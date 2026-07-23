@@ -16,7 +16,9 @@ import type {
   DispatchImportRow,
   DispatchImportView,
 } from '../services/dispatch-imports';
-import { loadAdminSettings, loadRemoteOperationalSettings, saveAdminSettings, saveRemoteOperationalSettings } from '../services/settings';
+import type { ManagementData } from '../demo/management';
+import { loadDispatchReferenceSnapshot } from '../services/management';
+import { defaultAdminSettings, loadAdminSettings, loadRemoteOperationalSettings, saveAdminSettings, saveRemoteOperationalSettings } from '../services/settings';
 
 type ConditionCandidate = {
   code: string;
@@ -34,8 +36,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
   const [departureError, setDepartureError] = useState(false);
   const [operationsBusy, setOperationsBusy] = useState(false);
   const [operationsError, setOperationsError] = useState('');
-  const [operationsReloadKey, setOperationsReloadKey] = useState(0);
-  const [operationsStatus, setOperationsStatus] = useState<'error' | 'loading' | 'ready'>(() => apiConfig.mode === 'remote' ? 'loading' : 'ready');
+  const [operationsStatus, setOperationsStatus] = useState<'loading' | 'ready'>(() => apiConfig.mode === 'remote' ? 'loading' : 'ready');
   const [workAction, setWorkAction] = useState<'upload' | 'edit' | 'delete' | ''>('');
   const [uploadFileName, setUploadFileName] = useState('');
   const [uploadRows, setUploadRows] = useState<DispatchImportRow[]>([]);
@@ -46,6 +47,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
   const [uploadBusy, setUploadBusy] = useState(false);
   const [conditionCandidates, setConditionCandidates] = useState<ConditionCandidate[]>([]);
   const [remoteDispatch, setRemoteDispatch] = useState<DispatchListView | null>(null);
+  const [remoteReferences, setRemoteReferences] = useState<ManagementData | null>(null);
   const [remoteStatus, setRemoteStatus] = useState<'error' | 'loading' | 'ready'>(() => apiConfig.mode === 'remote' ? 'loading' : 'ready');
   const [remoteError, setRemoteError] = useState('');
   const [remoteReloadKey, setRemoteReloadKey] = useState(0);
@@ -88,9 +90,9 @@ export function DispatchPage({ title, description }: { title: string; descriptio
     let active = true;
     setOperationsStatus('loading');
     setOperationsError('');
-    setLoadingStartTime('');
-    setDepartureTime('');
-    setDepartureDraft('');
+    setLoadingStartTime(defaultAdminSettings.loadingStartTime);
+    setDepartureTime(defaultAdminSettings.plannedDepartureTime);
+    setDepartureDraft(defaultAdminSettings.plannedDepartureTime);
     loadRemoteOperationalSettings()
       .then((settings) => {
         if (!active) return;
@@ -100,29 +102,37 @@ export function DispatchPage({ title, description }: { title: string; descriptio
         setDepartureDraft(settings.plannedDepartureTime);
         setOperationsStatus('ready');
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (!active) return;
-        setOperationsError(errorMessage(error));
-        setOperationsStatus('error');
+        setLoadingStartTime(defaultAdminSettings.loadingStartTime);
+        setDepartureTime(defaultAdminSettings.plannedDepartureTime);
+        setDepartureDraft(defaultAdminSettings.plannedDepartureTime);
+        setOperationsStatus('ready');
       });
     return () => {
       active = false;
     };
-  }, [operationsReloadKey]);
+  }, []);
   useEffect(() => {
     if (apiConfig.mode !== 'remote') return undefined;
     const controller = new AbortController();
     setRemoteStatus('loading');
     setRemoteError('');
     setRemoteDispatch(null);
-    loadDispatchList(controller.signal)
-      .then((view) => {
+    setRemoteReferences(null);
+    Promise.all([
+      loadDispatchList(controller.signal),
+      loadDispatchReferenceSnapshot(),
+    ])
+      .then(([view, references]) => {
         setRemoteDispatch(view);
+        setRemoteReferences(references);
         setRemoteStatus('ready');
       })
       .catch((error: unknown) => {
         if (isAbortError(error)) return;
         setRemoteDispatch(null);
+        setRemoteReferences(null);
         setRemoteError(errorMessage(error));
         setRemoteStatus('error');
       });
@@ -242,13 +252,13 @@ export function DispatchPage({ title, description }: { title: string; descriptio
             setOperationsError('');
           }}
           onDepartureSave={() => void saveDepartureTime()}
-          onOperationsRetry={() => setOperationsReloadKey((current) => current + 1)}
           onRetry={() => setRemoteReloadKey((current) => current + 1)}
           operationsBusy={operationsBusy}
           operationsError={operationsError}
           operationsStatus={operationsStatus}
           status={remoteStatus}
           view={remoteDispatch}
+          references={remoteReferences}
         />
       ) : (
       <div className="work-two-grid">
@@ -334,33 +344,44 @@ function RemoteDispatchBoard({
   error,
   onDepartureChange,
   onDepartureSave,
-  onOperationsRetry,
   onRetry,
   operationsBusy,
   operationsError,
   operationsStatus,
   status,
   view,
+  references,
 }: {
   departureDraft: string;
   departureError: boolean;
   error: string;
   onDepartureChange: (value: string) => void;
   onDepartureSave: () => void;
-  onOperationsRetry: () => void;
   onRetry: () => void;
   operationsBusy: boolean;
   operationsError: string;
-  operationsStatus: 'error' | 'loading' | 'ready';
+  operationsStatus: 'loading' | 'ready';
   status: 'error' | 'loading' | 'ready';
   view: DispatchListView | null;
+  references: ManagementData | null;
 }): ReactElement {
+  const [selectedOrderId, setSelectedOrderId] = useState('');
+  const selectedOrder = view?.rows.find((row) => row.sellerOrderId === selectedOrderId) ?? view?.rows[0];
+
+  useEffect(() => {
+    if (!view?.rows.length) {
+      setSelectedOrderId('');
+      return;
+    }
+    if (!view.rows.some((row) => row.sellerOrderId === selectedOrderId)) setSelectedOrderId(view.rows[0].sellerOrderId);
+  }, [selectedOrderId, view]);
+
   if (status === 'loading') {
     return (
       <div className="work-two-grid">
-        <section className="work-column" aria-label="배차 정본">
-          <div className="tab-line section-heading"><span>배차 현황</span><span className="section-meta">remote</span></div>
-          <div className="customer-empty-state" role="status"><strong>불러오는 중</strong><span>원격 배차 정본을 확인하고 있습니다.</span></div>
+        <section className="work-column" aria-label="배차 현황">
+          <div className="tab-line section-heading"><span>배차 현황</span><span className="section-meta">확인 중</span></div>
+          <div className="customer-empty-state" role="status"><strong>불러오는 중</strong><span>배차 정보를 확인하고 있습니다.</span></div>
         </section>
       </div>
     );
@@ -368,67 +389,75 @@ function RemoteDispatchBoard({
   if (status === 'error' || view === null) {
     return (
       <div className="work-two-grid">
-        <section className="work-column" aria-label="배차 정본">
-          <div className="tab-line section-heading"><span>배차 현황</span><span className="section-meta">remote</span></div>
-          <div className="customer-empty-state" role="alert"><strong>배차 정본 차단</strong><span>{error || '원격 배차 정본을 불러올 수 없습니다.'}</span><button className="btn" type="button" onClick={onRetry}>다시 시도</button></div>
+        <section className="work-column" aria-label="배차 현황">
+          <div className="tab-line section-heading"><span>배차 현황</span><span className="section-meta">확인 필요</span></div>
+          <div className="customer-empty-state" role="alert"><strong>배차 정보를 불러오지 못했습니다.</strong><span>{error || '잠시 후 다시 시도하세요.'}</span><button className="btn" type="button" onClick={onRetry}>다시 시도</button></div>
         </section>
       </div>
     );
   }
   return (
     <div className="work-two-grid">
-      <section className="work-column split" aria-label="배차 정본">
+      <section className="work-column split" aria-label="배차 현황">
         <div className="tab-line section-heading"><span>배차 현황</span><span className="section-meta">{view.summary.total}건</span></div>
-        <div className="dispatch-upload-summary" role="status">
-          <span>전체 <b>{view.summary.total}</b></span>
-          <span>배정 <b>{view.summary.assigned}</b></span>
-          <span>미배정 <b>{view.summary.unassigned}</b></span>
-          <span>ETA 확인 <b>{view.summary.etaAttention}</b></span>
-        </div>
         <div className="work-scroll work-courier-table-scroll overlay-scroll" aria-label="배차 목록">
-          <table className="work-courier-table">
-            <thead><tr><th>SellerOrderKey</th><th>배정</th><th>ETA</th></tr></thead>
+          <table className="work-courier-table remote-dispatch-table">
+            <thead><tr><th>주문</th><th>상태</th></tr></thead>
             <tbody>
               {view.rows.map((row) => (
-                <tr key={row.sellerOrderId}>
-                  <td><strong>{row.sellerOrderKey}</strong><small>{row.sellerOrderId}</small></td>
-                  <td><strong>{row.assignmentStatus}</strong></td>
-                  <td><strong>{row.etaStatus}</strong></td>
+                <tr
+                  className={row.sellerOrderId === selectedOrder?.sellerOrderId ? 'active' : ''}
+                  key={row.sellerOrderId}
+                  aria-selected={row.sellerOrderId === selectedOrder?.sellerOrderId}
+                  tabIndex={0}
+                  onClick={() => setSelectedOrderId(row.sellerOrderId)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    setSelectedOrderId(row.sellerOrderId);
+                  }}
+                >
+                  <td><strong>{row.sellerOrderKey}</strong><small>{referenceName(references?.customers, row.customerId)}</small></td>
+                  <td><strong>{assignmentLabel(row.assignmentStatus)}</strong><small>{etaLabel(row.etaStatus)}</small></td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {!view.rows.length ? <div className="customer-empty-state" role="status"><strong>배차 없음</strong><span>등록된 주문이 없습니다.</span></div> : null}
         </div>
       </section>
 
       <div className="work-right-stack">
-        <section className="work-column" aria-label="배차 요약">
-          <div className="tab-line section-heading"><span>정본 필드</span><span className="section-meta">G005</span></div>
-          <RemoteDepartureTime
-            busy={operationsBusy}
-            draft={departureDraft}
-            error={operationsError}
-            invalid={departureError}
-            onChange={onDepartureChange}
-            onRetry={onOperationsRetry}
-            onSave={onDepartureSave}
-            status={operationsStatus}
-          />
-          {view.rows.length ? <div className="work-timeline-list overlay-scroll" aria-label="배차 정본 필드 목록">{view.rows.map((row) => (
-            <div className="work-timeline-row" key={`${row.sellerOrderId}:fields`}>
-              <i>주</i>
-              <span><strong>{row.customerId}</strong><small>{row.destinationId}</small><small>{routeLabel(row)}</small></span>
-              <time dateTime={row.estimatedArrivalAt ?? undefined}>{formatRemoteEta(row.estimatedArrivalAt)}</time>
-            </div>
-          ))}</div> : <div className="customer-empty-state" role="status"><strong>배차 없음</strong><span>원격 정본에서 조회된 배차가 없습니다.</span></div>}
+        <section className="work-column" aria-label="배송 일정">
+          <div className="work-live-head section-heading">
+            <span>배송 일정</span>
+            <RemoteDepartureTime
+              busy={operationsBusy}
+              draft={departureDraft}
+              error={operationsError}
+              invalid={departureError}
+              onChange={onDepartureChange}
+              onSave={onDepartureSave}
+              status={operationsStatus}
+            />
+          </div>
+          {selectedOrder ? <div className="work-timeline-list overlay-scroll" aria-label="배송 전체 타임라인">
+            <div className="work-timeline-row"><i>출</i><span><strong>출발 예정</strong><small>{assignmentLabel(selectedOrder.assignmentStatus)}</small></span><time>{departureDraft || '-'}</time></div>
+            <div className="work-timeline-row active"><i>도</i><span><strong>{referenceName(references?.destinations, selectedOrder.destinationId)}</strong><small>{etaLabel(selectedOrder.etaStatus)}</small></span><time dateTime={selectedOrder.estimatedArrivalAt ?? undefined}>{formatRemoteEta(selectedOrder.estimatedArrivalAt)}</time></div>
+          </div> : <div className="customer-empty-state" role="status"><strong>배송 일정 없음</strong><span>주문을 등록하면 출발과 도착 일정이 표시됩니다.</span></div>}
         </section>
 
-        <section className="work-column" aria-label="배차 상세 제한">
-          <div className="tab-line section-heading"><span>상세 정보</span><span className="section-meta">unavailable</span></div>
-          <div className="work-order-detail">
-            <section className="work-selected-stop"><strong>원격 정본 표시 제한</strong><span>이 화면은 G005 배차 필드만 표시합니다.</span></section>
-            <div className="customer-empty-state" role="status"><strong>부가 세부 정보 미제공</strong><span>원격 API가 제공하지 않는 운영 세부 항목은 표시하지 않습니다.</span></div>
-          </div>
+        <section className="work-column" aria-label="배송 상세">
+          <div className="tab-line section-heading"><span>배송 상세</span><span className="section-meta">{selectedOrder ? etaLabel(selectedOrder.etaStatus) : '선택 없음'}</span></div>
+          {selectedOrder ? <div className="work-order-detail">
+            <section className="work-selected-stop"><strong>{selectedOrder.sellerOrderKey}</strong><span>{referenceName(references?.destinations, selectedOrder.destinationId)}</span></section>
+            <dl className="remote-dispatch-detail">
+              <div><dt>제조사</dt><dd>{referenceName(references?.customers, selectedOrder.customerId)}</dd></div>
+              <div><dt>배정 상태</dt><dd>{assignmentLabel(selectedOrder.assignmentStatus)}</dd></div>
+              <div><dt>도착 상태</dt><dd>{etaLabel(selectedOrder.etaStatus)}</dd></div>
+              <div><dt>도착 예정</dt><dd>{formatRemoteEta(selectedOrder.estimatedArrivalAt)}</dd></div>
+            </dl>
+          </div> : <div className="customer-empty-state" role="status"><strong>배송 상세 없음</strong><span>왼쪽에서 주문을 선택하세요.</span></div>}
         </section>
       </div>
     </div>
@@ -441,7 +470,6 @@ function RemoteDepartureTime({
   error,
   invalid,
   onChange,
-  onRetry,
   onSave,
   status,
 }: {
@@ -450,12 +478,10 @@ function RemoteDepartureTime({
   error: string;
   invalid: boolean;
   onChange: (value: string) => void;
-  onRetry: () => void;
   onSave: () => void;
-  status: 'error' | 'loading' | 'ready';
+  status: 'loading' | 'ready';
 }): ReactElement {
-  if (status === 'loading') return <div className="customer-empty-state" role="status"><strong>운영 시간 불러오는 중</strong><span>원격 출발 예정 시간을 확인하고 있습니다.</span></div>;
-  if (status === 'error') return <div className="customer-empty-state" role="alert"><strong>출발 시간 unavailable</strong><span>{error || '원격 운영 시간을 불러올 수 없습니다.'}</span><button className="btn" type="button" onClick={onRetry}>다시 시도</button></div>;
+  if (status === 'loading') return <div className="customer-empty-state" role="status"><strong>운영 시간 확인 중</strong><span>출발 예정 시간을 확인하고 있습니다.</span></div>;
   return (
     <form className="work-departure-time" aria-label="운영 시간 편집" onSubmit={(event) => { event.preventDefault(); onSave(); }}>
       <label htmlFor="remoteDepartureTime">출발</label>
@@ -482,12 +508,33 @@ function errorMessage(error: unknown): string {
 }
 
 function formatRemoteEta(value: string | null): string {
-  if (!value) return 'ETA 미제공';
-  return value;
+  if (!value) return '예정 확인';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' }).format(date);
 }
 
-function routeLabel(row: DispatchListView['rows'][number]): string {
-  return `routePlanId ${row.routePlanId ?? '-'} / routeVersionId ${row.routeVersionId ?? '-'}`;
+function assignmentLabel(value: DispatchListView['rows'][number]['assignmentStatus']): string {
+  return value === 'ASSIGNED' ? '배정 완료' : '미배정';
+}
+
+function etaLabel(value: DispatchListView['rows'][number]['etaStatus']): string {
+  switch (value) {
+    case 'READY':
+      return '도착 예정';
+    case 'PENDING':
+      return '계산 중';
+    case 'FAILED':
+      return '확인 필요';
+    case 'STALE':
+      return '갱신 필요';
+    case 'NOT_REQUIRED':
+      return '미대상';
+  }
+}
+
+function referenceName(items: Array<{ id: string; name: string }> | undefined, id: string): string {
+  return items?.find((item) => item.id === id)?.name ?? '정보 확인';
 }
 
 function isAbortError(error: unknown): boolean {

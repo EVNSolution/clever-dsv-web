@@ -31,9 +31,10 @@ type MapCanvasProps = {
   onVehicleSelect?: (vehicleId: string) => void;
   onDeliveryStopSelect?: (selection: DeliveryStopSelection) => void;
   selectedDeliveryStop?: DeliveryStopSelection;
+  showOperationalLayers?: boolean;
 };
 
-export function MapCanvas({ ariaLabel, endpoint, mapMode, destinationMode, vehicleId, showFleetOverview = false, onVehicleSelect, onDeliveryStopSelect, selectedDeliveryStop }: MapCanvasProps): ReactElement {
+export function MapCanvas({ ariaLabel, endpoint, mapMode, destinationMode, vehicleId, showFleetOverview = false, onVehicleSelect, onDeliveryStopSelect, selectedDeliveryStop, showOperationalLayers = true }: MapCanvasProps): ReactElement {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<maplibregl.Map | null>(null);
   const routeGeometryRef = useRef<Record<string, Coordinate[]>>(Object.fromEntries(Object.keys(routeCoordinates).map((route) => [route, routeWaypoints(route as DemoVehicle['route'])])));
@@ -74,7 +75,7 @@ export function MapCanvas({ ariaLabel, endpoint, mapMode, destinationMode, vehic
     map.addControl(new maplibregl.AttributionControl({ compact: true }));
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
     map.on('load', () => {
-      addMarkerImages(map);
+      if (showOperationalLayers) addMarkerImages(map);
       if (!cancelled) setMapReady(true);
     });
 
@@ -84,7 +85,7 @@ export function MapCanvas({ ariaLabel, endpoint, mapMode, destinationMode, vehic
       delete (window as typeof window & { dsvMap?: maplibregl.Map }).dsvMap;
       map.remove();
     };
-  }, []);
+  }, [showOperationalLayers]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -94,7 +95,7 @@ export function MapCanvas({ ariaLabel, endpoint, mapMode, destinationMode, vehic
 
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map || !mapReady) return undefined;
+    if (!map || !mapReady || !showOperationalLayers) return undefined;
     const routes = [...new Set(visibleVehicles.map((vehicle) => vehicle.route))];
     routes.forEach((route) => {
       const cached = readCachedRoute(endpoint, route);
@@ -109,21 +110,21 @@ export function MapCanvas({ ariaLabel, endpoint, mapMode, destinationMode, vehic
     );
     updateMapData(map, visibleVehicles, spotlightVehicle, routeGeometryRef.current, routeDropoffsRef.current, destinationMode, focusedStop);
     return undefined;
-  }, [destinationMode, endpoint, focusedStop, mapReady, routeVersion, showFleetOverview, vehicleId]);
+  }, [destinationMode, endpoint, focusedStop, mapReady, routeVersion, showFleetOverview, showOperationalLayers, vehicleId]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map || !mapReady) return;
+    if (!map || !mapReady || !showOperationalLayers) return;
     if (focusedStop && focusedStop.vehicleId === vehicleId) {
       map.easeTo({ center: focusedStop.coordinate, zoom: mapCamera.destinationZoom, duration: mapCamera.destinationDuration });
       return;
     }
     const routes = [...new Set(visibleVehicles.map((vehicle) => vehicle.route))];
     fitMap(map, spotlightVehicle ? routeGeometryRef.current[spotlightVehicle.route] : routes.flatMap((route) => routeGeometryRef.current[route]));
-  }, [focusedStop, mapReady, showFleetOverview, vehicleId]);
+  }, [focusedStop, mapReady, showFleetOverview, showOperationalLayers, vehicleId]);
 
   useEffect(() => {
-    if (!mapReady) return undefined;
+    if (!mapReady || !showOperationalLayers) return undefined;
     const routes = [...new Set(visibleVehicles.map((vehicle) => vehicle.route))];
     const controllers = routes.map((route) => {
       const controller = new AbortController();
@@ -137,7 +138,7 @@ export function MapCanvas({ ariaLabel, endpoint, mapMode, destinationMode, vehic
       return controller;
     });
     return () => controllers.forEach((controller) => controller.abort());
-  }, [endpoint, mapReady, routeScopeKey]);
+  }, [endpoint, mapReady, routeScopeKey, showOperationalLayers]);
 
   return (
     <article className="card map-card" aria-label="실시간 차량 지도">

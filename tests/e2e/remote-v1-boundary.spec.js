@@ -174,6 +174,21 @@ test('accepts a valid admin session only through the strict v1 session envelope'
   const api = await installApiFixtures(page, {
     'GET /api/dsv/v1/session': v1Envelope(adminSession),
     'GET /api/dsv/v1/control': v1Envelope(controlSummary),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
+      items: [{
+        displayName: 'Canonical Refrigerated Truck',
+        driverAssignments: [],
+        status: 'ACTIVE',
+        vehicleId: 'vehicle-g006-control',
+        vehiclePlate: '99테 6006',
+      }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({
+      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Manufacturer', status: 'ACTIVE' }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/dispatches': v1Envelope({ items: [], page: { hasMore: false } }),
   });
 
   await page.goto('/control');
@@ -182,6 +197,9 @@ test('accepts a valid admin session only through the strict v1 session envelope'
   await expect(page.getByRole('link', { name: '관제', exact: true })).toBeVisible();
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/control');
   await expect(page.getByLabel('지원되는 관제 요약')).toContainText(controlSummary.serviceDate);
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+  await expect(page.getByLabel('예정 차량 리스트')).toContainText('99테 6006');
+  await expect(page.getByLabel('제조사별 주문 리스트')).toBeVisible();
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session')).toBe(true);
   expect(api.unexpected).toEqual([]);
 });

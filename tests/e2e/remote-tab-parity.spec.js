@@ -127,6 +127,14 @@ function dispatchPageFixture() {
 function dispatchFixtures(fixtures = {}) {
   return {
     'GET /api/dsv/settings/operations': legacyEnvelope({ loadingStartTime: '07:15', plannedDepartureTime: '08:45' }),
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({
+      items: [{ customerId: 'customer-g006', displayName: 'Canonical Manufacturer G006', status: 'ACTIVE' }],
+      page: { hasMore: false },
+    }, 'g006-dispatch-customers'),
+    'GET /api/dsv/v1/destinations?limit=100': v1Envelope({
+      items: [{ destinationId: 'destination-g006', displayName: 'Canonical Destination G006' }],
+      page: { hasMore: false },
+    }, 'g006-dispatch-destinations'),
     ...fixtures,
   };
 }
@@ -161,7 +169,9 @@ test('dispatch success renders the canonical v1 seller-order summary without con
 
   const dispatchRow = page.getByRole('row').filter({ hasText: 'SELLER-G006-DISPATCH' });
   await expect(dispatchRow).toBeVisible();
-  await expect(dispatchRow).toContainText('READY');
+  await expect(dispatchRow).toContainText('도착 예정');
+  await expect(page.getByLabel('배송 일정')).toBeVisible();
+  await expect(page.getByLabel('배송 상세')).toBeVisible();
   await expect(page.getByLabel('운영 시간 편집')).toBeVisible();
   await expect(page.getByLabel('출발 시간')).toHaveValue('08:45');
   await expectNoConcreteDemo(page);
@@ -184,18 +194,17 @@ test('dispatch read failure is visible and leaves the dispatch sentinel untouche
   expectOnlyFixtureCalls(api);
 });
 
-test('dispatch keeps the canonical time editor unavailable without complete remote operational settings', async ({ page }) => {
-  const api = await installApiFixtures(page, adminFixtures({
+test('dispatch uses the operating default when remote operational settings are incomplete', async ({ page }) => {
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
     'GET /api/dsv/settings/operations': legacyEnvelope({ loadingStartTime: '07:15' }),
     'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
-  }));
+  })));
 
   await page.goto('/dispatch');
 
-  await expect(page.getByRole('alert').filter({ hasText: '원격 설정 응답 형식이 올바르지 않습니다.' })).toBeVisible();
-  await expect(page.getByLabel('운영 시간 편집')).toHaveCount(0);
-  await expect(page.getByLabel('출발 시간')).toHaveCount(0);
-  await expect(page.getByText('08:30', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('운영 시간 편집')).toBeVisible();
+  await expect(page.getByLabel('출발 시간')).toHaveValue('08:30');
+  await expect(page.getByText('unavailable')).toHaveCount(0);
   await expectNoConcreteDemo(page);
   expectOnlyFixtureCalls(api);
 });

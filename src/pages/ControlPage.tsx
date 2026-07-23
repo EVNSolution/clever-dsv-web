@@ -8,6 +8,10 @@ import type { RouteEstimate } from '../services/routing';
 import { loadAdminSettings } from '../services/settings';
 import { currentDeliveryStopFor, deliveryStopIdFor, loadControlSummary, loadDeliveryStopContext } from '../services/control';
 import type { ControlSummary, DeliveryStopContext, DeliveryStopSelection } from '../services/control';
+import { loadDispatchList } from '../services/dispatch';
+import type { DispatchListItem } from '../services/dispatch';
+import { loadControlManagementSnapshot } from '../services/management';
+import type { ManagementData } from '../demo/management';
 
 type ControlPageProps = {
   endpoint: string;
@@ -22,102 +26,124 @@ type ControlPageProps = {
 type StatusClass = 'completed' | 'loading' | 'moving';
 
 export function ControlPage(props: ControlPageProps): ReactElement {
-  if (apiConfig.mode === 'remote') return <RemoteControlPage selectedDeliveryStop={props.selectedDeliveryStop} />;
+  if (apiConfig.mode === 'remote') return <RemoteControlPage />;
   return <DemoControlPage {...props} />;
 }
 
-function RemoteControlPage({ selectedDeliveryStop }: { selectedDeliveryStop?: DeliveryStopSelection }): ReactElement {
+function RemoteControlPage(): ReactElement {
   const [summary, setSummary] = useState<ControlSummary>();
-  const [summaryError, setSummaryError] = useState('');
-  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [management, setManagement] = useState<ManagementData>();
+  const [orders, setOrders] = useState<DispatchListItem[]>([]);
+  const [panelError, setPanelError] = useState('');
+  const [panelLoading, setPanelLoading] = useState(true);
   const [retryRequest, setRetryRequest] = useState(0);
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [deliveryContext, setDeliveryContext] = useState<DeliveryStopContext>();
-  const [deliveryContextError, setDeliveryContextError] = useState('');
-  const [deliveryContextLoading, setDeliveryContextLoading] = useState(false);
 
   useEffect(() => {
-    const controller = new AbortController();
-    setSummaryLoading(true);
-    setSummaryError('');
-    loadControlSummary(controller.signal)
-      .then(setSummary)
+    const summaryController = new AbortController();
+    const dispatchController = new AbortController();
+    setPanelLoading(true);
+    setPanelError('');
+    loadControlSummary(summaryController.signal)
+      .then(async (nextSummary) => {
+        if (summaryController.signal.aborted) return;
+        setSummary(nextSummary);
+        const [nextManagement, dispatch] = await Promise.all([
+          loadControlManagementSnapshot(),
+          loadDispatchList(dispatchController.signal),
+        ]);
+        if (summaryController.signal.aborted || dispatchController.signal.aborted) return;
+        setManagement(nextManagement);
+        setOrders(dispatch.rows);
+      })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         setSummary(undefined);
-        setSummaryError(error instanceof Error ? error.message : '관제 요약을 불러오지 못했습니다.');
+        setManagement(undefined);
+        setOrders([]);
+        setPanelError(error instanceof Error ? error.message : '관제 정보를 불러오지 못했습니다.');
       })
       .finally(() => {
-        if (!controller.signal.aborted) setSummaryLoading(false);
+        if (!summaryController.signal.aborted && !dispatchController.signal.aborted) setPanelLoading(false);
       });
-    return () => controller.abort();
+    return () => {
+      summaryController.abort();
+      dispatchController.abort();
+    };
   }, [retryRequest]);
 
-  useEffect(() => {
-    if (!detailOpen || !selectedDeliveryStop) return;
-    const controller = new AbortController();
-    setDeliveryContextLoading(true);
-    setDeliveryContextError('');
-    loadDeliveryStopContext(selectedDeliveryStop, controller.signal)
-      .then(setDeliveryContext)
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return;
-        setDeliveryContext(undefined);
-        setDeliveryContextError(error instanceof Error ? error.message : '배송지 상세 정보를 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setDeliveryContextLoading(false);
-      });
-    return () => controller.abort();
-  }, [detailOpen, selectedDeliveryStop]);
+  const manufacturerOrders = groupOrdersByManufacturer(orders, management);
+  const vehicles = management?.vehicles ?? [];
 
   return (
-    <aside className="side" aria-label="관제 원격 패널">
+    <aside className="side" aria-label="관제 운영 패널">
       <div className="panel-view">
-        <section className="card panel expand-card" id="vehicleCard" aria-label="관제 요약">
+        <section className="card panel expand-card" id="vehicleCard" aria-label="예정 차량 리스트">
           <div className="tab-line section-heading">
-            <span>관제 요약</span>
-            <span className="card-tools"><span className="chip mini">remote v1</span><button className="panel-toggle" type="button" onClick={() => setRetryRequest((request) => request + 1)}>재시도</button></span>
+            <span>예정 차량</span>
+            <span className="card-tools">
+              <span className="chip mini">{vehicles.length}대</span>
+              <button className="panel-toggle" type="button" onClick={() => setRetryRequest((request) => request + 1)}>새로고침</button>
+            </span>
           </div>
-          {summaryLoading ? <div className="panel-state" role="status">관제 요약을 불러오는 중입니다.</div> : null}
-          {summaryError ? <div className="panel-state error" role="alert">{summaryError}</div> : null}
-          {summary && !summaryLoading && !summaryError ? (
-            <div className="destination-context" role="status" aria-label="지원되는 관제 요약">
-              <div className="note-list cargo-note-list">
-                <div className="note-row done"><i>일</i><span><b>기준일</b>serviceDate</span><em>{summary.serviceDate}</em></div>
-                <div className="note-row done"><i>총</i><span><b>전체 배차</b>totalDispatchCount</span><em>{summary.totalDispatchCount}</em></div>
-                <div className="note-row done"><i>배</i><span><b>배정 완료</b>assignedCount</span><em>{summary.assignedCount}</em></div>
-                <div className="note-row warn"><i>미</i><span><b>미배정</b>unassignedCount</span><em>{summary.unassignedCount}</em></div>
-                <div className="note-row warn"><i>대</i><span><b>ETA 대기</b>pendingEtaCount</span><em>{summary.pendingEtaCount}</em></div>
-                <div className="note-row warn"><i>실</i><span><b>ETA 실패</b>failedEtaCount</span><em>{summary.failedEtaCount}</em></div>
-                <div className="note-row done"><i>준</i><span><b>ETA 준비</b>readyEtaCount</span><em>{summary.readyEtaCount}</em></div>
-              </div>
+          {panelLoading ? <div className="panel-state" role="status">예정 차량을 불러오는 중입니다.</div> : null}
+          {panelError ? <div className="panel-state error" role="alert">{panelError}</div> : null}
+          {summary && !panelLoading && !panelError ? (
+            <div className="control-summary-strip" role="status" aria-label="지원되는 관제 요약">
+              <span>기준일 <b>{summary.serviceDate}</b></span>
+              <span>배차 <b>{summary.totalDispatchCount}</b></span>
+              <span>미배정 <b>{summary.unassignedCount}</b></span>
+            </div>
+          ) : null}
+          {!panelLoading && !panelError ? (
+            <div className="control-vehicle-list overlay-scroll">
+              {vehicles.map((vehicle) => (
+                <div className="control-vehicle-row" key={vehicle.id}>
+                  <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong><small>{vehicle.type || '차종 미등록'}</small></span>
+                  <em>{management?.assignments.some((assignment) => assignment.vehicleId === vehicle.id) ? '배차 준비' : '배송원 미배정'}</em>
+                </div>
+              ))}
+              {!vehicles.length ? <div className="panel-state">예정 차량이 없습니다.</div> : null}
             </div>
           ) : null}
         </section>
 
-        <section className="card panel expand-card" id="destinationCard" aria-label="원격 미지원 상세">
+        <section className="card panel expand-card" id="destinationCard" aria-label="제조사별 주문 리스트">
           <div className="tab-line section-heading">
-            <span className="destination-title">상세 기능 <small>미지원</small></span>
-            <button className={`panel-toggle ${detailOpen ? 'active' : ''}`} type="button" disabled={!selectedDeliveryStop} onClick={() => setDetailOpen((open) => !open)}>{detailOpen ? '닫기' : '상세'}</button>
+            <span className="destination-title">제조사별 주문</span>
+            <span className="chip mini">{orders.length}건</span>
           </div>
-          <div className="destination-context">
-            <section aria-label="미지원 기능"><h3>원격 정본 미지원</h3><div className="note-list">
-              {['fleet', 'map', 'route', 'cargo', 'proof'].map((feature) => <div className="note-row warn" key={feature}><i>!</i><span><b>{feature}</b>원격 v1 정본 계약에 포함되지 않아 표시하지 않습니다.</span></div>)}
-            </div></section>
-            {selectedDeliveryStop ? (
-              <section aria-label="배송지 상세"><h3>배송지 상세</h3>
-                {!detailOpen ? <div className="panel-state">상세 열기 전에는 legacy 배송지 context를 호출하지 않습니다.</div> : null}
-                {deliveryContextLoading ? <div className="panel-state" role="status">배송지 상세 정보를 불러오는 중입니다.</div> : null}
-                {deliveryContextError ? <div className="panel-state error" role="alert">{deliveryContextError}</div> : null}
-                {deliveryContext ? <div className="panel-state">legacy 배송지 context가 명시적 상세 열기로 로드되었습니다.</div> : null}
+          <div className="manufacturer-order-list overlay-scroll">
+            {manufacturerOrders.map((group) => (
+              <section className="manufacturer-order-group" key={group.id}>
+                <div><strong>{group.name}</strong><span>{group.orders.length}건</span></div>
+                {group.orders.map((order) => (
+                  <div className="manufacturer-order-row" key={order.sellerOrderId}>
+                    <span><b>{order.sellerOrderKey}</b><small>{order.destinationId}</small></span>
+                    <em>{formatControlEta(order.estimatedArrivalAt)}</em>
+                  </div>
+                ))}
               </section>
-            ) : <div className="panel-state">원격 v1 요약 외 상세 데이터는 표시하지 않습니다.</div>}
+            ))}
+            {!panelLoading && !panelError && !manufacturerOrders.length ? <div className="panel-state">등록된 제조사 주문이 없습니다.</div> : null}
           </div>
         </section>
       </div>
     </aside>
   );
+}
+
+function groupOrdersByManufacturer(orders: DispatchListItem[], management?: ManagementData): Array<{ id: string; name: string; orders: DispatchListItem[] }> {
+  const names = new Map(management?.customers.map((customer) => [customer.id, customer.name]) ?? []);
+  const groups = new Map<string, DispatchListItem[]>();
+  for (const order of orders) groups.set(order.customerId, [...(groups.get(order.customerId) ?? []), order]);
+  return [...groups].map(([id, groupedOrders]) => ({ id, name: names.get(id) ?? id, orders: groupedOrders }));
+}
+
+function formatControlEta(value: string | null): string {
+  if (!value) return '예정 확인';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' }).format(date);
 }
 
 function DemoControlPage({ endpoint, selectedVehicleId, selectedDeliveryStop, spotlightVehicleId, vehicleLookupRequest, onSelectDeliveryStop, onSelectVehicle }: ControlPageProps): ReactElement {

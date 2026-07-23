@@ -17,7 +17,7 @@ export type AdminSettings = {
 export type OperationalSettings = Pick<AdminSettings, 'loadingStartTime' | 'plannedDepartureTime'>;
 
 export const defaultAdminSettings: AdminSettings = {
-  loadingStartTime: '',
+  loadingStartTime: '07:30',
   plannedDepartureTime: '08:30',
   temperatureLimit: 8,
   etaDelayMinutes: 10,

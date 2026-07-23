@@ -21,7 +21,7 @@ export function AdminShell({
   onNavigate: (path: AdminPath) => void;
 }): ReactElement {
   const activeTab = adminTabs.find((tab) => tab.path === activePath) ?? adminTabs[0];
-  const control = apiConfig.mode === 'mock' ? getControlPage() : undefined;
+  const control = getControlPage();
   const [controls, setControls] = useState<ShellControlsState>(defaultShellControls);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [navigationExpanded, setNavigationExpanded] = useState(false);
@@ -52,9 +52,9 @@ export function AdminShell({
         ))}
       </nav>
 
-      {apiConfig.mode === 'mock' ? <div className="top-cluster">
+      <div className="top-cluster">
         {activePath === '/control' ? <MapToolbar controls={controls} onChange={setControls} /> : null}
-        <NotificationIsland
+        {apiConfig.mode === 'mock' ? <NotificationIsland
           open={notificationOpen}
           onToggle={() => setNotificationOpen((open) => !open)}
           onClose={() => setNotificationOpen(false)}
@@ -66,17 +66,18 @@ export function AdminShell({
             onNavigate('/control');
             setNotificationOpen(false);
           }}
-        />
-      </div> : null}
+        /> : null}
+      </div>
 
       <section className="grid" aria-label="배송 관제">
-        {activePath === '/control' && apiConfig.mode === 'mock' && control ? (
+        {activePath === '/control' ? (
           <Suspense fallback={<article className="card map-card" aria-label="지도 불러오는 중" />}>
             <MapCanvas
               ariaLabel={`관리자 관제 지도 - ${control.routeEngine.provider} ${control.routeEngine.endpoint}`}
               endpoint={control.routeEngine.endpoint}
               mapMode={controls.mapMode}
               destinationMode={controls.destinationMode}
+              showOperationalLayers={apiConfig.mode === 'mock'}
               vehicleId={spotlightVehicleId}
               showFleetOverview
               selectedDeliveryStop={selectedDeliveryStop}
@@ -93,7 +94,7 @@ export function AdminShell({
             />
           </Suspense>
         ) : null}
-        {activePath === '/control' ? <ControlPage endpoint={control?.routeEngine.endpoint ?? ''} selectedVehicleId={selectedVehicleId} selectedDeliveryStop={selectedDeliveryStop} spotlightVehicleId={spotlightVehicleId} vehicleLookupRequest={vehicleLookupRequest} onSelectDeliveryStop={setSelectedDeliveryStop} onSelectVehicle={(vehicleId) => { setSelectedVehicleId(vehicleId); setSelectedDeliveryStop(undefined); setSpotlightVehicleId((current) => current === vehicleId ? undefined : vehicleId); }} /> : <AdminContent activePath={activePath} title={activeTab.title} description={activeTab.description} />}
+        {activePath === '/control' ? <ControlPage endpoint={control.routeEngine.endpoint} selectedVehicleId={selectedVehicleId} selectedDeliveryStop={selectedDeliveryStop} spotlightVehicleId={spotlightVehicleId} vehicleLookupRequest={vehicleLookupRequest} onSelectDeliveryStop={setSelectedDeliveryStop} onSelectVehicle={(vehicleId) => { setSelectedVehicleId(vehicleId); setSelectedDeliveryStop(undefined); setSpotlightVehicleId((current) => current === vehicleId ? undefined : vehicleId); }} /> : <AdminContent activePath={activePath} title={activeTab.title} description={activeTab.description} />}
       </section>
     </main>
   );

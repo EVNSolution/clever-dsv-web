@@ -64,6 +64,38 @@ export async function loadManagementSnapshot(): Promise<ManagementData> {
   return loadRemoteManagementSnapshot();
 }
 
+export async function loadControlManagementSnapshot(): Promise<ManagementData> {
+  if (apiConfig.mode === 'mock') return loadManagementData();
+  const [vehicles, customers] = await Promise.all([
+    readV1List('vehicles', isV1VehicleListItem),
+    readV1List('customers', isV1CustomerListItem),
+  ]);
+  return {
+    ...emptyManagementData,
+    assignments: vehicles.flatMap((vehicle) => (vehicle.driverAssignments ?? []).map((assignment) => ({
+      driverId: assignment.driverId,
+      id: assignment.assignmentId,
+      kind: '기본 배정' as const,
+      vehicleId: vehicle.vehicleId,
+    }))),
+    customers: customers.map(customerViewModel),
+    vehicles: vehicles.map(vehicleViewModel),
+  };
+}
+
+export async function loadDispatchReferenceSnapshot(): Promise<ManagementData> {
+  if (apiConfig.mode === 'mock') return loadManagementData();
+  const [customers, destinations] = await Promise.all([
+    readV1List('customers', isV1CustomerListItem),
+    readV1List('destinations', isV1DestinationListItem),
+  ]);
+  return {
+    ...emptyManagementData,
+    customers: customers.map(customerViewModel),
+    destinations: destinations.map(destinationViewModel),
+  };
+}
+
 export async function persistManagementChange(previous: ManagementData, next: ManagementData): Promise<ManagementData> {
   if (apiConfig.mode === 'mock') {
     saveManagementData(next);
