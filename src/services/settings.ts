@@ -57,12 +57,17 @@ export async function saveRemoteOperationalSettings(
 }
 
 function operationalSettingsFrom(value: unknown): OperationalSettings {
-  if (!value || typeof value !== 'object' || !validTime(Reflect.get(value, 'loadingStartTime')) || !validTime(Reflect.get(value, 'plannedDepartureTime'))) {
+  if (!value || typeof value !== 'object') {
+    throw new Error('원격 설정 응답 형식이 올바르지 않습니다.');
+  }
+  const loadingStartTime = Reflect.get(value, 'loadingStartTime');
+  const plannedDepartureTime = Reflect.get(value, 'plannedDepartureTime');
+  if ((loadingStartTime !== null && !validTime(loadingStartTime)) || (plannedDepartureTime !== null && !validTime(plannedDepartureTime))) {
     throw new Error('원격 설정 응답 형식이 올바르지 않습니다.');
   }
   return {
-    loadingStartTime: Reflect.get(value, 'loadingStartTime') as string,
-    plannedDepartureTime: Reflect.get(value, 'plannedDepartureTime') as string,
+    loadingStartTime: loadingStartTime ?? defaultAdminSettings.loadingStartTime,
+    plannedDepartureTime: plannedDepartureTime ?? defaultAdminSettings.plannedDepartureTime,
   };
 }
 

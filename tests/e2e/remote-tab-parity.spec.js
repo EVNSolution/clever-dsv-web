@@ -391,6 +391,8 @@ test('settings GET and PATCH use the exact bounded legacy path', async ({ page }
   await page.goto('/settings');
   await expect(page.getByLabel('준비 시작 시간')).toHaveValue('07:15');
   await expect(page.getByLabel('출발 예정 시간')).toHaveValue('08:45');
+  await expect(page.getByText('원격 설정')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '초기화', exact: true })).toBeVisible();
   await page.getByLabel('준비 시작 시간').fill('07:30');
   await page.getByLabel('출발 예정 시간').fill('09:00');
   await page.getByRole('button', { name: '저장', exact: true }).click();
@@ -398,6 +400,19 @@ test('settings GET and PATCH use the exact bounded legacy path', async ({ page }
   await expect(page.getByRole('status').filter({ hasText: '설정을 저장했습니다.' })).toBeVisible();
   expect(patchBody).toEqual({ loadingStartTime: '07:30', plannedDepartureTime: '09:00' });
   await expectSentinel(page, key, sentinel);
+  expectOnlyFixtureCalls(api);
+});
+
+test('settings renders operating defaults when the backend has no saved times', async ({ page }) => {
+  const api = await installApiFixtures(page, adminFixtures({
+    'GET /api/dsv/settings/operations': legacyEnvelope({ loadingStartTime: null, plannedDepartureTime: null }),
+  }));
+
+  await page.goto('/settings');
+
+  await expect(page.getByLabel('준비 시작 시간')).toHaveValue('07:30');
+  await expect(page.getByLabel('출발 예정 시간')).toHaveValue('08:30');
+  await expect(page.getByText('기본값을 표시했습니다.')).toHaveCount(0);
   expectOnlyFixtureCalls(api);
 });
 

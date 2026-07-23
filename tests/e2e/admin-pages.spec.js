@@ -109,6 +109,8 @@ test('admin settings persist after reload', async ({ page }) => {
   await plannedDepartureTime.fill('08:20');
   await temperatureLimit.fill('9.5');
   await delayAlerts.uncheck();
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: '설정을 저장했습니다.' })).toBeVisible();
   await page.reload();
 
   await expect(loadingStartTime).toHaveValue('07:45');
@@ -121,6 +123,7 @@ test('dispatch uses the shared planned departure setting', async ({ page }) => {
   await page.goto('/settings');
   await page.getByLabel('준비 시작 시간').fill('07:40');
   await page.getByLabel('출발 예정 시간').fill('08:10');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
   await page.goto('/dispatch');
 
   await expect(page.getByLabel('출발 시간')).toHaveValue('08:10');
