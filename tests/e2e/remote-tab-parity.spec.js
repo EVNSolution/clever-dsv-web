@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 
 const v1Meta = { apiVersion: 'dsv.v1' };
 const adminSession = {
+  csrfToken: 'g006-admin-csrf',
   principalType: 'DSV_ADMIN',
   shopId: 'shop-g006-parity',
   scopes: [
@@ -394,11 +395,28 @@ test('settings GET and PATCH use the exact bounded legacy path', async ({ page }
   const key = 'clever.admin.settings';
   const sentinel = 'g006-settings-success-sentinel';
   await seedSentinel(page, key, sentinel);
+  let sessionReadCount = 0;
   let patchBody;
+  const patchCsrfTokens = [];
   const api = await installApiFixtures(page, adminFixtures({
+    'GET /api/dsv/v1/session': () => {
+      sessionReadCount += 1;
+      return v1Envelope({
+        ...adminSession,
+        csrfToken: sessionReadCount === 1 ? 'g006-stale-csrf' : 'g006-current-csrf',
+      }, `g006-parity-session-${sessionReadCount}`);
+    },
     'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings({ loadingStartTime: '07:15', plannedDepartureTime: '08:45' })),
     'PATCH /api/dsv/settings/operations': ({ request }) => {
       patchBody = request.postDataJSON();
+      const csrfToken = request.headers()['x-csrf-token'];
+      patchCsrfTokens.push(csrfToken);
+      if (csrfToken === 'g006-stale-csrf') {
+        return {
+          body: { data: null, error: { code: 'FORBIDDEN', message: 'Invalid CSRF token' } },
+          status: 403,
+        };
+      }
       return legacyEnvelope(operationSettings({ loadingStartTime: '07:30', plannedDepartureTime: '09:00' }));
     },
   }));
@@ -418,6 +436,8 @@ test('settings GET and PATCH use the exact bounded legacy path', async ({ page }
 
   await expect(page.getByRole('status').filter({ hasText: '설정을 저장했습니다.' })).toBeVisible();
   expect(patchBody).toEqual(operationSettings({ loadingStartTime: '07:30', plannedDepartureTime: '09:00' }));
+  expect(patchCsrfTokens).toEqual(['g006-stale-csrf', 'g006-current-csrf']);
+  expect(sessionReadCount).toBe(2);
   await expectSentinel(page, key, sentinel);
   expectOnlyFixtureCalls(api);
 });

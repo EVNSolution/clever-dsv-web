@@ -91,6 +91,7 @@
     .record-row { cursor:pointer; }
     .record-row:hover, .record-row.active { background:var(--blue-soft); }
     .setting-input { width:110px; min-height:34px; border:1px solid var(--hairline); border-radius:12px; padding:0 10px; font:inherit; }
+    .setting-input[type="time"] { width:140px; }
     .destination-list { display:grid; gap:10px; margin-top:14px; }
     .destination-button { width:100%; border:1px solid var(--hairline); border-radius:16px; background:#fff; padding:8px 12px; text-align:left; cursor:pointer; display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center; }
     .destination-button.active { border-color:rgba(0,102,204,.28); background:var(--blue-soft); }
@@ -112,15 +113,17 @@
     .page-content.records-page .page-grid { grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); grid-template-rows:minmax(300px, 1.08fr) minmax(230px, .92fr); }
     .page-content.records-page .page-panel.wide { grid-column:1 / -1; }
     .page-content.settings-page .page-grid {
-      grid-template-columns:repeat(2, minmax(300px, 1fr));
+      grid-template-columns:repeat(3, minmax(240px, 1fr));
       grid-auto-rows:auto;
       align-content:start;
     }
     .page-content.settings-page .page-panel .page-table { margin-top:0; }
-    .settings-command-panel { padding: 12px 14px; }
-    .settings-command-panel > .tab-line:first-child { margin-bottom: 0; }
+    .settings-hero { align-items:center; }
+    .settings-header-tools { display:flex; align-items:center; justify-content:flex-end; gap:14px; min-width:0; }
+    .settings-feedback { min-width:0; color:var(--muted); font-size:12px; font-weight:700; text-align:right; }
+    .settings-feedback .error { color:var(--risk); }
+    .settings-feedback .text-button { border:0; padding:0; background:transparent; color:var(--blue); cursor:pointer; font:inherit; font-weight:900; }
     .settings-actions { display:flex; align-items:center; gap:8px; }
-    .settings-warning { display:flex; align-items:center; justify-content:space-between; gap:12px; }
     .work-two-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; align-items:stretch; height:min(720px, calc(100dvh - 264px)); min-height:500px; }
     .page-content.work-page .work-two-grid { flex:1 1 auto; min-height:0; height:auto; grid-auto-rows:minmax(0, 1fr); }
     .work-right-stack { min-height:0; display:grid; grid-template-rows:repeat(2, minmax(0, 1fr)); gap:16px; }

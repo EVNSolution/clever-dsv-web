@@ -10,11 +10,13 @@ const canonicalSentinels = {
 };
 
 const adminSession = {
+  csrfToken: 'g006-admin-csrf',
   principalType: 'DSV_ADMIN',
   shopId: 'shop-g006',
   scopes: ['dsv:session:read', 'dsv:control:read'],
 };
 const customerSession = {
+  csrfToken: 'g006-customer-csrf',
   principalType: 'CUSTOMER_USER',
   shopId: 'shop-g006',
   scopes: ['dsv:session:read', 'dsv:customer-deliveries:read'],

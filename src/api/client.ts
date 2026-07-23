@@ -86,8 +86,12 @@ export async function requestV1ReadJson<ResponseBody>(path: string, init: JsonRe
 export async function requestV1AssignmentCommandJson<ResponseBody>(path: string, init: JsonRequestInit = {}): Promise<ResponseBody> {
   const target = requestTarget(path, init.method);
   assertAllowed('v1 assignment command', target, assignmentCommandAllowlist);
-  const response = await fetchJson(apiConfig.v1BaseUrl, path, { ...init, method: target.method });
-  const body = await readAssignmentCommandResponseBody(response);
+  let response = await fetchJson(apiConfig.v1BaseUrl, path, { ...init, method: target.method });
+  let body = await readAssignmentCommandResponseBody(response);
+  if (isCsrfFailure(response.status, body) && await refreshCsrfToken()) {
+    response = await fetchJson(apiConfig.v1BaseUrl, path, { ...init, method: target.method });
+    body = await readAssignmentCommandResponseBody(response);
+  }
   if (!response.ok) throw legacyAssignmentCommandError(response.status, body);
   return legacyAssignmentCommandData<ResponseBody>(body);
 }
@@ -95,8 +99,12 @@ export async function requestV1AssignmentCommandJson<ResponseBody>(path: string,
 export async function requestLegacyJson<ResponseBody>(path: string, init: JsonRequestInit = {}): Promise<ResponseBody> {
   const target = requestTarget(path, init.method);
   assertAllowed('legacy API', target, legacyAllowlist);
-  const response = await fetchJson(apiConfig.legacyBaseUrl, path, { ...init, method: target.method });
-  const body = await readResponseBody(response);
+  let response = await fetchJson(apiConfig.legacyBaseUrl, path, { ...init, method: target.method });
+  let body = await readResponseBody(response);
+  if (isCsrfFailure(response.status, body) && await refreshCsrfToken()) {
+    response = await fetchJson(apiConfig.legacyBaseUrl, path, { ...init, method: target.method });
+    body = await readResponseBody(response);
+  }
   if (!response.ok) throw new ApiError(response.status, errorMessage(body, response.status), body);
   return legacyData<ResponseBody>(body);
 }
@@ -128,6 +136,28 @@ async function fetchJson(baseUrl: string, path: string, { json, headers, ...init
     },
     method,
   });
+}
+
+async function refreshCsrfToken(): Promise<boolean> {
+  try {
+    const response = await fetchJson(apiConfig.v1BaseUrl, 'session', { method: 'GET' });
+    const body = await readV1ResponseBody(response);
+    if (!response.ok) return false;
+    const session = strictV1Data<{ csrfToken?: unknown }>(body);
+    if (typeof session.csrfToken !== 'string' || session.csrfToken === '') return false;
+    window.sessionStorage.setItem('clever.auth.csrf', session.csrfToken);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isCsrfFailure(status: number, body: unknown): boolean {
+  return status === 403
+    && isObject(body)
+    && isObject(body.error)
+    && body.error.code === 'FORBIDDEN'
+    && body.error.message === 'Invalid CSRF token';
 }
 
 function strictV1Data<ResponseBody>(body: unknown): ResponseBody {

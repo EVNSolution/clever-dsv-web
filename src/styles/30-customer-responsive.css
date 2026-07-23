@@ -97,6 +97,8 @@
       .page-content.work-page .work-column,
       .page-content.dynamic-page .page-panel { min-height:360px; }
       .page-content.records-page .page-panel.wide { grid-column:auto; }
+      .settings-hero { align-items:flex-start; }
+      .settings-header-tools { align-items:flex-end; flex-direction:column-reverse; gap:8px; }
     }
 
     @media (max-width: 920px) {
@@ -123,6 +125,9 @@
       .page-content { position: relative; inset: auto; margin: 14px 12px 20px; padding: 20px; }
       .page-content.dynamic-page { overflow:auto; }
       .page-grid { grid-template-columns: 1fr; }
+      .settings-hero { align-items:flex-start; flex-direction:column; }
+      .settings-header-tools { width:100%; justify-content:space-between; }
+      .settings-feedback { text-align:left; }
       .work-two-grid { grid-template-columns:1fr; height:auto; min-height:0; }
       .work-right-stack { grid-template-rows:auto; }
       .work-detail-content { grid-template-columns:1fr; }

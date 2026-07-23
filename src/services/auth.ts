@@ -14,6 +14,7 @@ export type Principal = {
 
 type LoginResponse = { accessToken?: string; csrfToken?: string };
 type SessionDto = {
+  csrfToken: string;
   principalType: PrincipalRole;
   shopId: string;
   scopes: string[];
@@ -33,6 +34,7 @@ export async function login(credentials: LoginCredentials): Promise<void> {
 export async function restoreSession(): Promise<Principal> {
   if (apiConfig.mode === 'mock') return { id: 'mock-admin', principalType: 'DSV_ADMIN', shopId: 'mock-shop', scopes: [], customerId: 'mock-customer', driverId: null };
   const session = await requestV1ReadJson<SessionDto>('session');
+  storeTransportSession(session);
   return principalFromSession(session);
 }
 
@@ -48,11 +50,12 @@ function storeTransportSession(session: unknown): void {
 
 function principalFromSession(session: SessionDto): Principal {
   const principalType = principalTypeFrom(session);
+  const csrfToken = stringField(session, ['csrfToken']);
   const shopId = stringField(session, ['shopId']);
   const customerId = stringField(session, ['customerId']);
   const driverId = stringField(session, ['driverId']);
   const scopes = arrayField(session, ['scopes']);
-  if (!principalType || !shopId || !Array.isArray(session.scopes) || scopes.length !== session.scopes.length) {
+  if (!csrfToken || !principalType || !shopId || !Array.isArray(session.scopes) || scopes.length !== session.scopes.length) {
     throw new ApiError(502, '세션 API 응답 형식이 올바르지 않습니다.', session);
   }
   return {

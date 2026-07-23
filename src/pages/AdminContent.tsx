@@ -8,7 +8,7 @@ import { SettingsPage } from './SettingsPage';
 export function AdminContent({ activePath, title, description }: { activePath: AdminPath; title: string; description: string }): ReactElement {
   return (
     <section className={`page-content dynamic-page admin-content overlay-scroll ${classNameForPath(activePath)}`} aria-label={`${title} 페이지`}>
-      {activePath === '/dispatch' ? null : <div className="page-hero"><div><h2>{title}</h2><p>{description}</p></div></div>}
+      {activePath === '/dispatch' || activePath === '/settings' ? null : <div className="page-hero"><div><h2>{title}</h2><p>{description}</p></div></div>}
       {contentForPath(activePath, title, description)}
     </section>
   );
@@ -38,8 +38,8 @@ function contentForPath(activePath: AdminPath, title: string, description: strin
     case '/records':
       return <RecordsPage />;
     case '/settings':
-      return <SettingsPage />;
+      return <SettingsPage title={title} description={description} />;
     default:
-      return <SettingsPage />;
+      return <SettingsPage title={title} description={description} />;
   }
 }
