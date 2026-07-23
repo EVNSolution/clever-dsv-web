@@ -152,9 +152,15 @@ test('destination suggests similar addresses and allows manual same-place linkin
   await expect(page.locator('.master-destination-table tr', { hasText: name })).toHaveCount(0);
 });
 
-test('condition supports create and edit but not delete', async ({ page }) => {
+test('condition keeps create and delete on the list and edit on the detail', async ({ page }) => {
   const name = `조건 ${stamp()}`;
   await openScope(page, '운송조건');
+  const listPanel = page.locator('.master-condition-grid > .page-panel').first();
+  const detailPanel = page.locator('.master-condition-grid > .page-panel').nth(1);
+  await expect(listPanel.getByRole('button', { name: '운송조건 등록', exact: true })).toBeVisible();
+  await expect(listPanel.getByRole('button', { name: '운송조건 삭제', exact: true })).toBeVisible();
+  await expect(listPanel.getByRole('button', { name: '운송조건 수정', exact: true })).toHaveCount(0);
+  await expect(detailPanel.getByRole('button', { name: '운송조건 수정', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '운송조건 등록', exact: true }).click();
   let form = page.getByLabel('운송조건 편집');
   await form.getByLabel('조건 코드').fill(`COND-${stamp().slice(-4)}`);
@@ -170,7 +176,10 @@ test('condition supports create and edit but not delete', async ({ page }) => {
   await page.reload();
   await page.getByRole('button', { name: '운송조건', exact: true }).click();
   await expect(page.locator('.master-condition-grid tr', { hasText: `${name} 수정` })).toBeVisible();
-  await expect(page.getByRole('button', { name: '운송조건 삭제', exact: true })).toHaveCount(0);
+  await page.locator('.master-condition-grid tr', { hasText: `${name} 수정` }).click();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: '운송조건 삭제', exact: true }).click();
+  await expect(page.locator('.master-condition-grid tr', { hasText: `${name} 수정` })).toHaveCount(0);
 });
 
 test('dispatch condition inspection keeps source casing and registers explicit candidates', async ({ page }) => {

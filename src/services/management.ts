@@ -115,6 +115,8 @@ function resourceOperation(previous: ManagementData, next: ManagementData): (() 
   if (removedDriver) return () => requestLegacyJson(`drivers/${removedDriver.id}`, { method: 'DELETE' });
   const removedVehicle = previous.vehicles.find((vehicle) => !next.vehicles.some((item) => item.id === vehicle.id));
   if (removedVehicle) return () => requestLegacyJson(`vehicles/${removedVehicle.id}`, { method: 'DELETE' });
+  const removedCondition = previous.conditions.find((condition) => !next.conditions.some((item) => item.id === condition.id));
+  if (removedCondition) return () => requestLegacyJson(`conditions/${removedCondition.id}`, { method: 'DELETE' });
 
   const addedDriver = next.drivers.find((driver) => !previous.drivers.some((item) => item.id === driver.id));
   if (addedDriver) return () => requestLegacyJson<{ driver: ManagementDriver }>('drivers', { json: driverPayload(addedDriver), method: 'POST' });
@@ -138,7 +140,12 @@ function resourceOperation(previous: ManagementData, next: ManagementData): (() 
   if (removedAssignment) return () => requestLegacyJson(`vehicles/${removedAssignment.vehicleId}/drivers/${removedAssignment.id}`, { method: 'DELETE' });
 
   const addedCondition = next.conditions.find((condition) => !previous.conditions.some((item) => item.id === condition.id));
-  if (addedCondition) return () => requestLegacyJson<{ condition: ManagementCondition }>('conditions', { json: conditionPayload(addedCondition), method: 'POST' });
+  if (addedCondition) return () => requestLegacyJson<{ condition: ManagementCondition }>('conditions', { json: conditionWritePayload(addedCondition), method: 'POST' });
+  const changedCondition = next.conditions.find((condition) => {
+    const current = previous.conditions.find((item) => item.id === condition.id);
+    return current !== undefined && JSON.stringify(current) !== JSON.stringify(condition);
+  });
+  if (changedCondition) return () => requestLegacyJson<{ condition: ManagementCondition }>(`conditions/${changedCondition.id}`, { json: conditionWritePayload(changedCondition), method: 'PATCH' });
   return null;
 }
 
@@ -315,7 +322,10 @@ function vehiclePayload(vehicle: ManagementVehicle): Omit<ManagementVehicle, 'id
   return payload;
 }
 
-function conditionPayload(condition: ManagementCondition): Omit<ManagementCondition, 'id'> {
-  const { id: _id, ...payload } = condition;
-  return payload;
+function conditionWritePayload(condition: ManagementCondition): Pick<ManagementCondition, 'code' | 'description' | 'name'> {
+  return {
+    code: condition.code,
+    description: condition.description,
+    name: condition.name,
+  };
 }

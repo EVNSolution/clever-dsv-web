@@ -43,6 +43,8 @@ const legacyAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'POST', pattern: /^dispatch-imports\/preview$/u },
   { method: 'POST', pattern: /^dispatch-imports$/u },
   { method: 'POST', pattern: /^conditions$/u },
+  { method: 'PATCH', pattern: /^conditions\/[^/]+$/u },
+  { method: 'DELETE', pattern: /^conditions\/[^/]+$/u },
   { method: 'GET', pattern: /^settings\/operations$/u },
   { method: 'PATCH', pattern: /^settings\/operations$/u },
   { method: 'POST', pattern: /^drivers$/u },

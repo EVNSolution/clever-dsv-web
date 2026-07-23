@@ -349,6 +349,8 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'POST dispatch-imports/preview',
     'POST dispatch-imports',
     'POST conditions',
+    'PATCH conditions/[^/]+',
+    'DELETE conditions/[^/]+',
     'GET settings/operations',
     'PATCH settings/operations',
     'POST drivers',
