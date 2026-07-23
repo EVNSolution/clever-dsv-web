@@ -35,6 +35,21 @@ function legacyError(status, message) {
   return { body: { data: null, error: { code: `G006_${status}`, message } }, status };
 }
 
+function operationSettings(overrides = {}) {
+  return {
+    dwellMinutes: 5,
+    etaDelayMinutes: 10,
+    forwardDelayAlerts: true,
+    gpsSilenceSeconds: 30,
+    loadingStartTime: '07:30',
+    plannedDepartureTime: '08:30',
+    recordMissingProof: true,
+    showTemperatureAlerts: true,
+    temperatureLimit: 8,
+    ...overrides,
+  };
+}
+
 function adminFixtures(fixtures) {
   return {
     'GET /api/dsv/v1/session': v1Envelope(adminSession, 'g006-parity-session'),
@@ -126,7 +141,7 @@ function dispatchPageFixture() {
 
 function dispatchFixtures(fixtures = {}) {
   return {
-    'GET /api/dsv/settings/operations': legacyEnvelope({ loadingStartTime: '07:15', plannedDepartureTime: '08:45' }),
+    'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings({ loadingStartTime: '07:15', plannedDepartureTime: '08:45' })),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({
       items: [{ customerId: 'customer-g006', displayName: 'Canonical Manufacturer G006', status: 'ACTIVE' }],
       page: { hasMore: false },
@@ -381,16 +396,20 @@ test('settings GET and PATCH use the exact bounded legacy path', async ({ page }
   await seedSentinel(page, key, sentinel);
   let patchBody;
   const api = await installApiFixtures(page, adminFixtures({
-    'GET /api/dsv/settings/operations': legacyEnvelope({ loadingStartTime: '07:15', plannedDepartureTime: '08:45' }),
+    'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings({ loadingStartTime: '07:15', plannedDepartureTime: '08:45' })),
     'PATCH /api/dsv/settings/operations': ({ request }) => {
       patchBody = request.postDataJSON();
-      return legacyEnvelope({ loadingStartTime: '07:30', plannedDepartureTime: '09:00' });
+      return legacyEnvelope(operationSettings({ loadingStartTime: '07:30', plannedDepartureTime: '09:00' }));
     },
   }));
 
   await page.goto('/settings');
   await expect(page.getByLabel('준비 시작 시간')).toHaveValue('07:15');
   await expect(page.getByLabel('출발 예정 시간')).toHaveValue('08:45');
+  await expect(page.getByLabel('특장 온도 상한')).toHaveValue('8');
+  await expect(page.getByLabel('ETA 지연 알림')).toHaveValue('10');
+  await expect(page.getByLabel('GPS 미수신 알림')).toHaveValue('30');
+  await expect(page.getByLabel('도착 후 대기시간')).toHaveValue('5');
   await expect(page.getByText('원격 설정')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '초기화', exact: true })).toBeVisible();
   await page.getByLabel('준비 시작 시간').fill('07:30');
@@ -398,21 +417,27 @@ test('settings GET and PATCH use the exact bounded legacy path', async ({ page }
   await page.getByRole('button', { name: '저장', exact: true }).click();
 
   await expect(page.getByRole('status').filter({ hasText: '설정을 저장했습니다.' })).toBeVisible();
-  expect(patchBody).toEqual({ loadingStartTime: '07:30', plannedDepartureTime: '09:00' });
+  expect(patchBody).toEqual(operationSettings({ loadingStartTime: '07:30', plannedDepartureTime: '09:00' }));
   await expectSentinel(page, key, sentinel);
   expectOnlyFixtureCalls(api);
 });
 
-test('settings renders operating defaults when the backend has no saved times', async ({ page }) => {
+test('settings renders the complete backend defaults', async ({ page }) => {
   const api = await installApiFixtures(page, adminFixtures({
-    'GET /api/dsv/settings/operations': legacyEnvelope({ loadingStartTime: null, plannedDepartureTime: null }),
+    'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings()),
   }));
 
   await page.goto('/settings');
 
   await expect(page.getByLabel('준비 시작 시간')).toHaveValue('07:30');
   await expect(page.getByLabel('출발 예정 시간')).toHaveValue('08:30');
-  await expect(page.getByText('기본값을 표시했습니다.')).toHaveCount(0);
+  await expect(page.getByLabel('특장 온도 상한')).toHaveValue('8');
+  await expect(page.getByLabel('ETA 지연 알림')).toHaveValue('10');
+  await expect(page.getByLabel('GPS 미수신 알림')).toHaveValue('30');
+  await expect(page.getByLabel('도착 후 대기시간')).toHaveValue('5');
+  await expect(page.getByRole('checkbox', { name: '관제 화면 표시' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: '배송원에게 전달' })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: '기록 페이지에 표시' })).toBeChecked();
   expectOnlyFixtureCalls(api);
 });
 
@@ -421,7 +446,7 @@ test('failed settings PATCH keeps the component draft and leaves the settings se
   const sentinel = 'g006-settings-failure-sentinel';
   await seedSentinel(page, key, sentinel);
   const api = await installApiFixtures(page, adminFixtures({
-    'GET /api/dsv/settings/operations': legacyEnvelope({ loadingStartTime: '07:15', plannedDepartureTime: '08:45' }),
+    'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings({ loadingStartTime: '07:15', plannedDepartureTime: '08:45' })),
     'PATCH /api/dsv/settings/operations': legacyError(500, 'settings patch failed'),
   }));
 

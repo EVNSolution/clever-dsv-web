@@ -13,10 +13,7 @@ import type { AdminSettings, OperationalSettings } from '../services/settings';
 type LoadState = 'loading' | 'ready';
 type SaveState = 'error' | 'idle' | 'saving' | 'saved';
 
-const defaultOperationalSettings: OperationalSettings = {
-  loadingStartTime: defaultAdminSettings.loadingStartTime,
-  plannedDepartureTime: defaultAdminSettings.plannedDepartureTime,
-};
+const defaultOperationalSettings: OperationalSettings = defaultAdminSettings;
 
 export function SettingsPage(): ReactElement {
   const isRemote = apiConfig.mode === 'remote';
@@ -43,7 +40,7 @@ export function SettingsPage(): ReactElement {
       .catch(() => {
         if (!active) return;
         setRemoteSettings(defaultOperationalSettings);
-        setLoadWarning('저장된 설정을 불러오지 못해 기본값을 표시했습니다.');
+        setLoadWarning('설정을 불러오지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.');
         setLoadState('ready');
       });
     return () => { active = false; };
@@ -108,7 +105,7 @@ export function SettingsPage(): ReactElement {
         {resetNotice ? <div className="panel-state" role="status">{resetNotice}</div> : null}
       </section>
 
-      <section className={`page-panel ${isRemote ? 'wide' : ''}`}>
+      <section className="page-panel">
         <div className="tab-line section-heading"><span>운영 시간</span></div>
         <table className="page-table">
           <tbody>
@@ -124,18 +121,14 @@ export function SettingsPage(): ReactElement {
         </table>
       </section>
 
-      {!isRemote ? (
-        <>
-          <section className="page-panel">
-            <div className="tab-line section-heading"><span>알림 기준</span></div>
-            <table className="page-table"><tbody><tr><th>특장 온도 상한</th><td><input className="setting-input" type="number" value={mockSettings.temperatureLimit} step="0.5" onChange={(event) => updateMock('temperatureLimit', Number(event.target.value))} /> ℃</td></tr><tr><th>ETA 지연 알림</th><td><input className="setting-input" type="number" value={mockSettings.etaDelayMinutes} onChange={(event) => updateMock('etaDelayMinutes', Number(event.target.value))} /> 분 이상</td></tr><tr><th>GPS 미수신 알림</th><td><input className="setting-input" type="number" value={mockSettings.gpsSilenceSeconds} onChange={(event) => updateMock('gpsSilenceSeconds', Number(event.target.value))} /> 초 이상</td></tr><tr><th>도착 후 대기시간</th><td><input className="setting-input" type="number" min="1" max="30" value={mockSettings.dwellMinutes} onChange={(event) => updateMock('dwellMinutes', Number(event.target.value))} /> 분</td></tr></tbody></table>
-          </section>
-          <section className="page-panel">
-            <div className="tab-line section-heading"><span>알림 수신</span></div>
-            <table className="page-table"><tbody><tr><th>온도 경고</th><td><label><input type="checkbox" checked={mockSettings.showTemperatureAlerts} onChange={(event) => updateMock('showTemperatureAlerts', event.target.checked)} /> 관제 화면 표시</label></td></tr><tr><th>배송 지연</th><td><label><input type="checkbox" checked={mockSettings.forwardDelayAlerts} onChange={(event) => updateMock('forwardDelayAlerts', event.target.checked)} /> 배송원에게 전달</label></td></tr><tr><th>증빙 누락</th><td><label><input type="checkbox" checked={mockSettings.recordMissingProof} onChange={(event) => updateMock('recordMissingProof', event.target.checked)} /> 기록 페이지에 표시</label></td></tr></tbody></table>
-          </section>
-        </>
-      ) : null}
+      <section className="page-panel">
+        <div className="tab-line section-heading"><span>알림 기준</span></div>
+        <table className="page-table"><tbody><tr><th>특장 온도 상한</th><td><input className="setting-input" aria-label="특장 온도 상한" type="number" value={settings.temperatureLimit} step="0.5" min="-50" max="50" onChange={(event) => isRemote ? updateRemote('temperatureLimit', Number(event.target.value)) : updateMock('temperatureLimit', Number(event.target.value))} /> ℃</td></tr><tr><th>ETA 지연 알림</th><td><input className="setting-input" aria-label="ETA 지연 알림" type="number" min="1" max="240" value={settings.etaDelayMinutes} onChange={(event) => isRemote ? updateRemote('etaDelayMinutes', Number(event.target.value)) : updateMock('etaDelayMinutes', Number(event.target.value))} /> 분 이상</td></tr><tr><th>GPS 미수신 알림</th><td><input className="setting-input" aria-label="GPS 미수신 알림" type="number" min="5" max="3600" value={settings.gpsSilenceSeconds} onChange={(event) => isRemote ? updateRemote('gpsSilenceSeconds', Number(event.target.value)) : updateMock('gpsSilenceSeconds', Number(event.target.value))} /> 초 이상</td></tr><tr><th>도착 후 대기시간</th><td><input className="setting-input" aria-label="도착 후 대기시간" type="number" min="0" max="240" value={settings.dwellMinutes} onChange={(event) => isRemote ? updateRemote('dwellMinutes', Number(event.target.value)) : updateMock('dwellMinutes', Number(event.target.value))} /> 분</td></tr></tbody></table>
+      </section>
+      <section className="page-panel">
+        <div className="tab-line section-heading"><span>알림 수신</span></div>
+        <table className="page-table"><tbody><tr><th>온도 경고</th><td><label><input type="checkbox" checked={settings.showTemperatureAlerts} onChange={(event) => isRemote ? updateRemote('showTemperatureAlerts', event.target.checked) : updateMock('showTemperatureAlerts', event.target.checked)} /> 관제 화면 표시</label></td></tr><tr><th>배송 지연</th><td><label><input type="checkbox" checked={settings.forwardDelayAlerts} onChange={(event) => isRemote ? updateRemote('forwardDelayAlerts', event.target.checked) : updateMock('forwardDelayAlerts', event.target.checked)} /> 배송원에게 전달</label></td></tr><tr><th>증빙 누락</th><td><label><input type="checkbox" checked={settings.recordMissingProof} onChange={(event) => isRemote ? updateRemote('recordMissingProof', event.target.checked) : updateMock('recordMissingProof', event.target.checked)} /> 기록 페이지에 표시</label></td></tr></tbody></table>
+      </section>
     </div>
   );
 }
