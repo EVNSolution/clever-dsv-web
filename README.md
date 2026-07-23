@@ -1,4 +1,4 @@
-# Clever - DSV Web
+# CLEVER - DSV Web
 
 `dsv.cleversystem.ai` 전용 웹 프론트엔드입니다.
 
@@ -24,6 +24,7 @@ npm run check
 
 ## 다음 구현 시작점
 
-1. `docs/reference/demo-reference/index.html`의 고객사/배송조회 화면 구조 확인
-2. `src/`에 고객사 로그인, 고객 배송조회, DSV 운영자 화면을 분리 구현
-3. API는 same-origin 기준으로 `clever-route-server`의 `/customer/*`, `/api/dsv/*`와 연결
+1. 현재 화면 경로는 `/control`, `/dispatch`, `/records`, `/master-data`, `/settings`, `/customer/delivery-inquiry`입니다.
+2. 운영자 메뉴 표기는 `관제`, `배차`, `이력`, `관리`, `설정`입니다.
+3. `src/demo`는 프론트엔드 데모 투영과 화면 fixture의 정본입니다. 이 타입은 백엔드 모델이나 API DTO 계약이 아닙니다.
+4. API 연결은 `docs/backend-api.md`와 확정된 계약 문서를 기준으로 진행합니다.
