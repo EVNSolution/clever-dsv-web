@@ -373,18 +373,18 @@
     .page-content .work-column > .section-heading-actions.section-heading-actions:first-child { padding:0 10px; }
 
     .master-data-shell { min-height:0; flex:1 1 auto; display:flex; flex-direction:column; gap:12px; }
-    .master-scope-nav { flex:0 0 auto; display:flex; gap:8px; }
-    .master-scope-nav button { min-height:36px; padding:0 14px; border:1px solid var(--hairline); border-radius:12px; background:#fff; color:var(--muted); font:800 13px/1 Pretendard, sans-serif; cursor:pointer; }
-    .master-scope-nav button[aria-pressed="true"] { border-color:#000; background:#000; color:#fff; }
+    .master-scope-nav,
+    .management-subnav { flex:0 0 auto; display:flex; gap:0; border-bottom:1px solid var(--hairline); }
+    .master-scope-nav button,
+    .management-subnav button { min-height:34px; padding:0 12px; border:0; border-bottom:2px solid transparent; border-radius:0; background:transparent; color:var(--muted); font:800 12px/1 Pretendard, sans-serif; cursor:pointer; }
+    .master-scope-nav button[aria-pressed="true"],
+    .management-subnav button[aria-pressed="true"] { border-bottom-color:#000; background:transparent; color:var(--ink); }
     .master-data-shell > .courier-grid,
     .master-data-shell > .page-grid { min-height:0; flex:1 1 auto; }
     .master-data-shell > .management-resource-shell { min-height:0; flex:1 1 auto; }
     .management-resource-shell { display:flex; flex-direction:column; gap:10px; }
     .management-resource-shell > .courier-grid,
     .management-resource-shell > .page-grid { min-height:0; flex:1 1 auto; }
-    .management-subnav { display:flex; gap:6px; }
-    .management-subnav button { min-height:30px; padding:0 12px; border:1px solid var(--hairline); border-radius:10px; background:#fff; color:var(--muted); font:800 12px/1 Pretendard, sans-serif; cursor:pointer; }
-    .management-subnav button[aria-pressed="true"] { border-color:#000; background:#000; color:#fff; }
     .resource-crud-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
     .master-network-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
     .master-destination-panel { min-height:0; display:flex; flex-direction:column; }

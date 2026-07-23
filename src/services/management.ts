@@ -12,16 +12,24 @@ type V1ListPage<TItem> = {
 };
 
 type V1DriverListItem = {
+  age?: number;
+  career?: string;
   displayName: string;
   driverId: string;
+  gender?: string;
   phone?: string;
+  score?: string;
   status?: string;
+  traits?: string[];
+  zone?: string;
 };
 
 type V1VehicleListItem = {
   displayName: string;
   driverAssignments?: V1VehicleDriverAssignment[];
+  note?: string;
   status?: string;
+  type?: string;
   vehicleId: string;
   vehiclePlate?: string;
 };
@@ -190,23 +198,23 @@ async function readV1List<TItem>(endpoint: string, isItem: (value: unknown) => v
 
 function driverViewModel(driver: V1DriverListItem): ManagementDriver {
   return {
-    age: 0,
-    career: '',
-    gender: '',
+    age: driver.age ?? 30,
+    career: driver.career ?? '미등록',
+    gender: driver.gender ?? '미등록',
     id: driver.driverId,
     name: driver.displayName,
-    score: driver.status ?? '',
-    traits: driver.phone ? [`연락처 ${driver.phone}`] : [],
-    zone: '',
+    score: driver.score ?? '미등록',
+    traits: driver.traits ?? (driver.phone ? [`연락처 ${driver.phone}`] : []),
+    zone: driver.zone ?? '미등록',
   };
 }
 
 function vehicleViewModel(vehicle: V1VehicleListItem): ManagementVehicle {
   return {
     id: vehicle.vehicleId,
-    note: '',
+    note: vehicle.note ?? '',
     plate: vehicle.vehiclePlate ?? '',
-    type: vehicle.displayName,
+    type: vehicle.type ?? vehicle.displayName,
   };
 }
 
@@ -249,20 +257,28 @@ function isV1ListPage<TItem>(value: unknown, isItem: (item: unknown) => item is 
 }
 
 function isV1DriverListItem(value: unknown): value is V1DriverListItem {
-  return hasOnlyKeys(value, ['displayName', 'driverId', 'phone', 'status'])
+  return hasOnlyKeys(value, ['age', 'career', 'displayName', 'driverId', 'gender', 'phone', 'score', 'status', 'traits', 'zone'])
     && isNonEmptyString(value.driverId)
     && isNonEmptyString(value.displayName)
+    && (value.age === undefined || (typeof value.age === 'number' && Number.isInteger(value.age)))
+    && isOptionalString(value.career)
+    && isOptionalString(value.gender)
     && isOptionalString(value.phone)
-    && isOptionalString(value.status);
+    && isOptionalString(value.score)
+    && isOptionalString(value.status)
+    && (value.traits === undefined || (Array.isArray(value.traits) && value.traits.every((item) => typeof item === 'string')))
+    && isOptionalString(value.zone);
 }
 
 function isV1VehicleListItem(value: unknown): value is V1VehicleListItem {
-  return hasOnlyKeys(value, ['displayName', 'driverAssignments', 'status', 'vehicleId', 'vehiclePlate'])
+  return hasOnlyKeys(value, ['displayName', 'driverAssignments', 'note', 'status', 'type', 'vehicleId', 'vehiclePlate'])
     && isNonEmptyString(value.vehicleId)
     && isNonEmptyString(value.displayName)
     && (value.driverAssignments === undefined
       || (Array.isArray(value.driverAssignments) && value.driverAssignments.every(isV1VehicleDriverAssignment)))
+    && isOptionalString(value.note)
     && isOptionalString(value.status)
+    && isOptionalString(value.type)
     && isOptionalString(value.vehiclePlate);
 }
 

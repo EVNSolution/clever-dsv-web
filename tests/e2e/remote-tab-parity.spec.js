@@ -108,13 +108,26 @@ function expectOnlyFixtureCalls(api) {
 function managementListFixtures(overrides = {}) {
   return {
     'GET /api/dsv/v1/drivers?limit=100': v1Envelope({
-      items: [{ displayName: 'Canonical Driver G006', driverId: 'driver-g006', phone: '010-0000-6006', status: 'ACTIVE' }],
+      items: [{
+        age: 42,
+        career: '배송 경력 6년',
+        displayName: 'Canonical Driver G006',
+        driverId: 'driver-g006',
+        gender: '남성',
+        phone: '010-0000-6006',
+        score: 'A',
+        status: 'ACTIVE',
+        traits: ['냉장 배송'],
+        zone: '강남',
+      }],
     }, 'g006-drivers'),
     'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
       items: [{
         displayName: 'Canonical Refrigerated Truck',
         driverAssignments: [{ assignmentId: 'assignment-g006', driverId: 'driver-g006' }],
+        note: '정기 점검 완료',
         status: 'ACTIVE',
+        type: '냉장탑차',
         vehicleId: 'vehicle-g006',
         vehiclePlate: '99테 6006',
       }],
@@ -275,13 +288,14 @@ test('management success renders all five canonical v1 lists', async ({ page }) 
   await page.goto('/master-data');
 
   await expect(page.getByText('Canonical Driver G006', { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: '배송원 수정', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '배송원 수정', exact: true })).toBeEnabled();
+  await expect(page.getByLabel('배송원 상세')).not.toContainText('ACTIVE');
   await page.getByRole('button', { name: '차량', exact: true }).click();
   await expect(page.getByText('99테 6006', { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: '차량 수정', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '차량 수정', exact: true })).toBeEnabled();
   const vehicleRow = page.getByLabel('차량 리스트').getByRole('row').filter({ hasText: '99테 6006' });
-  await expect(vehicleRow.locator('td').nth(1)).toHaveText('Canonical Refrigerated Truck');
-  await expect(vehicleRow.locator('td').nth(2)).toHaveText('미제공');
+  await expect(vehicleRow.locator('td').nth(1)).toHaveText('냉장탑차');
+  await expect(vehicleRow.locator('td').nth(2)).toHaveText('정기 점검 완료');
   const assignment = page.getByLabel('배송원 배정');
   await expect(assignment.getByRole('row').filter({ hasText: 'Canonical Driver G006' })).toBeVisible();
   await page.getByRole('button', { name: '고객사', exact: true }).click();
@@ -291,6 +305,64 @@ test('management success renders all five canonical v1 lists', async ({ page }) 
   await expect(page.getByText('냉장 운송', { exact: true }).first()).toBeVisible();
   const conditionRow = page.locator('.master-condition-grid tbody tr').filter({ hasText: '냉장 운송' });
   await expect(conditionRow.locator('td')).toHaveText(['COLD', '냉장 운송', '냉장 상태를 유지하여 운송합니다.']);
+  expectOnlyFixtureCalls(api);
+});
+
+test('management edits drivers and vehicles through the remote mutation contracts', async ({ page }) => {
+  let driverName = 'Canonical Driver G006';
+  let vehicleNote = '정기 점검 완료';
+  const driverItem = () => ({
+    age: 42,
+    career: '배송 경력 6년',
+    displayName: driverName,
+    driverId: 'driver-g006',
+    gender: '남성',
+    phone: '010-0000-6006',
+    score: 'A',
+    status: 'ACTIVE',
+    traits: ['냉장 배송'],
+    zone: '강남',
+  });
+  const vehicleItem = () => ({
+    displayName: 'Canonical Refrigerated Truck',
+    driverAssignments: [{ assignmentId: 'assignment-g006', driverId: 'driver-g006' }],
+    note: vehicleNote,
+    status: 'ACTIVE',
+    type: '냉장탑차',
+    vehicleId: 'vehicle-g006',
+    vehiclePlate: '99테 6006',
+  });
+  const api = await installApiFixtures(page, adminFixtures(managementListFixtures({
+    'GET /api/dsv/v1/drivers?limit=100': () => v1Envelope({ items: [driverItem()] }, 'g006-drivers-edit'),
+    'GET /api/dsv/v1/vehicles?limit=100': () => v1Envelope({ items: [vehicleItem()], page: { hasMore: false } }, 'g006-vehicles-edit'),
+    'PATCH /api/dsv/drivers/driver-g006': async ({ request }) => {
+      const body = await request.postDataJSON();
+      driverName = body.name;
+      return legacyEnvelope({ driver: { ...body, id: 'driver-g006' } });
+    },
+    'PATCH /api/dsv/vehicles/vehicle-g006': async ({ request }) => {
+      const body = await request.postDataJSON();
+      vehicleNote = body.note;
+      return legacyEnvelope({ vehicle: { ...body, id: 'vehicle-g006' } });
+    },
+  })));
+
+  await page.goto('/master-data');
+  await page.getByRole('button', { name: '배송원 수정', exact: true }).click();
+  const driverForm = page.getByLabel('배송원 편집');
+  await driverForm.getByLabel('이름').fill('수정 배송원 G006');
+  await driverForm.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(page.getByText('수정 배송원 G006', { exact: true }).first()).toBeVisible();
+
+  await page.getByRole('button', { name: '차량', exact: true }).click();
+  await page.getByRole('button', { name: '차량 수정', exact: true }).click();
+  const vehicleForm = page.getByLabel('차량 편집');
+  await vehicleForm.getByLabel('메모').fill('수정 점검 완료');
+  await vehicleForm.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(page.getByLabel('차량 리스트').getByRole('row').filter({ hasText: '99테 6006' })).toContainText('수정 점검 완료');
+
+  expect(api.calls.some((call) => call.key === 'PATCH /api/dsv/drivers/driver-g006')).toBe(true);
+  expect(api.calls.some((call) => call.key === 'PATCH /api/dsv/vehicles/vehicle-g006')).toBe(true);
   expectOnlyFixtureCalls(api);
 });
 
