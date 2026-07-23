@@ -129,7 +129,13 @@ function managementListFixtures(overrides = {}) {
       page: { hasMore: false },
     }, 'g006-destinations'),
     'GET /api/dsv/v1/conditions?limit=100': v1Envelope({
-      items: [{ conditionId: 'condition-g006', name: 'CANONICAL_COLD', status: 'ACTIVE' }],
+      items: [{
+        code: 'COLD',
+        conditionId: 'condition-g006',
+        description: '냉장 상태를 유지하여 운송합니다.',
+        name: '냉장 운송',
+        status: 'ACTIVE',
+      }],
       page: { hasMore: false },
     }, 'g006-conditions'),
     ...overrides,
@@ -282,9 +288,9 @@ test('management success renders all five canonical v1 lists', async ({ page }) 
   await expect(page.getByText('Canonical Customer G006', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Canonical Destination G006', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: '운송조건', exact: true }).click();
-  await expect(page.getByText('CANONICAL_COLD', { exact: true }).first()).toBeVisible();
-  const conditionRow = page.locator('.master-condition-grid tbody tr').filter({ hasText: 'CANONICAL_COLD' });
-  await expect(conditionRow.locator('td')).toHaveText(['미제공', 'CANONICAL_COLD', '미제공']);
+  await expect(page.getByText('냉장 운송', { exact: true }).first()).toBeVisible();
+  const conditionRow = page.locator('.master-condition-grid tbody tr').filter({ hasText: '냉장 운송' });
+  await expect(conditionRow.locator('td')).toHaveText(['COLD', '냉장 운송', '냉장 상태를 유지하여 운송합니다.']);
   expectOnlyFixtureCalls(api);
 });
 

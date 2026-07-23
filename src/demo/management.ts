@@ -73,9 +73,9 @@ const seed: ManagementData = {
   customers: devDb.customers.map((customer) => ({ ...customer })),
   destinations: uniqueDestinations(),
   conditions: [
-    { id: 'condition-cold', code: 'COLD', name: '냉장', description: '냉장 상태를 유지하여 운송합니다.', temperature: '2–8℃', vehicle: '냉장탑차', proof: '온도기록, 인수증' },
-    { id: 'condition-ambient', code: 'AMBIENT', name: '상온', description: '상온 조건으로 운송합니다.', temperature: '실온', vehicle: '윙바디 또는 일반 화물', proof: 'POD' },
-    { id: 'condition-ts03', code: 'TS03', name: 'TS03', description: '계약서에 정의된 TS03 운송 조건을 적용합니다.', temperature: '', vehicle: '', proof: '' },
+    { id: 'condition-ambient', code: 'AMBIENT', name: '상온 운송', description: '상온 조건으로 운송합니다.', temperature: '실온', vehicle: '윙바디 또는 일반 화물', proof: 'POD' },
+    { id: 'condition-cold', code: 'COLD', name: '냉장 운송', description: '냉장 상태를 유지하여 운송합니다.', temperature: '2–8℃', vehicle: '냉장탑차', proof: '온도기록, 인수증' },
+    { id: 'condition-ts03', code: 'TS03', name: '특수 운송 03', description: '계약서에 정의된 TS03 운송 조건을 적용합니다.', temperature: '', vehicle: '', proof: '' },
   ],
 };
 

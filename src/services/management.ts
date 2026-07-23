@@ -45,7 +45,9 @@ type V1DestinationListItem = {
 };
 
 type V1ConditionListItem = {
+  code: string;
   conditionId: string;
+  description: string;
   name: string;
   status?: string;
 };
@@ -220,8 +222,8 @@ function destinationViewModel(destination: V1DestinationListItem): ManagementDat
 
 function conditionViewModel(condition: V1ConditionListItem): ManagementCondition {
   return {
-    code: '',
-    description: '',
+    code: condition.code,
+    description: condition.description,
     id: condition.conditionId,
     name: condition.name,
     proof: '',
@@ -279,8 +281,10 @@ function isV1DestinationListItem(value: unknown): value is V1DestinationListItem
 }
 
 function isV1ConditionListItem(value: unknown): value is V1ConditionListItem {
-  return hasOnlyKeys(value, ['conditionId', 'name', 'status'])
+  return hasOnlyKeys(value, ['code', 'conditionId', 'description', 'name', 'status'])
+    && isNonEmptyString(value.code)
     && isNonEmptyString(value.conditionId)
+    && typeof value.description === 'string'
     && isNonEmptyString(value.name)
     && isOptionalString(value.status);
 }
