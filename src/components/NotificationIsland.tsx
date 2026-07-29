@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
+import { Bell, X } from 'lucide-react';
 import { loadReadNotificationIds, notificationItems, saveReadNotificationIds } from '../services/notifications';
 
 export function NotificationIsland({ open, onToggle, onClose, onVehicleLookup }: { open: boolean; onToggle: () => void; onClose: () => void; onVehicleLookup: (vehicleId: string) => void }): ReactElement {
@@ -9,12 +10,14 @@ export function NotificationIsland({ open, onToggle, onClose, onVehicleLookup }:
   const markRead = (id: string) => setReadIds((ids) => ids.includes(id) ? ids : [...ids, id]);
   return (
     <div className="notification-island" aria-label="알림 센터">
-      <button className={`notification-bell${open ? ' ringing' : ''}`} type="button" aria-label="알림 열기" aria-expanded={open} onClick={onToggle}>
-        <span className="bell-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg></span><span className="notification-count" hidden={unreadCount === 0}>{unreadCount}</span>
+      <button className="notification-bell" type="button" aria-label="알림 열기" aria-expanded={open} onClick={onToggle}>
+        <Bell className="bell-icon" aria-hidden="true" />
+        <span className="notification-count" hidden={unreadCount === 0}>{unreadCount}</span>
       </button>
       <div className="notification-stack overlay-scroll" hidden={!open}>
-        <div className="notification-head"><span className="notification-head-copy"><strong>알림 센터</strong><small>읽지 않은 알림 {unreadCount}건</small></span><span className="notification-head-actions"><button className="notification-action" type="button" disabled={unreadCount === 0} onClick={() => setReadIds(notificationItems.map((item) => item.id))}>전부 읽음</button><button className="notification-action close" type="button" aria-label="알림 닫기" onClick={onClose}>×</button></span></div>
-        <p className="notification-summary">차량 이상과 배송 진행 상태를 확인하세요.</p>
+        <div className="notification-head"><span className="notification-head-copy"><strong>알림 센터</strong><small>읽지 않은 알림 {unreadCount}건</small></span><span className="notification-head-actions"><button className="notification-action" type="button" disabled={unreadCount === 0} onClick={() => setReadIds(notificationItems.map((item) => item.id))}>전부 읽음</button><button className="notification-action close" type="button" aria-label="알림 닫기" onClick={onClose}><X aria-hidden="true" /></button></span></div>
+        <p className="notification-summary">운영 알림을 확인하세요.</p>
+        {!notificationItems.length ? <p className="notification-summary" role="status">알림이 없습니다.</p> : null}
         {notificationItems.map((item) => {
           const read = readIds.includes(item.id);
           return (

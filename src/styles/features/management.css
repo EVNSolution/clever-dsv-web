@@ -1,0 +1,75 @@
+.page-content.master-data-page .page-panel { padding-top:10px; }
+.page-content.records-page .page-grid { grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); grid-template-rows:minmax(300px, 1.08fr) minmax(230px, .92fr); }
+.page-content.records-page .page-panel.wide { grid-column:1 / -1; }
+
+.master-data-shell { min-height:0; flex:1 1 auto; display:flex; flex-direction:column; gap:12px; }
+.master-scope-nav { flex:0 0 auto; display:flex; gap:0; border-bottom:1px solid var(--color-border); }
+.master-scope-nav button { min-height:34px; padding:0 12px; border:0; border-bottom:2px solid transparent; border-radius:0; background:transparent; color:var(--color-muted); font:800 12px/1 var(--font-sans); cursor:pointer; }
+.master-scope-nav button[aria-pressed="true"] { border-bottom-color:var(--color-black); background:transparent; color:var(--color-ink); }
+.master-data-shell > .courier-grid,
+.master-data-shell > .page-grid { min-height:0; flex:1 1 auto; }
+.master-data-shell > .management-resource-shell { min-height:0; flex:1 1 auto; }
+.management-resource-shell {
+  display:grid; grid-template-rows:repeat(2, minmax(0, 1fr)); gap:12px;
+}
+.resource-workspace {
+  min-width:0; min-height:0; display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr)); gap:var(--space-4);
+  transition:grid-template-columns .24s ease;
+}
+.resource-workspace > .page-panel { min-width:0; min-height:0; }
+.master-network-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); grid-template-rows:minmax(0, 1fr); }
+.management-entity-column {
+  min-width:0; min-height:0; display:grid;
+  grid-template-rows:minmax(220px, 1fr) minmax(170px, .65fr); gap:16px;
+}
+.management-list-panel,
+.management-detail-panel { min-height:0; }
+.master-data-page .management-list-panel,
+.master-data-page .management-detail-panel { padding:10px 14px 14px; }
+.master-destination-panel { min-height:0; display:flex; flex-direction:column; }
+.master-destination-panel .record-scroll { min-height:160px; }
+.master-destination-table th:last-child, .master-destination-table td:last-child { width:54px; white-space:nowrap; }
+.master-data-page .page-table tbody tr[tabindex] { cursor:pointer; }
+.master-data-page .page-table tbody tr[tabindex]:hover { background:var(--color-row-hover); }
+.master-data-page .page-table tbody tr.active { background:var(--color-primary-soft); box-shadow:inset 3px 0 0 var(--color-primary); }
+.master-customer-table th:nth-child(1) { width:32%; }
+.master-customer-table th:nth-child(2) { width:23%; }
+.master-customer-link { color:var(--color-primary); font-size:12px; font-weight:800; text-decoration:none; }
+.master-customer-link:hover, .master-customer-link:focus-visible { text-decoration:underline; }
+.master-detail-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:18px; padding:8px 10px; }
+.master-detail-grid dl { margin:0; display:grid; grid-template-columns:110px minmax(0, 1fr); gap:9px 12px; }
+.master-detail-grid dt { color:var(--color-muted); font-size:12px; font-weight:800; }
+.master-detail-grid dd { margin:0; color:var(--color-ink); font-size:13px; font-weight:800; }
+.master-detail-grid strong { color:var(--color-ink); font-size:13px; }
+.master-detail-grid p { margin:8px 0 0; color:var(--color-muted); font-size:13px; font-weight:700; }
+.management-actions { display:inline-flex; align-items:center; gap:5px; margin-left:auto; }
+.management-heading-side { display:inline-flex; align-items:center; gap:8px; margin-left:auto; }
+.management-heading-side .management-actions { margin-left:0; }
+.management-actions button,
+.management-form-actions button { min-height:28px; border:1px solid var(--color-control-border); border-radius:8px; padding:0 9px; background:var(--color-white); color:var(--color-ink); font:800 11px/1 var(--font-sans); cursor:pointer; }
+.management-actions button.danger { border-color:rgba(217,45,32,.28); color:var(--color-risk); }
+.management-actions button:disabled { opacity:.35; cursor:default; }
+.management-editor { min-height:0; display:flex; flex-direction:column; gap:14px; }
+.management-form-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; padding:4px 10px; }
+.management-form-grid label { display:grid; gap:6px; color:var(--color-muted); font-size:11px; font-weight:800; }
+.management-form-grid label.wide { grid-column:1 / -1; }
+.management-form-grid input,
+.management-form-grid select { width:100%; min-height:36px; border:1px solid var(--color-control-border); border-radius:9px; padding:0 10px; background:var(--color-white); color:var(--color-ink); font:700 13px/1 var(--font-sans); }
+.management-form-actions { display:flex; justify-content:flex-end; gap:6px; padding:0 10px 4px; }
+.management-form-actions button.primary { border-color:var(--color-black); background:var(--color-black); color:var(--color-white); }
+.management-empty { padding:24px 10px; color:var(--color-muted); font-size:13px; font-weight:700; text-align:center; }
+.management-detail { margin:0; padding:8px 10px; display:grid; gap:10px; }
+.management-detail div { display:grid; grid-template-columns:110px minmax(0, 1fr); gap:12px; }
+.management-detail dt { color:var(--color-muted); font-size:12px; font-weight:800; }
+.management-detail dd { margin:0; color:var(--color-ink); font-size:13px; font-weight:800; }
+.resource-workspace .management-detail dd { min-width:0; overflow-wrap:anywhere; }
+.vehicle-assignment-card { min-height:0; margin-top:12px; }
+.vehicle-assignment-controls { display:flex; align-items:end; gap:8px; padding:0 10px 10px; }
+.vehicle-assignment-controls label { min-width:0; flex:1 1 auto; display:grid; gap:6px; color:var(--color-muted); font-size:11px; font-weight:800; }
+.vehicle-assignment-controls select { width:100%; min-height:34px; border:1px solid var(--color-control-border); border-radius:9px; padding:0 10px; background:var(--color-white); color:var(--color-ink); font:700 13px/1 var(--font-sans); }
+.vehicle-assignment-controls .management-actions { flex:0 0 auto; }
+.vehicle-assignment-card .courier-history-table th:last-child,
+.vehicle-assignment-card .courier-history-table td:last-child { width:64px; text-align:right; }
+.address-similarity { margin:0 10px; padding:10px 12px; display:flex; align-items:center; gap:10px; border:1px solid #e1b86a; border-radius:10px; background:var(--color-white)af0; color:#6d4b0d; font-size:11px; }
+.address-similarity strong { margin-right:auto; }

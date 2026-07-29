@@ -1,0 +1,13 @@
+{
+  "attribution": "OpenFreeMap © OpenMapTiles Data from OpenStreetMap",
+  "bounds": [124.5, 33, 132, 39.5],
+  "initialView": {
+    "center": [126.995, 37.43],
+    "zoom": 10.35
+  },
+  "profileId": "dsv-korea-v1",
+  "providerMode": "public_allowlisted",
+  "regionCode": "KR",
+  "styleUrl": "/map/styles/dsv-korea-v1.json",
+  "version": "2026-07"
+}

@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import type { AdminPath } from '../app-routes';
+import { AdminPageHeader } from '../components/AdminUi';
 import { MasterDataPage } from './MasterDataPage';
 import { DispatchPage } from './DispatchPage';
 import { RecordsPage } from './RecordsPage';
@@ -8,7 +9,7 @@ import { SettingsPage } from './SettingsPage';
 export function AdminContent({ activePath, title, description }: { activePath: AdminPath; title: string; description: string }): ReactElement {
   return (
     <section className={`page-content dynamic-page admin-content overlay-scroll ${classNameForPath(activePath)}`} aria-label={`${title} 페이지`}>
-      {activePath === '/dispatch' || activePath === '/settings' ? null : <div className="page-hero"><div><h2>{title}</h2><p>{description}</p></div></div>}
+      {activePath === '/dispatch' || activePath === '/settings' ? null : <AdminPageHeader title={title} description={description} />}
       {contentForPath(activePath, title, description)}
     </section>
   );

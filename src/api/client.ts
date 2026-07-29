@@ -1,4 +1,5 @@
 import { apiConfig } from './config';
+import { expireTransportSession, readAuthToken, readCsrfToken, storeCsrfToken } from './auth-session';
 
 type JsonRequestInit = Omit<RequestInit, 'body'> & { json?: unknown };
 
@@ -40,6 +41,8 @@ export class ApiError extends Error {
 
 const legacyAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'POST', pattern: /^auth\/login$/u },
+  { method: 'POST', pattern: /^auth\/logout$/u },
+  { method: 'GET', pattern: /^auth\/session$/u },
   { method: 'POST', pattern: /^dispatch-imports\/preview$/u },
   { method: 'POST', pattern: /^dispatch-imports$/u },
   { method: 'POST', pattern: /^conditions$/u },
@@ -47,6 +50,7 @@ const legacyAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'DELETE', pattern: /^conditions\/[^/]+$/u },
   { method: 'GET', pattern: /^settings\/operations$/u },
   { method: 'PATCH', pattern: /^settings\/operations$/u },
+  { method: 'POST', pattern: /^settings\/operations\/geocode$/u },
   { method: 'POST', pattern: /^drivers$/u },
   { method: 'PATCH', pattern: /^drivers\/[^/]+$/u },
   { method: 'DELETE', pattern: /^drivers\/[^/]+$/u },
@@ -60,6 +64,7 @@ const legacyAllowlist: Array<{ method: string; pattern: RegExp }> = [
 
 const v1ReadAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'GET', pattern: /^session$/u },
+  { method: 'GET', pattern: /^map\/profile$/u },
   { method: 'GET', pattern: /^control$/u },
   { method: 'GET', pattern: /^dispatches$/u },
   { method: 'GET', pattern: /^records$/u },
@@ -80,6 +85,7 @@ export async function requestV1ReadJson<ResponseBody>(path: string, init: JsonRe
   const target = requestTarget(path, init.method);
   assertAllowed('v1 read', target, v1ReadAllowlist);
   const response = await fetchJson(apiConfig.v1BaseUrl, path, { ...init, method: target.method });
+  if (response.status === 401) expireTransportSession();
   const body = await readV1ResponseBody(response);
   if (!response.ok) throw strictV1Error(response.status, body);
   return strictV1Data<ResponseBody>(body);
@@ -89,9 +95,11 @@ export async function requestV1AssignmentCommandJson<ResponseBody>(path: string,
   const target = requestTarget(path, init.method);
   assertAllowed('v1 assignment command', target, assignmentCommandAllowlist);
   let response = await fetchJson(apiConfig.v1BaseUrl, path, { ...init, method: target.method });
+  if (response.status === 401) expireTransportSession();
   let body = await readAssignmentCommandResponseBody(response);
   if (isCsrfFailure(response.status, body) && await refreshCsrfToken()) {
     response = await fetchJson(apiConfig.v1BaseUrl, path, { ...init, method: target.method });
+    if (response.status === 401) expireTransportSession();
     body = await readAssignmentCommandResponseBody(response);
   }
   if (!response.ok) throw legacyAssignmentCommandError(response.status, body);
@@ -102,9 +110,11 @@ export async function requestLegacyJson<ResponseBody>(path: string, init: JsonRe
   const target = requestTarget(path, init.method);
   assertAllowed('legacy API', target, legacyAllowlist);
   let response = await fetchJson(apiConfig.legacyBaseUrl, path, { ...init, method: target.method });
+  if (response.status === 401) expireTransportSession();
   let body = await readResponseBody(response);
   if (isCsrfFailure(response.status, body) && await refreshCsrfToken()) {
     response = await fetchJson(apiConfig.legacyBaseUrl, path, { ...init, method: target.method });
+    if (response.status === 401) expireTransportSession();
     body = await readResponseBody(response);
   }
   if (!response.ok) throw new ApiError(response.status, errorMessage(body, response.status), body);
@@ -122,8 +132,8 @@ function disallowedRequest(boundary: string, target: RequestTarget): ApiError {
 }
 
 async function fetchJson(baseUrl: string, path: string, { json, headers, ...init }: JsonRequestInit): Promise<Response> {
-  const token = window.sessionStorage.getItem('clever.auth.token');
-  const csrfToken = window.sessionStorage.getItem('clever.auth.csrf');
+  const token = readAuthToken();
+  const csrfToken = readCsrfToken();
   const method = methodFor(init.method);
   return fetch(`${baseUrl}/${path.replace(/^\/+/, '')}`, {
     ...init,
@@ -142,12 +152,13 @@ async function fetchJson(baseUrl: string, path: string, { json, headers, ...init
 
 async function refreshCsrfToken(): Promise<boolean> {
   try {
-    const response = await fetchJson(apiConfig.v1BaseUrl, 'session', { method: 'GET' });
-    const body = await readV1ResponseBody(response);
+    const response = await fetchJson(apiConfig.legacyBaseUrl, 'auth/session', { method: 'GET' });
+    if (response.status === 401) expireTransportSession();
+    const body = await readResponseBody(response);
     if (!response.ok) return false;
-    const session = strictV1Data<{ csrfToken?: unknown }>(body);
+    const session = legacyData<{ csrfToken?: unknown }>(body);
     if (typeof session.csrfToken !== 'string' || session.csrfToken === '') return false;
-    window.sessionStorage.setItem('clever.auth.csrf', session.csrfToken);
+    storeCsrfToken(session.csrfToken);
     return true;
   } catch {
     return false;

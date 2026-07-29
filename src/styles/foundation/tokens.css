@@ -1,0 +1,60 @@
+
+:root {
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-canvas: #f5f5f7;
+  --color-surface: var(--color-white);
+  --color-ink: #1d1d1f;
+  --color-muted: #6e6e73;
+  --color-border: #e5e5ea;
+  --color-primary: #0066cc;
+  --color-primary-soft: #e8f2ff;
+  --color-success: #1f8b4c;
+  --color-success-soft: #e9f7ef;
+  --color-future: #d1d5db;
+  --color-complete: #8e8e93;
+  --color-complete-soft: #f2f2f7;
+  --color-risk: #d92d20;
+  --color-risk-soft: #fff0ed;
+  --color-warning: #f79009;
+  --color-warning-soft: #fff7e8;
+  --color-map-canvas: #eef3f8;
+  --color-departure: #008060;
+  --color-control-border: #cfd5dd;
+  --color-text-subtle: #737b87;
+  --color-row-hover: #f7faff;
+  --color-row-divider: #eceff3;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+
+  --radius-control: 12px;
+  --radius-table: 14px;
+  --radius-card: 18px;
+  --radius-panel: 24px;
+  --radius-shell: 30px;
+  --radius-pill: 999px;
+
+  --control-height-small: 28px;
+  --control-height-medium: 36px;
+  --control-height-large: 44px;
+
+  --text-page-title: 34px;
+  --text-section-title: 15px;
+  --text-body: 14px;
+  --text-caption: 11px;
+
+  --shadow-floating: 0 24px 70px rgba(0, 0, 0, .10);
+  --motion-fast: .16s;
+  --motion-standard: .2s;
+
+  font-family: var(--font-sans);
+  font-synthesis: none;
+}

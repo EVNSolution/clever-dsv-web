@@ -1,4 +1,5 @@
 import { ApiError, requestJson, requestV1ReadJson } from '../api/client';
+import { clearTransportSession, storeAuthToken, storeCsrfToken } from '../api/auth-session';
 import { apiConfig } from '../api/config';
 
 export type LoginCredentials = { id: string; password: string };
@@ -7,6 +8,7 @@ export type Principal = {
   id: string;
   principalType: PrincipalRole;
   shopId: string;
+  displayName: string | null;
   scopes: string[];
   customerId: string | null;
   driverId: string | null;
@@ -14,9 +16,10 @@ export type Principal = {
 
 type LoginResponse = { accessToken?: string; csrfToken?: string };
 type SessionDto = {
-  csrfToken: string;
   principalType: PrincipalRole;
   shopId: string;
+  actorId?: string;
+  displayName?: string;
   scopes: string[];
   customerId?: string;
   driverId?: string;
@@ -24,15 +27,33 @@ type SessionDto = {
 
 export async function login(credentials: LoginCredentials): Promise<void> {
   if (apiConfig.mode === 'mock') {
-    window.sessionStorage.setItem('clever.auth.token', `dev-token-${Date.now()}`);
+    storeAuthToken(`dev-token-${Date.now()}`);
     return;
   }
-  const session = await requestJson<LoginResponse>('auth/login', { method: 'POST', json: { ...credentials, shopDomain: apiConfig.shopDomain } });
-  storeTransportSession(session);
+  clearTransportSession();
+  try {
+    const session = await requestJson<LoginResponse>('auth/login', { method: 'POST', json: { ...credentials, shopDomain: apiConfig.shopDomain } });
+    storeTransportSession(session);
+  } catch (error) {
+    clearTransportSession();
+    throw error;
+  }
+}
+
+export async function logout(): Promise<void> {
+  if (apiConfig.mode === 'mock') {
+    clearTransportSession();
+    return;
+  }
+  try {
+    await requestJson<{ loggedOut: boolean }>('auth/logout', { method: 'POST' });
+  } finally {
+    clearTransportSession();
+  }
 }
 
 export async function restoreSession(): Promise<Principal> {
-  if (apiConfig.mode === 'mock') return { id: 'mock-admin', principalType: 'DSV_ADMIN', shopId: 'mock-shop', scopes: [], customerId: 'mock-customer', driverId: null };
+  if (apiConfig.mode === 'mock') return { id: 'mock-admin', principalType: 'DSV_ADMIN', shopId: 'mock-shop', displayName: null, scopes: [], customerId: 'mock-customer', driverId: null };
   const session = await requestV1ReadJson<SessionDto>('session');
   storeTransportSession(session);
   return principalFromSession(session);
@@ -44,24 +65,33 @@ export function hasRole(principal: Principal, role: PrincipalRole): boolean {
 
 function storeTransportSession(session: unknown): void {
   if (!isObject(session)) return;
-  if (typeof session.accessToken === 'string' && session.accessToken) window.sessionStorage.setItem('clever.auth.token', session.accessToken);
-  if (typeof session.csrfToken === 'string' && session.csrfToken) window.sessionStorage.setItem('clever.auth.csrf', session.csrfToken);
+  if (typeof session.accessToken === 'string' && session.accessToken) storeAuthToken(session.accessToken);
+  if (typeof session.csrfToken === 'string' && session.csrfToken) storeCsrfToken(session.csrfToken);
 }
 
 function principalFromSession(session: SessionDto): Principal {
   const principalType = principalTypeFrom(session);
-  const csrfToken = stringField(session, ['csrfToken']);
   const shopId = stringField(session, ['shopId']);
+  const actorId = stringField(session, ['actorId']);
+  const displayName = stringField(session, ['displayName']);
   const customerId = stringField(session, ['customerId']);
   const driverId = stringField(session, ['driverId']);
   const scopes = arrayField(session, ['scopes']);
-  if (!csrfToken || !principalType || !shopId || !Array.isArray(session.scopes) || scopes.length !== session.scopes.length) {
+  if (!principalType || !shopId || !Array.isArray(session.scopes) || scopes.length !== session.scopes.length) {
+    throw new ApiError(502, '세션 API 응답 형식이 올바르지 않습니다.', session);
+  }
+  if (principalType === 'DSV_ADMIN' && !actorId) {
+    throw new ApiError(502, '세션 API 응답 형식이 올바르지 않습니다.', session);
+  }
+  const principalId = principalType === 'CUSTOMER_USER' ? customerId ?? shopId : actorId;
+  if (!principalId) {
     throw new ApiError(502, '세션 API 응답 형식이 올바르지 않습니다.', session);
   }
   return {
-    id: principalType === 'CUSTOMER_USER' ? customerId ?? shopId : shopId,
+    id: principalId,
     principalType,
     shopId,
+    displayName,
     scopes,
     customerId,
     driverId,

@@ -6,35 +6,42 @@ test('admin tab labels keep English paths', async ({ page }) => {
   await expect(page.getByRole('button', { name: '사이드바 펼치기' })).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('.sidebar-brand-title')).not.toBeVisible();
   await expect(page.locator('.main-tab.active .main-tab-copy')).toHaveCSS('text-align', 'center');
+  await expect(page.getByRole('button', { name: '로그아웃' })).toBeVisible();
+  await expect(page.locator('.sidebar-logout svg')).toBeVisible();
+  await expect(page.locator('.sidebar-logout')).toHaveCSS('height', '40px');
   await page.getByRole('button', { name: '사이드바 펼치기' }).click();
-  await expect(page.locator('.left-tabs')).toHaveCSS('width', '194px');
+  await expect(page.locator('.left-tabs')).toHaveCSS('width', '206px');
+  await expect(page.locator('.left-tabs')).toHaveCSS('border-right-color', 'rgb(72, 72, 74)');
   await page.waitForTimeout(400);
   const fixedHeaderBox = await page.locator('.sidebar-brand').boundingBox();
   await expect(page.locator('.sidebar-brand')).toHaveCSS('height', '40px');
-  await expect(page.locator('.map-toolbar')).toHaveCSS('height', '91px');
+  await expect(page.locator('.sidebar-logout')).toHaveCSS('height', '40px');
   await expect(page.locator('.notification-bell')).toHaveCSS('height', '52px');
+  await expect(page.locator('.notification-bell')).toHaveCSS('border-color', 'rgb(229, 229, 234)');
   await expect(page.locator('.notification-bell svg')).toHaveCSS('color', 'rgb(0, 0, 0)');
+  await expect(page.locator('#vehicleCard')).toHaveCSS('border-color', 'rgb(229, 229, 234)');
+  await expect(page.locator('#destinationCard')).toHaveCSS('border-color', 'rgb(229, 229, 234)');
   await expect(page.locator('.side')).toHaveCSS('top', '20px');
-  const toolbarBox = await page.locator('.map-toolbar').boundingBox();
   const bellBox = await page.locator('.notification-bell').boundingBox();
   const expandedTabsBox = await page.locator('.left-tabs').boundingBox();
-  expect(toolbarBox.x).toBe(expandedTabsBox.x + expandedTabsBox.width + 12);
-  expect(Math.round(bellBox.x - toolbarBox.x - toolbarBox.width)).toBe(12);
-  expect(bellBox.y).toBe(toolbarBox.y);
+  expect(bellBox.x).toBe(expandedTabsBox.x + expandedTabsBox.width + 12);
+  expect(bellBox.y).toBe(expandedTabsBox.y);
   await page.getByLabel('알림 열기').click();
+  await expect(page.locator('.notification-stack')).toHaveCSS('border-color', 'rgb(229, 229, 234)');
   const notificationBox = await page.locator('.notification-stack').boundingBox();
   expect(notificationBox.x).toBe(bellBox.x);
   expect(notificationBox.y).toBe(bellBox.y + bellBox.height + 12);
   expect(notificationBox.width).toBe(380);
   await page.getByLabel('알림 닫기').click();
-  await expect(page.getByRole('button', { name: '사이드바 접기' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('button', { name: '사이드바 접기', exact: true })).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('.sidebar-brand-mark')).toHaveCSS('width', '60px');
   await expect(page.locator('.sidebar-brand-mark')).toHaveCSS('height', '40px');
   await expect(page.locator('.sidebar-brand-mark')).toHaveCSS('font-size', '22px');
   await expect(page.locator('.main-tab.active')).toHaveCSS('height', '40px');
-  await expect(page.locator('.main-tab.active .main-tab-copy small')).toHaveText('차량과 배송지를 관제');
+  await expect(page.locator('.main-tab.active .main-tab-copy small')).toHaveText('차량과 배송지 관제');
   await expect(page.locator('.main-tab.active .main-tab-copy small')).toBeVisible();
-  await expect(page.locator('.main-tab.active .main-tab-copy small')).toHaveCSS('font-size', '9px');
+  await expect(page.locator('.main-tab.active .main-tab-copy small')).toHaveCSS('font-size', '11px');
+  await expect(page.locator('.main-tab.active .main-tab-copy small')).toHaveCSS('color', 'rgba(255, 255, 255, 0.86)');
   await expect(page.locator('.main-tab.active .main-tab-copy')).toHaveCSS('display', 'grid');
   await expect(page.locator('.main-tab.active .main-tab-copy')).toHaveCSS('align-items', 'center');
   await expect(page.locator('.main-tab.active .main-tab-copy')).toHaveCSS('text-align', 'left');
@@ -44,23 +51,25 @@ test('admin tab labels keep English paths', async ({ page }) => {
   })));
   expect(new Set(tabCopyPositions.map(({ titleX }) => titleX)).size).toBe(1);
   expect(new Set(tabCopyPositions.map(({ descriptionX }) => descriptionX)).size).toBe(1);
-  await expect(page.locator('.sidebar-brand-toggle')).toBeVisible();
-  await expect(page.locator('.sidebar-brand-toggle')).toHaveCSS('width', '16px');
-  await expect(page.locator('.sidebar-brand-toggle')).toHaveCSS('border-top-width', '0px');
-  await expect(page.locator('.sidebar-brand-toggle')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   const expandedBrandMarkBox = await page.locator('.sidebar-brand-mark').boundingBox();
   const expandedActiveTabBox = await page.locator('.main-tab.active').boundingBox();
   const expandedBrandBox = await page.locator('.sidebar-brand').boundingBox();
-  const expandedBrandTitleBox = await page.locator('.sidebar-brand-title').boundingBox();
-  const expandedToggleBox = await page.locator('.sidebar-brand-toggle').boundingBox();
-  expect(expandedToggleBox.x - expandedBrandTitleBox.x - expandedBrandTitleBox.width).toBeGreaterThanOrEqual(18);
-  expect(expandedToggleBox.x + expandedToggleBox.width).toBeLessThanOrEqual(expandedBrandBox.x + expandedBrandBox.width);
+  const expandedRailBox = await page.locator('.sidebar-collapse-rail').boundingBox();
+  expect(expandedRailBox.width).toBe(12);
+  expect(expandedRailBox.height).toBe(expandedTabsBox.height);
+  expect(expandedRailBox.x + expandedRailBox.width).toBe(expandedTabsBox.x + expandedTabsBox.width);
+  expect(Math.abs(
+    (expandedActiveTabBox.x - expandedTabsBox.x)
+    - (expandedRailBox.x - (expandedActiveTabBox.x + expandedActiveTabBox.width)),
+  )).toBeLessThanOrEqual(2);
+  expect(expandedRailBox.y).toBe(expandedTabsBox.y);
   expect(expandedBrandMarkBox.y).toBe(expandedBrandBox.y);
   expect(expandedBrandMarkBox.y + expandedBrandMarkBox.height).toBe(expandedBrandBox.y + expandedBrandBox.height);
   expect(expandedBrandMarkBox.x).toBe(expandedActiveTabBox.x);
-  const chevronSize = await page.locator('.sidebar-brand-toggle').evaluate((element) => ({ width: getComputedStyle(element, '::before').width, height: getComputedStyle(element, '::before').height }));
-  expect(chevronSize).toEqual({ width: '4px', height: '4px' });
-  await page.getByRole('button', { name: '사이드바 접기' }).click();
+  await page.getByRole('button', { name: 'C 버튼으로 사이드바 접기' }).click();
+  await expect(page.getByRole('button', { name: '사이드바 펼치기' })).toHaveAttribute('aria-expanded', 'false');
+  await page.getByRole('button', { name: '사이드바 펼치기' }).click();
+  await page.getByRole('button', { name: '사이드바 접기', exact: true }).click();
   await expect(page.getByRole('button', { name: '사이드바 펼치기' })).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('.left-tabs')).toHaveCSS('width', '76px');
   await page.waitForTimeout(400);
@@ -68,30 +77,27 @@ test('admin tab labels keep English paths', async ({ page }) => {
   await expect(page.locator('.sidebar-brand-mark')).toHaveText('C');
   await expect(page.locator('.sidebar-brand-mark')).toHaveCSS('width', '60px');
   await expect(page.locator('.sidebar-brand-mark')).toHaveCSS('height', '40px');
-  await expect(page.locator('.sidebar-brand-toggle')).not.toBeVisible();
+  await expect(page.locator('.sidebar-collapse-rail')).not.toBeVisible();
   await expect(page.locator('.main-tab.active .main-tab-copy small')).not.toBeVisible();
   await expect(page.locator('.main-tab.active .main-tab-copy')).toHaveCSS('text-align', 'center');
   const collapsedBrandMarkBox = await page.locator('.sidebar-brand-mark').boundingBox();
   const collapsedActiveTabBox = await page.locator('.main-tab.active').boundingBox();
   const collapsedTabsBox = await page.locator('.left-tabs').boundingBox();
-  const collapsedToolbarBox = await page.locator('.map-toolbar').boundingBox();
-  expect(collapsedToolbarBox.x).toBe(collapsedTabsBox.x + collapsedTabsBox.width + 12);
+  const collapsedBellBox = await page.locator('.notification-bell').boundingBox();
+  expect(collapsedBellBox.x).toBe(collapsedTabsBox.x + collapsedTabsBox.width + 12);
   expect(collapsedBrandMarkBox.x).toBe(collapsedActiveTabBox.x);
   expect(collapsedBrandMarkBox.x).toBe(expandedBrandMarkBox.x);
   expect(collapsedActiveTabBox.x).toBe(expandedActiveTabBox.x);
   await page.getByRole('button', { name: '사이드바 펼치기' }).click();
-  await expect(page.locator('.left-tabs')).toHaveCSS('width', '194px');
+  await expect(page.locator('.left-tabs')).toHaveCSS('width', '206px');
   await page.waitForTimeout(400);
   await expect(page.locator('.sidebar-brand-title')).toHaveText('CLEVER DSV');
-  await expect(page.locator('.sidebar-brand')).toHaveCSS('width', '182px');
+  await expect(page.locator('.sidebar-brand')).toHaveCSS('width', '180px');
   await expect(page.locator('.tab-icon')).toHaveCount(0);
   await expect(page.locator('.brand-copy small')).toHaveCount(0);
   await expect(page.locator('html')).toHaveCSS('font-family', /Pretendard Variable/);
-  for (const name of ['포인트', '마커', '2D', '3D']) {
-    await expect(page.getByRole('button', { name, exact: true })).toHaveCSS('height', '28px');
-    await expect(page.getByRole('button', { name, exact: true })).toHaveCSS('font-size', '12px');
-    await expect(page.getByRole('button', { name, exact: true })).toHaveCSS('font-weight', '800');
-  }
+  await expect(page.getByRole('button', { name: '2D', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '3D', exact: true })).toHaveCount(0);
 
   for (const [tab, path] of [
     ['배차', '/dispatch'],
@@ -108,131 +114,319 @@ test('admin tab labels keep English paths', async ({ page }) => {
     expect(currentHeaderBox.height).toBe(fixedHeaderBox.height);
     expect(Math.abs(currentHeaderBox.x - fixedHeaderBox.x)).toBeLessThanOrEqual(3);
     expect(Math.abs(currentHeaderBox.y - fixedHeaderBox.y)).toBeLessThanOrEqual(2);
-    await expect(page.locator('.maplibregl-canvas')).toHaveCount(0);
+    await expect(page.locator('.map-card .maplibregl-canvas')).toHaveCount(0);
     await expect(page.locator('main.page')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     await expect(page.getByText(/Demo|Simulation/)).toHaveCount(0);
   }
 });
+
+test('compact viewport uses a full-screen navigation menu', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/settings');
+
+  const navigation = page.getByRole('navigation', { name: '주 메뉴' });
+  const menuButton = page.getByRole('button', { name: '사이드바 펼치기' });
+  await expect(menuButton).toBeVisible();
+  await expect(page.getByRole('link', { name: '관제' })).not.toBeVisible();
+
+  const closedNavigationBox = await navigation.boundingBox();
+  expect(closedNavigationBox).toMatchObject({ x: 12, y: 12, width: 196, height: 56 });
+  await expect(page.locator('.sidebar-brand-title')).toBeVisible();
+  const settingsContentBox = await page.locator('.page-content').boundingBox();
+  expect(settingsContentBox.y).toBeGreaterThanOrEqual(80);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+
+  await menuButton.click();
+  await expect(page.getByRole('button', { name: '사이드바 접기', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.sidebar-brand-title')).toBeVisible();
+  await expect(page.getByRole('link', { name: '관제' })).toBeVisible();
+  await expect(page.locator('.main-tab-copy small').first()).toBeVisible();
+  await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
+  await expect.poll(async () => (await navigation.boundingBox()).x).toBe(0);
+  await expect.poll(async () => (await navigation.boundingBox()).width).toBeCloseTo(390, 1);
+  const openNavigationBox = await navigation.boundingBox();
+  expect(openNavigationBox.x).toBe(0);
+  expect(openNavigationBox.y).toBe(0);
+  expect(openNavigationBox.width).toBeCloseTo(390, 1);
+  expect(openNavigationBox.height).toBe(844);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+
+  await page.getByRole('link', { name: '관리' }).click();
+  await expectPath(page, '/master-data');
+  await expect(page.getByRole('button', { name: '사이드바 펼치기' })).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('link', { name: '관제' })).not.toBeVisible();
+
+  await page.getByRole('button', { name: '사이드바 펼치기' }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: '사이드바 펼치기' })).toHaveAttribute('aria-expanded', 'false');
+
+  await page.getByRole('button', { name: '사이드바 펼치기' }).click();
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(page.getByRole('button', { name: '사이드바 펼치기' })).toHaveAttribute('aria-expanded', 'false');
+  await expect(navigation).not.toHaveCSS('position', 'fixed');
+});
+
+test('intermediate viewport keeps the navigation vertical and content at the top', async ({ page }) => {
+  await page.setViewportSize({ width: 850, height: 900 });
+  await page.goto('/dispatch');
+
+  const navigation = page.getByRole('navigation', { name: '주 메뉴' });
+  const navigationBox = await navigation.boundingBox();
+  const contentBox = await page.locator('.page-content').boundingBox();
+  expect(navigationBox).toMatchObject({ x: 12, y: 12, width: 76 });
+  expect(contentBox.y).toBeLessThanOrEqual(12);
+  expect(contentBox.x).toBeGreaterThanOrEqual(100);
+  await expect(navigation).toHaveCSS('grid-auto-flow', 'row');
+  await expect(page.locator('main.page')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(page.locator('.page-content')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(page.locator('.operations-hero')).toHaveCSS('border-top-width', '0px');
+  await expect(page.locator('.dispatch-assignment')).toHaveCSS('border-top-width', '1px');
+  await expect(page.locator('.dispatch-assignment')).toHaveCSS('border-top-color', 'rgb(229, 229, 234)');
+
+  const tabBoxes = await page.locator('.main-tab').evaluateAll((tabs) => tabs.map((tab) => {
+    const box = tab.getBoundingClientRect();
+    return { x: box.x, y: box.y };
+  }));
+  expect(new Set(tabBoxes.map((box) => Math.round(box.x))).size).toBe(1);
+  expect(tabBoxes.every((box, index) => index === 0 || box.y > tabBoxes[index - 1].y)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(850);
+});
+
+test('dispatch keeps the driver workspace at a fixed desktop width', async ({ page }) => {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto('/dispatch');
+    const workspaceBox = await page.locator('.dispatch-map-workspace').boundingBox();
+    const mapBox = await page.locator('.dispatch-map-panel').boundingBox();
+    const driverBox = await page.locator('.dispatch-drivers-panel').boundingBox();
+    const workspacePaddingRight = await page.locator('.dispatch-map-workspace').evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingRight));
+    expect(driverBox.width).toBeCloseTo(264, 1);
+    expect(driverBox.x + driverBox.width).toBeCloseTo(workspaceBox.x + workspaceBox.width - workspacePaddingRight, 1);
+    expect(mapBox.x + mapBox.width).toBeLessThan(driverBox.x);
+  }
+});
+
+test('dispatch separates the filter bar without sacrificing workspace height', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/dispatch');
+
+  const geometry = await page.evaluate(() => {
+    const toolbar = document.querySelector('.dispatch-assignment-toolbar');
+    const dateInput = document.querySelector('.dispatch-date-field input');
+    const workspace = document.querySelector('.dispatch-map-workspace');
+    const toolbarBox = toolbar.getBoundingClientRect();
+    const dateInputBox = dateInput.getBoundingClientRect();
+    const workspaceBox = workspace.getBoundingClientRect();
+    return {
+      borderBottomColor: getComputedStyle(toolbar).borderBottomColor,
+      controlBottomGap: toolbarBox.bottom - dateInputBox.bottom,
+      gap: workspaceBox.top - toolbarBox.bottom,
+      paddingBottom: getComputedStyle(toolbar).paddingBottom,
+      toolbarHeight: toolbarBox.height,
+      workspaceHeight: workspaceBox.height,
+    };
+  });
+
+  expect(geometry.borderBottomColor).toBe('rgb(236, 239, 243)');
+  expect(geometry.controlBottomGap).toBeGreaterThanOrEqual(8);
+  expect(geometry.gap).toBe(6);
+  expect(geometry.paddingBottom).toBe('8px');
+  expect(geometry.toolbarHeight).toBeLessThanOrEqual(44);
+  expect(geometry.workspaceHeight).toBeGreaterThanOrEqual(554);
+  const mapTitle = page.locator('.dispatch-map-header .admin-section-header > span').first();
+  await expect(mapTitle).toBeVisible();
+  await expect(mapTitle).toHaveCSS('white-space', 'nowrap');
+});
+
+test('admin shell keeps 12 pixel outer geometry and inline page descriptions', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const path of ['/dispatch', '/records', '/master-data', '/settings']) {
+    await page.goto(path);
+    const geometry = await page.evaluate(() => {
+      const navigation = document.querySelector('.left-tabs');
+      const content = document.querySelector('.page-content');
+      const hero = document.querySelector('.page-hero');
+      const titleGroup = hero?.firstElementChild;
+      const description = hero?.querySelector('p');
+      const navigationBox = navigation.getBoundingClientRect();
+      const contentBox = content.getBoundingClientRect();
+      return {
+        content: {
+          bottom: innerHeight - contentBox.bottom,
+          left: contentBox.left,
+          right: innerWidth - contentBox.right,
+          top: contentBox.top,
+        },
+        descriptionMarginTop: description ? getComputedStyle(description).marginTop : null,
+        descriptionWhiteSpace: description ? getComputedStyle(description).whiteSpace : null,
+        navigation: {
+          borderColor: getComputedStyle(navigation).borderTopColor,
+          left: navigationBox.left,
+          top: navigationBox.top,
+        },
+        padding: getComputedStyle(content).padding,
+        titleGroupDisplay: titleGroup ? getComputedStyle(titleGroup).display : null,
+      };
+    });
+    expect(geometry.content).toMatchObject({ bottom: 12, left: 100, right: 12, top: 12 });
+    expect(geometry.navigation).toMatchObject({ borderColor: 'rgb(229, 229, 234)', left: 12, top: 12 });
+    expect(geometry.padding).toBe('0px 12px');
+    expect(geometry.titleGroupDisplay).toBe('flex');
+    expect(geometry.descriptionMarginTop).toBe('0px');
+    expect(geometry.descriptionWhiteSpace).toBe('nowrap');
+  }
+});
+
+test('compact control starts with centered collapsed cards and opens empty states full screen', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/control');
+  await page.waitForFunction(() => window.dsvMap?.isStyleLoaded());
+
+  await expect(page.locator('#fleetList')).not.toBeVisible();
+  await expect(page.locator('#destinationList')).not.toBeVisible();
+  const mapBox = await page.locator('.map-card').boundingBox();
+  expect(mapBox).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
+  const bellBox = await page.locator('.notification-bell').boundingBox();
+  const mapControlsBox = await page.locator('.maplibregl-ctrl-bottom-right').boundingBox();
+  const cardsBox = await page.locator('.control-side').boundingBox();
+  expect(390 - bellBox.x - bellBox.width).toBe(12);
+  expect(390 - mapControlsBox.x - mapControlsBox.width).toBe(12);
+  expect(844 - mapControlsBox.y - mapControlsBox.height).toBe(148);
+  expect(390 - cardsBox.x - cardsBox.width).toBe(12);
+  for (const cardId of ['vehicleCard', 'destinationCard']) {
+    const card = await page.locator(`#${cardId}`).boundingBox();
+    const heading = await page.locator(`#${cardId} > .section-heading`).boundingBox();
+    expect(Math.abs((card.y + card.height / 2) - (heading.y + heading.height / 2))).toBeLessThanOrEqual(.5);
+  }
+
+  await page.getByRole('button', { name: '예정 차량 펼치기' }).click();
+  await expect(page.locator('#fleetList')).toBeVisible();
+  await expect(page.getByText('예정 차량이 없습니다.')).toBeVisible();
+  await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
+  const panelBox = await page.locator('.panel-view').boundingBox();
+  expect(panelBox).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
+  await page.getByRole('button', { name: '예정 차량 닫기' }).click();
+  await expect(page.getByRole('button', { name: '예정 차량 펼치기' })).toBeVisible();
+
+  await page.getByRole('button', { name: '제조사별 주문 펼치기' }).click();
+  await expect(page.locator('#destinationList')).toBeVisible();
+  await expect(page.getByText('등록된 제조사 주문이 없습니다.')).toBeVisible();
+  await page.getByRole('button', { name: '제조사별 주문 닫기' }).click();
+  await expect(page.getByRole('button', { name: '제조사별 주문 펼치기' })).toBeVisible();
+  await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden');
+});
+
 test('all primary interactive buttons mutate visible UI state', async ({ page }) => {
   await page.goto('/control');
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
-  const expandedDestinationY = (await page.locator('#destinationCard').boundingBox()).y;
-  await page.evaluate(() => { window.__initialMapCanvas = document.querySelector('.maplibregl-canvas'); });
 
-  await page.getByRole('button', { name: '포인트' }).click();
-  await expect(page.getByRole('button', { name: '포인트' })).toHaveAttribute('aria-pressed', 'true');
-
-  await page.getByRole('button', { name: '3D' }).click();
-  await expect(page.getByRole('button', { name: '3D' })).toHaveAttribute('aria-pressed', 'true');
-  await expect.poll(() => page.evaluate(() => document.querySelector('.maplibregl-canvas') === window.__initialMapCanvas)).toBe(true);
-
-  await expect(page.locator('.notification-count')).toHaveText('3');
+  await expect(page.locator('.notification-count')).toBeHidden();
   await page.getByLabel('알림 열기').click();
   await expect(page.getByText('알림 센터')).toBeVisible();
-  await expect(page.getByText('차량 이상과 배송 진행 상태를 확인하세요.')).toBeVisible();
-  await expect(page.getByText('읽지 않은 알림 3건')).toBeVisible();
-  const temperatureNotification = page.locator('[data-notification-id="temperature"]');
-  await temperatureNotification.getByRole('button', { name: '읽음' }).click();
-  await expect(page.getByText('읽지 않은 알림 2건')).toBeVisible();
-  await expect(page.locator('.notification-count')).toHaveText('2');
-  await expect(temperatureNotification).toHaveClass(/read/);
-  const delayNotification = page.locator('[data-notification-id="delay"]');
-  await delayNotification.getByRole('button', { name: '차량 조회' }).click();
-  await expect(page.getByText('알림 센터')).not.toBeVisible();
-  const lookedUpVehicle = page.locator('.row').filter({ hasText: '32바 7207' });
-  await expect(lookedUpVehicle).toHaveAttribute('aria-pressed', 'true');
-  await expect(lookedUpVehicle).toBeInViewport();
-  await expect(page.getByLabel('차량 온도 변화')).toBeVisible();
-  await expect(page.locator('#destinationList').getByText('한림대학교성심병원')).toBeVisible();
-  await expect.poll(() => page.evaluate(() => document.querySelector('.maplibregl-canvas') === window.__initialMapCanvas)).toBe(true);
-  await expect(page.locator('.notification-count')).toHaveText('1');
-  await page.getByLabel('알림 열기').click();
-  await page.getByRole('button', { name: '전부 읽음' }).click();
+  await expect(page.getByText('운영 알림을 확인하세요.')).toBeVisible();
+  await expect(page.getByText('알림이 없습니다.')).toBeVisible();
   await expect(page.getByText('읽지 않은 알림 0건')).toBeVisible();
-  await expect(page.locator('.notification-count')).toBeHidden();
   await page.getByLabel('알림 닫기').click();
   await page.reload();
   await expect(page.locator('.notification-count')).toBeHidden();
 
-  await page.getByRole('button', { name: '온도', exact: true }).click();
-  await expect(page.getByLabel('차량 온도 변화')).toBeVisible();
-  await expect(page.getByRole('button', { name: '닫기' }).first()).toBeVisible();
-
-  await page.getByRole('button', { name: '노트', exact: true }).click();
-  await expect(page.getByLabel('배송지 노트')).toBeVisible();
-
-  await page.getByRole('button', { name: '접기', exact: true }).click();
-  await page.waitForTimeout(100);
-  expect((await page.locator('#destinationCard').boundingBox()).y).toBe(expandedDestinationY);
-  await expect(page.getByRole('button', { name: '펼치기', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '펼치기', exact: true }).click();
-  await expect(page.getByRole('button', { name: '접기', exact: true })).toBeVisible();
-
   await expect(page.getByText(/Demo|Simulation/)).toHaveCount(0);
 
   await page.goto('/master-data');
-  await page.locator('[data-courier-id="c02"]').click();
-  await expect(page.getByLabel('배송원 상세').getByText('이서연')).toBeVisible();
-  await expect(page.getByLabel('배송원 상세').getByText('검체 운송 4년')).toBeVisible();
+  await expect(page.getByRole('button', { name: '운송자원', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '고객사', exact: true }).click();
+  await expect(page.getByText('고객사를 등록하세요.').first()).toBeVisible();
 
+  await page.setViewportSize({ width: 1280, height: 620 });
   await page.goto('/dispatch');
-  await page.getByRole('button', { name: /이서연/ }).click();
-  await expect(page.getByLabel('선택 배송 상세').getByText('1. 서울월드컵경기장', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: /홍대입구역/ }).click();
-  await expect(page.getByLabel('선택 배송 상세').getByText('3. 홍대입구역')).toBeVisible();
+  await expect(page.getByText('표시할 배송지가 없습니다.')).toBeVisible();
   await expect(page.getByRole('button', { name: '실시간 트레킹' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '새로고침' })).toHaveCount(0);
+  const assignmentBeforeUpload = await page.locator('.dispatch-assignment').boundingBox();
   await page.getByRole('button', { name: '주문 업로드' }).click();
-  await expect(page.getByText('업로드 사전 검사')).toBeVisible();
+  const assignmentAfterUpload = await page.locator('.dispatch-assignment').boundingBox();
+  expect(assignmentAfterUpload).toEqual(assignmentBeforeUpload);
+  await expect(page.getByText('CSV 또는 XLSX 배차 파일을 선택하거나 이 영역에 끌어 놓으세요.')).toBeVisible();
+  await expect(page.getByRole('button', { name: '파일 업로드', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '예제 업로드', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '예제 업로드', exact: true }).click();
+  await expect(page.getByText('dsv-fixed-dispatch-10.csv', { exact: true })).toBeVisible();
+  await expect(page.locator('.dispatch-upload-summary')).toContainText('10');
+  await expect(page.getByRole('button', { name: '파일 업로드', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '예제 업로드', exact: true })).toHaveCount(0);
+  await expect(page.getByText('*셀을 더블클릭하여 수정', { exact: true })).toBeVisible();
+  const sheetFrame = page.locator('.dispatch-upload-sheet');
+  const sheetScroll = page.locator('.dispatch-upload-sheet .sheet-scroll');
+  const uploadPanel = page.locator('.condition-upload-panel');
+  const [sheetFrameBox, sheetScrollBox, uploadPanelBox] = await Promise.all([sheetFrame.boundingBox(), sheetScroll.boundingBox(), uploadPanel.boundingBox()]);
+  expect(sheetFrameBox.height).toBe(280);
+  expect(sheetScrollBox.height).toBe(280);
+  expect(sheetScrollBox.x).toBe(sheetFrameBox.x);
+  expect(sheetFrameBox.x - uploadPanelBox.x).toBe(13);
+  expect(uploadPanelBox.x + uploadPanelBox.width - sheetFrameBox.x - sheetFrameBox.width).toBe(13);
+  await expect(sheetFrame).toHaveCSS('overflow', 'hidden');
+  await expect(sheetFrame).toHaveCSS('border-radius', '0px');
+  await expect(sheetFrame).toHaveCSS('border-top-width', '0px');
+  await expect(sheetScroll).toHaveCSS('border-radius', '0px');
+  await expect(sheetScroll).toHaveCSS('border-top-width', '0px');
+  const firstBoxCell = page.locator('.dispatch-upload-sheet tbody tr:nth-child(2) td:nth-of-type(5) .sheet-cell');
+  await firstBoxCell.dblclick();
+  const firstBoxEditor = page.getByLabel('2행 E열 편집', { exact: true });
+  await expect(firstBoxEditor).toBeVisible();
+  await firstBoxEditor.fill('0');
+  await firstBoxEditor.press('Enter');
+  await expect(firstBoxCell).toHaveText('0');
+  await expect(firstBoxCell.locator('..')).toHaveClass(/is-error/u);
+  await expect(firstBoxCell.locator('..')).toHaveCSS('box-shadow', /rgb\(212, 59, 47\)/u);
+  const cancelButton = page.getByRole('button', { name: '취소', exact: true });
+  const closeButton = page.getByRole('button', { name: '닫기', exact: true });
+  await expect(cancelButton).toBeVisible();
+  const [cancelBox, closeBox] = await Promise.all([cancelButton.boundingBox(), closeButton.boundingBox()]);
+  expect(cancelBox.y).toBe(closeBox.y);
+  expect(cancelBox.height).toBe(closeBox.height);
+  const issueDetails = page.locator('details.dispatch-upload-issues');
+  await expect(issueDetails).not.toHaveAttribute('open', '');
+  await expect(issueDetails.locator('.dispatch-upload-toggle-open')).toBeVisible();
+  await expect(issueDetails.locator('.dispatch-upload-toggle-close')).toBeHidden();
+  await issueDetails.locator('summary').click();
+  await expect(issueDetails.locator('.dispatch-upload-toggle-open')).toBeHidden();
+  await expect(issueDetails.locator('.dispatch-upload-toggle-close')).toBeVisible();
+  const firstBoxIssue = issueDetails.locator('.dispatch-upload-issue-list p').filter({ hasText: '2행' }).filter({ hasText: 'E열' });
+  await expect(firstBoxIssue).toContainText('박스 수량은 1 이상의 정수여야 합니다.');
+  await expect(issueDetails.locator('.dispatch-upload-issue-list p').filter({ hasText: 'A열' }).first()).toContainText('등록된 배송원을 찾을 수 없습니다.');
+  await expect(issueDetails.locator('.dispatch-upload-issue-list p').filter({ hasText: 'B열' }).first()).toContainText('등록된 차량 번호를 찾을 수 없습니다.');
+  await expect(issueDetails).toContainText('등록된 배송원을 찾을 수 없습니다.');
+  await expect(issueDetails).toContainText('등록된 차량 번호를 찾을 수 없습니다.');
+  await expect(issueDetails).not.toContainText('대상을 찾을 수 없습니다.');
+  const uploadScroll = page.locator('.dispatch-upload-scroll');
+  const scrollMetrics = await uploadScroll.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
+  await page.locator('.condition-candidate').last().scrollIntoViewIfNeeded();
+  expect(await uploadScroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect(page.locator('.condition-candidate').last()).toBeVisible();
   await page.getByRole('button', { name: '닫기' }).click();
-  await page.getByRole('button', { name: '수정' }).click();
-  await expect(page.getByText('배송 시간, 배정 배송원, 물품 수량을 수정합니다.')).toBeVisible();
-  await page.locator('.work-detail-feedback').getByRole('button', { name: '저장' }).click();
-  await page.getByRole('button', { name: '삭제' }).click();
-  await expect(page.getByText('주문을 삭제 대기 상태로 바꿉니다.')).toBeVisible();
+  await page.getByRole('button', { name: '주문 업로드' }).click();
+  await expect(page.getByText('dsv-fixed-dispatch-10.csv', { exact: true })).toBeVisible();
+  await cancelButton.click();
+  await expect(page.getByText('dsv-fixed-dispatch-10.csv', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '파일 업로드', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '예제 업로드', exact: true })).toBeVisible();
+  await expect(page.locator('.dispatch-upload-summary')).toHaveCount(0);
+  await page.getByRole('button', { name: '닫기' }).click();
 
   await page.goto('/master-data');
-  await page.getByRole('button', { name: '고객사' }).click();
-  await page.getByRole('link', { name: 'CLEVER - 고객사 Demo 배송조회' }).click();
-  await expectPath(page, '/customer/delivery-inquiry');
-  await page.getByLabel('배송조회 날짜').getByRole('button', { name: /전일/ }).click();
-  await page.getByRole('button', { name: /DSV-2026-0709-02/ }).click();
-  await expect(page.getByText('인천 항공 긴급배송', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: /CR-330/ }).click();
-  await expect(page.getByText('항공 특송 서류함', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '고객사', exact: true }).click();
+  await expect(page.getByRole('link', { name: /배송조회/ })).toHaveCount(0);
 });
 
-test('notification vehicle lookup opens and reveals the vehicle from another tab', async ({ page }) => {
-  await page.goto('/dispatch');
-  await page.getByLabel('알림 열기').click();
-  await page.locator('[data-notification-id="proof"]').getByRole('button', { name: '차량 조회' }).click();
-
-  await expect(page).toHaveURL(/\/control$/);
-  await expect(page.getByText('알림 센터')).not.toBeVisible();
-  const vehicle = page.locator('[data-vehicle-id="proof11"]');
-  await expect(vehicle).toHaveAttribute('aria-pressed', 'true');
-  await expect(vehicle).toBeInViewport();
-  await expect(vehicle).toBeFocused();
-  await expect(page.getByLabel('차량 온도 변화')).toBeVisible();
-});
-
-test('control detail panels use explicit no-device state and selected destination context', async ({ page }) => {
+test('empty notification center does not fabricate vehicle actions', async ({ page }) => {
   await page.goto('/control');
-
-  await page.getByRole('button', { name: '온도', exact: true }).click();
-  const temperature = page.getByLabel('차량 온도 변화');
-  await expect(temperature.getByText('단말기 미설치')).toBeVisible();
-  await expect(temperature.getByText('4.8℃')).toHaveCount(0);
-
-  await page.locator('[data-delivery-stop-id="demo:depart01:1"]').click();
-  await page.getByRole('button', { name: '노트', exact: true }).click();
-  const note = page.getByLabel('배송지 노트');
-  await expect(note.getByText('강남역 메모')).toBeVisible();
-  await expect(note.getByRole('heading', { name: '배송 품목' })).toBeVisible();
-  await expect(note.getByText('후문 하역장 이용')).toBeVisible();
-
-  await page.locator('[data-delivery-stop-id="demo:depart01:2"]').click();
-  await expect(note.getByText('역삼역 메모')).toBeVisible();
-  await expect(note.getByText('등록된 배송지 팁이 없습니다.')).toBeVisible();
-  await expect(page.locator('[data-delivery-stop-id="demo:depart01:2"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByLabel('알림 열기').click();
+  await expect(page.getByText('알림이 없습니다.')).toBeVisible();
+  await expect(page.getByRole('button', { name: '차량 조회' })).toHaveCount(0);
+  await expect(page.locator('[data-notification-id]')).toHaveCount(0);
+  await expect(page.locator('[data-vehicle-id]')).toHaveCount(0);
 });

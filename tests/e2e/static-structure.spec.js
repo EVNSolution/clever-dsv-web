@@ -34,17 +34,12 @@ test('canonical demo projection stays under src/demo', () => {
   const expectedDemoFiles = [
     'demo/model.ts',
     'demo/data.ts',
-    'demo/identity.ts',
     'demo/management.ts',
-    'demo/selectors/control.ts',
     'demo/selectors/customer.ts',
-    'demo/selectors/management.ts',
-    'demo/selectors/route.ts',
   ];
   for (const path of expectedDemoFiles) expect(exists(path), `${path} should exist`).toBe(true);
 
   const expectedDevDbFacades = [
-    'src/dev-db/admin-seed.ts',
     'src/dev-db/management.ts',
     'src/dev-db/queries.ts',
     'src/dev-db/schema.ts',
@@ -55,7 +50,7 @@ test('canonical demo projection stays under src/demo', () => {
 
   for (const path of devDbFiles) {
     const facade = readRepo(path);
-    const explicitDemoReexport = /export\s+(?:type\s+)?\{[\s\S]*?\}\s+from\s+['"]\.\.\/demo\/(?:data|identity|management|model|selectors\/(?:control|customer|management|route))['"];\s*/g;
+    const explicitDemoReexport = /export\s+(?:type\s+)?\{[\s\S]*?\}\s+from\s+['"]\.\.\/demo\/(?:data|management|model|selectors\/customer)['"];\s*/g;
     expect(facade.match(explicitDemoReexport)?.length ?? 0, `${path} should explicitly re-export src/demo ownership`).toBeGreaterThan(0);
     expect(facade).not.toMatch(/export\s+\*/);
     expect(facade.replace(explicitDemoReexport, '').trim(), `${path} should contain no implementation outside named re-exports`).toBe('');
@@ -67,36 +62,44 @@ test('canonical demo projection stays under src/demo', () => {
   expect(model).toMatch(/not (api|API) DTOs?/);
 });
 
-test('assignment relation and route history stay separate', () => {
-  for (const path of ['demo/model.ts', 'demo/management.ts', 'demo/selectors/management.ts']) {
+test('management keeps empty operational seeds until fixed dispatch import owns them', () => {
+  for (const path of ['demo/model.ts', 'demo/management.ts', 'demo/data.ts']) {
     expect(exists(path), `${path} should exist`).toBe(true);
   }
 
   const model = exists('demo/model.ts') ? readSrc('demo/model.ts') : '';
   const management = exists('demo/management.ts') ? readSrc('demo/management.ts') : '';
-  const selectors = exists('demo/selectors/management.ts') ? readSrc('demo/selectors/management.ts') : '';
-  const assignmentSource = `${model}\n${management}`;
-  expect(assignmentSource).toMatch(/ManagementAssignment(Relation)?/);
-  expect(assignmentSource).not.toMatch(/\b(active|isActive|startsAt|startDate|startedAt|endsAt|endDate|endedAt|unique|primary|current)\b/);
-  expect(selectors).toMatch(/routePlanStops/);
-  expect(selectors).toMatch(/progress|actualArrivals|completed/i);
-  expect(selectors).not.toMatch(/ManagementData\[['"]assignments['"]\]|data\.assignments|loadManagementData|saveManagementData/);
+  const data = exists('demo/data.ts') ? readSrc('demo/data.ts') : '';
+  expect(`${model}\n${management}`).toMatch(/ManagementAssignment(Relation)?/);
+  expect(management).toMatch(/drivers:\s*\[\]/);
+  expect(management).toMatch(/vehicles:\s*\[\]/);
+  expect(management).toMatch(/assignments:\s*\[\]/);
+  expect(management).toMatch(/customers:\s*\[\]/);
+  expect(management).toMatch(/destinations:\s*\[\]/);
+  expect(data).toMatch(/customers:\s*\[\]/);
+  expect(data).toMatch(/customerUsers:\s*\[\]/);
+  expect(data).toMatch(/orders:\s*\[\]/);
+  expect(data).toMatch(/orderItems:\s*\[\]/);
+  expect(data).toMatch(/deliveryStops:\s*\[\]/);
+  expect(data).toMatch(/routePlanStops:\s*\[\]/);
+  expect(data).toMatch(/proofMedia:\s*\[\]/);
+  expect(data).not.toMatch(/demoCouriers|demoVehicles|actualArrivals/);
+  expect(exists('pages/RecordsPage.tsx')).toBe(true);
+  expect(exists('pages/ResourcesPage.tsx')).toBe(true);
+  expect(readSrc('pages/RecordsPage.tsx')).toMatch(/배송 이력이 없습니다/);
+  expect(readSrc('pages/ResourcesPage.tsx')).toMatch(/등록된 배송원이 없습니다/);
+  expect(readSrc('pages/ResourcesPage.tsx')).toMatch(/등록된 차량이 없습니다/);
 });
 
-test('customer map identity uses explicit seed relation', () => {
-  expect(exists('demo/identity.ts'), 'demo/identity.ts should exist').toBe(true);
-  const identity = exists('demo/identity.ts') ? readSrc('demo/identity.ts') : '';
+test('customer map does not depend on seeded vehicle identity', () => {
   const customerPage = readSrc('pages/CustomerDeliveryInquiryPage.tsx');
-  expect(identity).toContain('vehicle-330');
-  expect(identity).toContain('proof11');
-  expect(identity).not.toMatch(/\.(plate|label|driver|driverName|name)\b|\[(0|index)\]/);
-  expect(customerPage).toMatch(/<MapCanvas[\s\S]*vehicleId=\{[^}]+}/);
+  expect(customerPage).not.toMatch(/mapVehicleIdForCustomerVehicle|vehicleId=\{/);
+  expect(customerPage).toMatch(/<MapCanvas ariaLabel="고객 배송조회 지도 - OpenFreeMap" \/>/);
+  expect(customerPage).not.toMatch(/mapMode|ShellControlsState|defaultShellControls/);
 });
 
 test('service and page imports follow dependency rules', () => {
-  const routing = readSrc('services/routing.ts');
-  expect(routing).not.toMatch(/dev-db\/queries/);
-  expect(routing).not.toMatch(/selectors.*Coordinate|Coordinate.*selectors/);
+  expect(exists('services/routing.ts')).toBe(false);
 
   const apiImports = listFiles('src/api', (path) => path.endsWith('.ts')).filter((path) => /from ['"][^'"]*demo\//.test(readRepo(path)));
   expect(apiImports).toEqual([]);
@@ -109,7 +112,7 @@ test('service and page imports follow dependency rules', () => {
   expect(rawSeedPageImports).toEqual([]);
 });
 
-test('manual router, local state, plain CSS, and lazy map loading remain', () => {
+test('manual router, local state, layered plain CSS, and lazy map loading remain', () => {
   const app = readSrc('App.tsx');
   const routes = readSrc('app-routes.ts');
   const adminShell = readSrc('components/AdminShell.tsx');
@@ -120,11 +123,8 @@ test('manual router, local state, plain CSS, and lazy map loading remain', () =>
   expect(app).toContain('popstate');
   expect(adminShell).toMatch(/useState/);
   expect(customerPage).toMatch(/useState/);
-  expect(main).toContain("import './styles/00-foundation-shell.css'");
-  expect(main).toContain("import './styles/10-control-panels.css'");
-  expect(main).toContain("import './styles/20-admin-pages.css'");
-  expect(main).toContain("import './styles/30-customer-responsive.css'");
-  expect(main).not.toContain("40-runtime-compat.css");
+  expect(main).toContain("import './styles/index.css'");
+  expect(main).not.toMatch(/styles\/(?:00-foundation-shell|10-control-panels|20-admin-pages|30-customer-responsive|40-runtime-compat)\.css/);
   expect(adminShell).toMatch(/lazy\(\(\) => import\('\.\/MapCanvas'\)/);
   expect(customerPage).toMatch(/lazy\(\(\) => import\('\.\.\/components\/MapCanvas'\)/);
 
@@ -156,19 +156,18 @@ test('single-concept labels remain', () => {
 
 test('CSS ownership manifest matches source usage', () => {
   const ownership = [
-    { selector: '.login-screen', owner: 'src/styles/00-foundation-shell.css' },
-    { selector: '.login-card', owner: 'src/styles/00-foundation-shell.css' },
-    { selector: '.login-card label', owner: 'src/styles/00-foundation-shell.css' },
-    { selector: '.login-card input', owner: 'src/styles/00-foundation-shell.css' },
-    { selector: '.login-card button', owner: 'src/styles/00-foundation-shell.css' },
-    { selector: '.login-card button:disabled', owner: 'src/styles/00-foundation-shell.css' },
-    { selector: '.login-error', owner: 'src/styles/00-foundation-shell.css' },
-    { selector: '.left-tabs a.main-tab', owner: 'src/styles/00-foundation-shell.css' },
-    { selector: '.nav-expanded .left-tabs a.main-tab', owner: 'src/styles/00-foundation-shell.css' },
-    { selector: '.maplibregl-canvas', owner: 'src/styles/00-foundation-shell.css' },
-    { selector: '#destinationList', owner: 'src/styles/20-admin-pages.css' },
-    { selector: '.customer-route-group small', owner: 'src/styles/30-customer-responsive.css' },
-    { selector: '.page-content.master-data-page .courier-grid', owner: 'src/styles/20-admin-pages.css' },
+    { selector: '.auth-page', owner: 'src/styles/features/auth.css' },
+    { selector: '.auth-panel', owner: 'src/styles/features/auth.css' },
+    { selector: '.auth-control', owner: 'src/styles/features/auth.css' },
+    { selector: '.auth-submit', owner: 'src/styles/features/auth.css' },
+    { selector: '.auth-error', owner: 'src/styles/features/auth.css' },
+    { selector: '.session-screen', owner: 'src/styles/features/auth.css' },
+    { selector: '.left-tabs a.main-tab', owner: 'src/styles/components/navigation.css' },
+    { selector: '.nav-expanded .left-tabs a.main-tab', owner: 'src/styles/components/navigation.css' },
+    { selector: '.maplibregl-canvas', owner: 'src/styles/components/map.css' },
+    { selector: '.manufacturer-order-list', owner: 'src/styles/features/control.css' },
+    { selector: '.customer-route-group small', owner: 'src/styles/features/customer.css' },
+    { selector: '.master-data-shell', owner: 'src/styles/features/management.css' },
     { selector: '.driver-history', owner: null },
     { selector: '.couriers-page', owner: null },
   ];
@@ -189,6 +188,43 @@ test('CSS ownership manifest matches source usage', () => {
   }
 });
 
+test('CSS entrypoint defines explicit design layers and token ownership', () => {
+  const entrypoint = readSrc('styles/index.css');
+  const tokens = readSrc('styles/foundation/tokens.css');
+  const legacyFiles = [
+    'styles/00-foundation-shell.css',
+    'styles/10-control-panels.css',
+    'styles/20-admin-pages.css',
+    'styles/30-customer-responsive.css',
+  ];
+
+  expect(entrypoint).toContain('@layer vendor, reset, tokens, base, components, features, responsive');
+  expect(entrypoint).toContain("layer(vendor)");
+  expect(entrypoint).toContain("layer(tokens)");
+  expect(entrypoint).toContain("layer(components)");
+  expect(entrypoint).toContain("layer(features)");
+  expect(entrypoint).toContain("layer(responsive)");
+  expect(entrypoint).toContain("layer(overrides)");
+  expect(tokens).toMatch(/--font-sans:/);
+  expect(tokens).toMatch(/--color-surface:/);
+  expect(tokens).toMatch(/--space-2:/);
+  expect(tokens).toMatch(/--radius-panel:/);
+  for (const path of legacyFiles) expect(exists(path), `${path} should be removed`).toBe(false);
+});
+
+test('application CSS consumes shared palette and typography tokens', () => {
+  const applicationCss = listFiles('src/styles', (path) => path.endsWith('.css') && !path.endsWith('foundation/tokens.css'))
+    .map(readRepo)
+    .join('\n');
+
+  expect(applicationCss).not.toMatch(/#fff(?:fff)?\b/i);
+  expect(applicationCss).not.toMatch(/#000(?:000)?\b/i);
+  expect(applicationCss).not.toMatch(/#eef3f8\b/i);
+  expect(applicationCss).not.toMatch(/#008060\b/i);
+  expect(applicationCss).not.toMatch(/Pretendard,\s*sans-serif/);
+  expect(applicationCss).not.toMatch(/var\(--(?:canvas|surface|ink|muted|hairline|blue|blue-soft|green|green-soft|future|done|done-soft|risk|risk-soft|amber|amber-soft|shadow|radius)\)/);
+});
+
 test('documentation names and boundaries', () => {
   const backendApi = readRepo('docs/backend-api.md');
   const docs = ['README.md', 'DESIGN.md', 'docs/backend-api.md'].map(readRepo).join('\n');
@@ -205,14 +241,22 @@ test('documentation names and boundaries', () => {
   expect(backendApi).toMatch(/## v1 reads[\s\S]*## Bounded legacy commands/i);
 });
 
+test('session check remains visually silent', () => {
+  const app = readRepo('src/App.tsx');
+  expect(app).not.toContain('관리자 세션 권한을 확인하고 있습니다.');
+  expect(app).not.toContain('고객 세션 권한을 확인하고 있습니다.');
+});
+
 test('package dependency inventory is unchanged', () => {
   const manifest = JSON.parse(readRepo('package.json'));
   expect(Object.keys(manifest.dependencies).sort()).toEqual([
     '@vitejs/plugin-react',
+    'lucide-react',
     'maplibre-gl',
     'pretendard',
     'react',
     'react-dom',
+    'xlsx',
   ]);
   expect(Object.keys(manifest.devDependencies).sort()).toEqual([
     '@playwright/test',

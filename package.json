@@ -5,19 +5,22 @@
   "type": "module",
   "description": "DSV 전용 웹 프론트엔드 for dsv.cleversystem.ai.",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 5174",
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "dev": "VITE_DSV_API_MODE=mock vite --host 0.0.0.0 --port 5174",
+    "dev:remote": "VITE_DSV_API_MODE=remote VITE_DSV_API_PROXY_TARGET=http://127.0.0.1:3001 VITE_DSV_SHOP_DOMAIN=dsv-demo.local vite --host 0.0.0.0 --port 5174",
+    "build": "tsc -p tsconfig.json --noEmit && VITE_DSV_API_MODE=${VITE_DSV_API_MODE:-remote} vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4174",
     "test:e2e": "VITE_DSV_API_MODE=mock playwright test",
-    "test:e2e:remote": "CI=1 VITE_DSV_API_MODE=remote playwright test tests/e2e/remote-v1-boundary.spec.js tests/e2e/remote-tab-parity.spec.js",
-    "check": "npm run build && npm run test:e2e && npm run test:e2e:remote"
+    "test:e2e:remote": "CI=1 VITE_DSV_API_MODE=remote VITE_DSV_API_PROXY_TARGET=http://127.0.0.1:3001 VITE_DSV_SHOP_DOMAIN=dsv-demo.local playwright test tests/e2e/remote-v1-boundary.spec.js tests/e2e/remote-tab-parity.spec.js",
+    "check": "VITE_DSV_API_MODE=mock npm run build && npm run test:e2e && npm run test:e2e:remote"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.2",
+    "lucide-react": "^1.27.0",
     "maplibre-gl": "^5.24.0",
     "pretendard": "^1.3.9",
     "react": "^19.2.1",
-    "react-dom": "^19.2.1"
+    "react-dom": "^19.2.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",

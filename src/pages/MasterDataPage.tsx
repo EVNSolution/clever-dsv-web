@@ -2,6 +2,14 @@ import type { FormEvent, ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import { customerDeliveryPath } from '../app-routes';
 import { apiConfig } from '../api/config';
+import {
+  AdminSectionHeader,
+  AdminTableFrame,
+  ManagementDetailAction,
+  ManagementEmptyState,
+  ManagementFormActions,
+  ManagementListActions,
+} from '../components/AdminUi';
 import type { ManagementData } from '../demo/management';
 import { addressSimilarity, loadManagementData, managementId } from '../demo/management';
 import { getCustomerOrders } from '../demo/selectors/customer';
@@ -75,7 +83,7 @@ export function MasterDataPage(): ReactElement {
   if (!shouldShowRemoteState) {
     switch (scope) {
       case 'resources':
-        content = <ResourcesPage data={data} onChange={updateData} />;
+        content = <ResourcesPage data={data} />;
         break;
       case 'network':
         content = <NetworkMaster data={data} onChange={updateData} />;
@@ -140,33 +148,62 @@ function NetworkMaster({ data, onChange }: { data: ManagementData; onChange: (da
 
   return (
     <div className="page-grid master-network-grid">
-      <section className="page-panel">
-        <div className="tab-line section-heading"><span>고객사</span>{isRemote ? <span className="section-meta">원격 읽기 전용</span> : <CrudActions name="고객사" selected={!!customer} onCreate={() => setEditor({ kind: 'customer' })} onEdit={() => setEditor({ kind: 'customer', id: customer?.id })} onDelete={removeCustomer} />}</div>
-        <div className="record-scroll overlay-scroll"><table className="page-table master-customer-table"><thead><tr><th>고객사</th><th>고객 코드</th><th>Order</th><th>배송조회</th></tr></thead><tbody>
-          {data.customers.map((item) => {
-            const orders = isRemote ? [] : getCustomerOrders(item.id);
-            return <tr className={item.id === customer?.id ? 'active' : ''} key={item.id} tabIndex={0} onClick={() => selectCustomer(item.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectCustomer(item.id); }}><td><strong>{item.name}</strong></td><td>{item.billingCode || unavailable(isRemote)}</td><td>{orders.length}건</td><td>{orders.length ? <a className="master-customer-link" href={`${customerDeliveryPath}?customer=${encodeURIComponent(item.id)}`} aria-label={`${item.name} 배송조회`} onClick={(event) => event.stopPropagation()}>배송조회</a> : '-'}</td></tr>;
-          })}
-        </tbody></table>{!data.customers.length ? <EmptyState label="고객사를 등록하세요." /> : null}</div>
-      </section>
-      <section className="page-panel master-destination-panel">
-        <div className="tab-line section-heading"><span>배송지</span>{isRemote ? <span className="section-meta">고객사 연결 미제공</span> : <CrudActions name="배송지" selected={!!selected} onCreate={() => openDestinationEditor()} onEdit={() => openDestinationEditor(selected?.id)} onDelete={removeDestination} />}</div>
-        <div className="record-scroll overlay-scroll"><table className="page-table master-destination-table"><thead><tr><th>배송지</th><th>주소</th><th>동일 주소</th></tr></thead><tbody>
-          {destinations.map((item) => <tr className={item.id === selected?.id ? 'active' : ''} key={item.id} tabIndex={0} onClick={() => { setSelectedDestinationId(item.id); setEditor(null); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedDestinationId(item.id); }}><td>{item.name}</td><td>{item.address || unavailable(isRemote)}</td><td>{item.sameAsId ? '연결' : '-'}</td></tr>)}
-        </tbody></table>{customer && !destinations.length ? <EmptyState label="배송지를 등록하세요." /> : null}</div>
-      </section>
-      <section className="page-panel wide master-editor-panel">
-        {editor?.kind === 'customer' ? <CustomerForm customer={data.customers.find((item) => item.id === editor.id)} onCancel={() => setEditor(null)} onSave={async (saved) => {
-          const customers = editor.id ? data.customers.map((item) => item.id === editor.id ? saved : item) : [...data.customers, saved];
-          await onChange({ ...data, customers }); setSelectedCustomerId(saved.id); setSelectedDestinationId(data.destinations.find((item) => item.customerId === saved.id)?.id ?? ''); setEditor(null);
-        }} /> : editor?.kind === 'destination' ? <DestinationForm customerId={customer?.id ?? ''} destination={data.destinations.find((item) => item.id === editor.id)} destinations={data.destinations} address={addressDraft} similar={similarDestinations} onAddressChange={setAddressDraft} onCancel={() => setEditor(null)} onSave={async (saved) => {
-          const allDestinations = editor.id ? data.destinations.map((item) => item.id === editor.id ? saved : item) : [...data.destinations, saved];
-          await onChange({ ...data, destinations: allDestinations }); setSelectedDestinationId(saved.id); setEditor(null);
-        }} /> : customer ? <>
-          <div className="tab-line section-heading"><span>고객사 상세</span><span className="section-meta">{customerOrders.length}건 Order</span></div>
-          <div className="master-detail-grid"><dl><dt>고객사</dt><dd>{customer.name}</dd><dt>고객 코드</dt><dd>{customer.billingCode || unavailable(isRemote)}</dd><dt>선택 배송지</dt><dd>{selected?.name ?? '-'}</dd><dt>정규화 주소</dt><dd>{selected?.address || unavailable(isRemote)}</dd></dl><div><strong>동일 배송지 연결</strong><p>{isRemote ? '미제공' : selected?.sameAsId ? data.destinations.find((item) => item.id === selected.sameAsId)?.name ?? '연결된 배송지' : '연결 없음'}</p></div></div>
-        </> : <EmptyState label="고객사를 등록하세요." />}
-      </section>
+      <div className="management-entity-column">
+        <section className="page-panel management-list-panel" aria-label="고객사 목록">
+          <AdminSectionHeader
+            title="고객사"
+            side={isRemote
+              ? <span className="section-meta">원격 읽기 전용</span>
+              : <ManagementListActions name="고객사" canDelete={!!customer} onCreate={() => setEditor({ kind: 'customer' })} onDelete={removeCustomer} />}
+          />
+          <AdminTableFrame>
+            <table className="page-table master-customer-table"><thead><tr><th>고객사</th><th>고객 코드</th><th>Order</th><th>배송조회</th></tr></thead><tbody>
+              {data.customers.map((item) => {
+                const orders = isRemote ? [] : getCustomerOrders(item.id);
+                return <tr className={item.id === customer?.id ? 'active' : ''} key={item.id} tabIndex={0} onClick={() => selectCustomer(item.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectCustomer(item.id); }}><td><strong>{item.name}</strong></td><td>{item.billingCode || unavailable(isRemote)}</td><td>{orders.length}건</td><td>{orders.length ? <a className="master-customer-link" href={`${customerDeliveryPath}?customer=${encodeURIComponent(item.id)}`} aria-label={`${item.name} 배송조회`} onClick={(event) => event.stopPropagation()}>배송조회</a> : '-'}</td></tr>;
+              })}
+            </tbody></table>
+            {!data.customers.length ? <EmptyState label="고객사를 등록하세요." /> : null}
+          </AdminTableFrame>
+        </section>
+        <section className="page-panel management-detail-panel" aria-label="고객사 상세">
+          {editor?.kind === 'customer' ? <CustomerForm customer={data.customers.find((item) => item.id === editor.id)} onCancel={() => setEditor(null)} onSave={async (saved) => {
+            const customers = editor.id ? data.customers.map((item) => item.id === editor.id ? saved : item) : [...data.customers, saved];
+            await onChange({ ...data, customers }); setSelectedCustomerId(saved.id); setSelectedDestinationId(data.destinations.find((item) => item.customerId === saved.id)?.id ?? ''); setEditor(null);
+          }} /> : <>
+            <AdminSectionHeader
+              title="고객사 상세"
+              side={customer ? <span className="management-heading-side"><span className="section-meta">{customerOrders.length}건 Order</span>{!isRemote ? <ManagementDetailAction name="고객사" onEdit={() => setEditor({ kind: 'customer', id: customer.id })} /> : null}</span> : undefined}
+            />
+            {customer ? <div className="master-detail-grid"><dl><dt>고객사</dt><dd>{customer.name}</dd><dt>고객 코드</dt><dd>{customer.billingCode || unavailable(isRemote)}</dd></dl><div><strong>배송지</strong><p>{destinations.length}곳 등록</p></div></div> : <EmptyState label="고객사를 등록하세요." />}
+          </>}
+        </section>
+      </div>
+      <div className="management-entity-column">
+        <section className="page-panel management-list-panel master-destination-panel" aria-label="배송지 목록">
+          <AdminSectionHeader
+            title="배송지"
+            side={isRemote
+              ? <span className="section-meta">고객사 연결 미제공</span>
+              : <ManagementListActions name="배송지" canDelete={!!selected} onCreate={() => openDestinationEditor()} onDelete={removeDestination} />}
+          />
+          <AdminTableFrame>
+            <table className="page-table master-destination-table"><thead><tr><th>배송지</th><th>주소</th><th>동일 주소</th></tr></thead><tbody>
+              {destinations.map((item) => <tr className={item.id === selected?.id ? 'active' : ''} key={item.id} tabIndex={0} onClick={() => { setSelectedDestinationId(item.id); setEditor(null); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedDestinationId(item.id); }}><td>{item.name}</td><td>{item.address || unavailable(isRemote)}</td><td>{item.sameAsId ? '연결' : '-'}</td></tr>)}
+            </tbody></table>
+            {customer && !destinations.length ? <EmptyState label="배송지를 등록하세요." /> : null}
+          </AdminTableFrame>
+        </section>
+        <section className="page-panel management-detail-panel" aria-label="배송지 상세">
+          {editor?.kind === 'destination' ? <DestinationForm customerId={customer?.id ?? ''} destination={data.destinations.find((item) => item.id === editor.id)} destinations={data.destinations} address={addressDraft} similar={similarDestinations} onAddressChange={setAddressDraft} onCancel={() => setEditor(null)} onSave={async (saved) => {
+            const allDestinations = editor.id ? data.destinations.map((item) => item.id === editor.id ? saved : item) : [...data.destinations, saved];
+            await onChange({ ...data, destinations: allDestinations }); setSelectedDestinationId(saved.id); setEditor(null);
+          }} /> : <>
+            <AdminSectionHeader title="배송지 상세" side={selected && !isRemote ? <ManagementDetailAction name="배송지" onEdit={() => openDestinationEditor(selected.id)} /> : undefined} />
+            {selected ? <div className="master-detail-grid"><dl><dt>배송지</dt><dd>{selected.name}</dd><dt>주소</dt><dd>{selected.address || unavailable(isRemote)}</dd></dl><div><strong>동일 배송지 연결</strong><p>{isRemote ? '미제공' : selected.sameAsId ? data.destinations.find((item) => item.id === selected.sameAsId)?.name ?? '연결된 배송지' : '연결 없음'}</p></div></div> : <EmptyState label={customer ? '배송지를 등록하세요.' : '고객사를 먼저 등록하세요.'} />}
+          </>}
+        </section>
+      </div>
     </div>
   );
 }
@@ -184,8 +221,13 @@ function ConditionMaster({ data, onChange }: { data: ManagementData; onChange: (
     }).catch(() => undefined);
   };
   return <div className="page-grid master-condition-grid">
-    <section className="page-panel wide"><div className="tab-line section-heading"><span>운송조건</span><span className="management-actions"><button type="button" aria-label="운송조건 등록" onClick={() => setEditorId(null)}>등록</button><button className="danger" type="button" aria-label="운송조건 삭제" disabled={!selected} onClick={removeCondition}>삭제</button></span></div><table className="page-table"><thead><tr><th>코드</th><th>명칭</th><th>설명</th></tr></thead><tbody>{data.conditions.map((condition) => <tr className={condition.id === selected?.id ? 'active' : ''} key={condition.id} tabIndex={0} onClick={() => { setSelectedId(condition.id); setEditorId(undefined); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(condition.id); setEditorId(undefined); } }}><td>{condition.code}</td><td>{condition.name}</td><td>{condition.description}</td></tr>)}</tbody></table></section>
-    <section className="page-panel wide">{editorId !== undefined ? <ConditionForm condition={data.conditions.find((item) => item.id === editorId)} onCancel={() => setEditorId(undefined)} onSave={async (saved) => { if (data.conditions.some((item) => item.id !== saved.id && item.code === saved.code)) { window.alert('같은 조건 코드가 이미 등록되어 있습니다.'); return; } const conditions = editorId ? data.conditions.map((item) => item.id === editorId ? saved : item) : [...data.conditions, saved]; await onChange({ ...data, conditions }); setSelectedId(saved.id); setEditorId(undefined); }} /> : selected ? <><div className="tab-line section-heading"><span>조건 상세</span><span className="management-actions"><span className="section-meta">{selected.code}</span><button type="button" aria-label="운송조건 수정" onClick={() => setEditorId(selected.id)}>수정</button></span></div><div className="master-detail-grid"><dl><dt>표시 명칭</dt><dd>{selected.name}</dd><dt>설명</dt><dd>{selected.description}</dd></dl><dl><dt>온도 범위</dt><dd>{selected.temperature || '-'}</dd><dt>적합 차량</dt><dd>{selected.vehicle || '-'}</dd><dt>필수 증빙</dt><dd>{selected.proof || '-'}</dd></dl></div></> : <EmptyState label="운송조건을 등록하세요." />}</section>
+    <section className="page-panel wide management-list-panel">
+      <AdminSectionHeader title="운송조건" side={<ManagementListActions name="운송조건" canDelete={!!selected} onCreate={() => setEditorId(null)} onDelete={removeCondition} />} />
+      <AdminTableFrame>
+        <table className="page-table"><thead><tr><th>코드</th><th>명칭</th><th>설명</th></tr></thead><tbody>{data.conditions.map((condition) => <tr className={condition.id === selected?.id ? 'active' : ''} key={condition.id} tabIndex={0} onClick={() => { setSelectedId(condition.id); setEditorId(undefined); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(condition.id); setEditorId(undefined); } }}><td>{condition.code}</td><td>{condition.name}</td><td>{condition.description}</td></tr>)}</tbody></table>
+      </AdminTableFrame>
+    </section>
+    <section className="page-panel wide management-detail-panel">{editorId !== undefined ? <ConditionForm condition={data.conditions.find((item) => item.id === editorId)} onCancel={() => setEditorId(undefined)} onSave={async (saved) => { if (data.conditions.some((item) => item.id !== saved.id && item.code === saved.code)) { window.alert('같은 조건 코드가 이미 등록되어 있습니다.'); return; } const conditions = editorId ? data.conditions.map((item) => item.id === editorId ? saved : item) : [...data.conditions, saved]; await onChange({ ...data, conditions }); setSelectedId(saved.id); setEditorId(undefined); }} /> : <><AdminSectionHeader title="조건 상세" side={selected ? <span className="management-heading-side"><span className="section-meta">{selected.code}</span><ManagementDetailAction name="운송조건" onEdit={() => setEditorId(selected.id)} /></span> : undefined} />{selected ? <div className="master-detail-grid"><dl><dt>표시 명칭</dt><dd>{selected.name}</dd><dt>설명</dt><dd>{selected.description}</dd></dl><dl><dt>온도 범위</dt><dd>{selected.temperature || '-'}</dd><dt>적합 차량</dt><dd>{selected.vehicle || '-'}</dd><dt>필수 증빙</dt><dd>{selected.proof || '-'}</dd></dl></div> : <EmptyState label="운송조건을 등록하세요." />}</>}</section>
   </div>;
 }
 
@@ -250,10 +292,9 @@ function ConditionForm({ condition, onSave, onCancel }: { condition?: Management
   return <form className="management-editor" aria-label="운송조건 편집" onSubmit={submit}><EditorTitle title={condition ? '운송조건 수정' : '운송조건 등록'} /><div className="management-form-grid"><label>조건 코드<input name="code" required defaultValue={condition?.code} /></label><label>명칭<input name="name" required defaultValue={condition?.name} /></label><label className="wide">설명<input name="description" required defaultValue={condition?.description} /></label><label>온도 범위<input name="temperature" defaultValue={condition?.temperature} /></label><label>적합 차량<input name="vehicle" defaultValue={condition?.vehicle} /></label><label className="wide">필수 증빙<input name="proof" defaultValue={condition?.proof} /></label></div><FormActions onCancel={onCancel} /></form>;
 }
 
-function CrudActions({ name, selected, onCreate, onEdit, onDelete }: { name: string; selected: boolean; onCreate: () => void; onEdit: () => void; onDelete: () => void }): ReactElement { return <span className="management-actions"><button type="button" aria-label={`${name} 등록`} onClick={onCreate}>등록</button><button type="button" aria-label={`${name} 수정`} disabled={!selected} onClick={onEdit}>수정</button><button className="danger" type="button" aria-label={`${name} 삭제`} disabled={!selected} onClick={onDelete}>삭제</button></span>; }
-function EditorTitle({ title }: { title: string }): ReactElement { return <div className="tab-line section-heading"><span>{title}</span></div>; }
-function FormActions({ onCancel }: { onCancel: () => void }): ReactElement { return <div className="management-form-actions"><button type="button" onClick={onCancel}>취소</button><button className="primary" type="submit">저장</button></div>; }
-function EmptyState({ label }: { label: string }): ReactElement { return <div className="management-empty" role="status">{label}</div>; }
+function EditorTitle({ title }: { title: string }): ReactElement { return <AdminSectionHeader title={title} />; }
+function FormActions({ onCancel }: { onCancel: () => void }): ReactElement { return <ManagementFormActions onCancel={onCancel} />; }
+function EmptyState({ label }: { label: string }): ReactElement { return <ManagementEmptyState>{label}</ManagementEmptyState>; }
 function unavailable(remote: boolean): string { return remote ? '미제공' : '-'; }
 function text(form: FormData, key: string): string { return String(form.get(key) ?? '').trim(); }
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : '기준정보 저장에 실패했습니다.'; }

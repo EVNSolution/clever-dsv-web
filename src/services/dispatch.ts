@@ -1,4 +1,4 @@
-import { requestV1ReadJson } from '../api/client';
+import { requestV1AssignmentCommandJson, requestV1ReadJson } from '../api/client';
 
 export type DispatchAssignmentStatus = 'ASSIGNED' | 'UNASSIGNED';
 export type DispatchEtaStatus = 'FAILED' | 'NOT_REQUIRED' | 'PENDING' | 'READY' | 'STALE';
@@ -6,13 +6,19 @@ export type DispatchEtaStatus = 'FAILED' | 'NOT_REQUIRED' | 'PENDING' | 'READY' 
 export type DispatchListItem = {
   assignmentStatus: DispatchAssignmentStatus;
   customerId: string;
+  destinationAddress: string | null;
+  destinationDisplayName: string | null;
   destinationId: string;
+  driverId: string | null;
   estimatedArrivalAt: string | null;
   etaStatus: DispatchEtaStatus;
+  latitude: number | null;
+  longitude: number | null;
   routePlanId: string | null;
   routeVersionId: string | null;
   sellerOrderId: string;
   sellerOrderKey: string;
+  vehicleId: string | null;
 };
 
 export type DispatchListPage = {
@@ -34,21 +40,41 @@ export type DispatchListView = {
 type RawDispatch = {
   assignmentStatus: DispatchAssignmentStatus;
   customerId: string;
+  destinationAddress?: string;
+  destinationDisplayName?: string;
   destinationId: string;
+  driverId?: string;
   estimatedArrivalAt?: string;
   etaStatus: DispatchEtaStatus;
+  latitude?: number;
+  longitude?: number;
   routePlanId?: string;
   routeVersionId?: string;
   sellerOrderId: string;
   sellerOrderKey: string;
+  vehicleId?: string;
 };
 
-export async function loadDispatchList(signal?: AbortSignal): Promise<DispatchListView> {
-  const data = await requestV1ReadJson<unknown>('dispatches', { signal });
-  const response = dispatchResponse(data);
-  const rows = response.items.map(toDispatchListItem);
+export type DispatchAssignmentResult = {
+  assignmentStatus: DispatchAssignmentStatus;
+  newRouteVersionId: string;
+  routePlanId: string | null;
+  sellerOrderId: string;
+};
+
+export async function loadDispatchList(serviceDate: string, signal?: AbortSignal): Promise<DispatchListView> {
+  const rows: DispatchListItem[] = [];
+  let cursor: string | undefined;
+  do {
+    const query = new URLSearchParams({ limit: '100', serviceDate });
+    if (cursor !== undefined) query.set('cursor', cursor);
+    const data = await requestV1ReadJson<unknown>(`dispatches?${query.toString()}`, { signal });
+    const response = dispatchResponse(data);
+    rows.push(...response.items.map(toDispatchListItem));
+    cursor = response.page?.hasMore === true ? response.page.nextCursor : undefined;
+    if (response.page?.hasMore === true && cursor === undefined) throw new Error('배차 목록 페이지 정보가 올바르지 않습니다.');
+  } while (cursor !== undefined);
   return {
-    page: response.page,
     rows,
     summary: {
       assigned: rows.filter((row) => row.assignmentStatus === 'ASSIGNED').length,
@@ -57,6 +83,44 @@ export async function loadDispatchList(signal?: AbortSignal): Promise<DispatchLi
       unassigned: rows.filter((row) => row.assignmentStatus === 'UNASSIGNED').length,
     },
   };
+}
+
+export async function reassignDispatchOrder(input: {
+  driverId: string;
+  order: DispatchListItem;
+  routePlanId?: string;
+  vehicleId: string;
+}): Promise<DispatchAssignmentResult> {
+  const data = await requestV1AssignmentCommandJson<unknown>(
+    `seller-orders/${encodeURIComponent(input.order.sellerOrderId)}/assignment/reassign`,
+    {
+      json: {
+        commandId: crypto.randomUUID(),
+        expectedVersion: input.order.routeVersionId ?? 'UNASSIGNED',
+        reason: '관리자 배정',
+        targetDriverId: input.driverId,
+        ...(input.routePlanId === undefined ? {} : { targetRoutePlanId: input.routePlanId }),
+        targetVehicleId: input.vehicleId,
+      },
+      method: 'POST',
+    },
+  );
+  return assignmentResult(data);
+}
+
+export async function unassignDispatchOrder(order: DispatchListItem): Promise<DispatchAssignmentResult> {
+  const data = await requestV1AssignmentCommandJson<unknown>(
+    `seller-orders/${encodeURIComponent(order.sellerOrderId)}/assignment/unassign`,
+    {
+      json: {
+        commandId: crypto.randomUUID(),
+        expectedVersion: order.routeVersionId ?? 'UNASSIGNED',
+        reason: '관리자 배정 해제',
+      },
+      method: 'POST',
+    },
+  );
+  return assignmentResult(data);
 }
 
 function dispatchResponse(data: unknown): { items: unknown[]; page?: DispatchListPage } {
@@ -83,18 +147,40 @@ function toDispatchListItem(raw: unknown): DispatchListItem {
   return {
     assignmentStatus: dispatch.assignmentStatus,
     customerId: dispatch.customerId,
+    destinationAddress: dispatch.destinationAddress ?? null,
+    destinationDisplayName: dispatch.destinationDisplayName ?? null,
     destinationId: dispatch.destinationId,
+    driverId: dispatch.driverId ?? null,
     estimatedArrivalAt: dispatch.estimatedArrivalAt ?? null,
     etaStatus: dispatch.etaStatus,
+    latitude: dispatch.latitude ?? null,
+    longitude: dispatch.longitude ?? null,
     routePlanId: dispatch.routePlanId ?? null,
     routeVersionId: dispatch.routeVersionId ?? null,
     sellerOrderId: dispatch.sellerOrderId,
     sellerOrderKey: dispatch.sellerOrderKey,
+    vehicleId: dispatch.vehicleId ?? null,
   };
 }
 
 function rawDispatch(value: unknown): RawDispatch {
-  if (!hasOnlyKeys(value, ['sellerOrderId', 'sellerOrderKey', 'customerId', 'destinationId', 'assignmentStatus', 'etaStatus', 'estimatedArrivalAt', 'routePlanId', 'routeVersionId'])) {
+  if (!hasOnlyKeys(value, [
+    'sellerOrderId',
+    'sellerOrderKey',
+    'customerId',
+    'destinationId',
+    'destinationDisplayName',
+    'destinationAddress',
+    'driverId',
+    'vehicleId',
+    'latitude',
+    'longitude',
+    'assignmentStatus',
+    'etaStatus',
+    'estimatedArrivalAt',
+    'routePlanId',
+    'routeVersionId',
+  ])) {
     throw new Error('배차 항목 응답 형식이 올바르지 않습니다.');
   }
   for (const field of ['sellerOrderId', 'sellerOrderKey', 'customerId', 'destinationId', 'assignmentStatus', 'etaStatus'] as const) {
@@ -102,10 +188,42 @@ function rawDispatch(value: unknown): RawDispatch {
   }
   if (!['ASSIGNED', 'UNASSIGNED'].includes(value.assignmentStatus as string)) throw new Error('배차 항목의 assignmentStatus 필드가 올바르지 않습니다.');
   if (!['FAILED', 'NOT_REQUIRED', 'PENDING', 'READY', 'STALE'].includes(value.etaStatus as string)) throw new Error('배차 항목의 etaStatus 필드가 올바르지 않습니다.');
-  for (const field of ['estimatedArrivalAt', 'routePlanId', 'routeVersionId'] as const) {
+  for (const field of ['destinationDisplayName', 'destinationAddress', 'driverId', 'vehicleId', 'estimatedArrivalAt', 'routePlanId', 'routeVersionId'] as const) {
     if (value[field] !== undefined && typeof value[field] !== 'string') throw new Error(`배차 항목의 ${field} 필드가 올바르지 않습니다.`);
   }
+  for (const field of ['latitude', 'longitude'] as const) {
+    if (value[field] !== undefined && (typeof value[field] !== 'number' || !Number.isFinite(value[field]))) {
+      throw new Error(`배차 항목의 ${field} 필드가 올바르지 않습니다.`);
+    }
+  }
   return value as RawDispatch;
+}
+
+function assignmentResult(value: unknown): DispatchAssignmentResult {
+  if (!hasOnlyKeys(value, ['assignmentResult']) || !hasOnlyKeys(value.assignmentResult, [
+    'assignmentStatus',
+    'auditEventId',
+    'commandId',
+    'etaStatus',
+    'newRouteVersionId',
+    'previousRouteVersionId',
+    'receiptId',
+    'routePlanId',
+    'sellerOrderId',
+  ])) throw new Error('배정 명령 응답 형식이 올바르지 않습니다.');
+  const result = value.assignmentResult;
+  if ((result.assignmentStatus !== 'ASSIGNED' && result.assignmentStatus !== 'UNASSIGNED')
+    || typeof result.newRouteVersionId !== 'string'
+    || typeof result.sellerOrderId !== 'string'
+    || (result.routePlanId !== null && typeof result.routePlanId !== 'string')) {
+    throw new Error('배정 명령 결과가 올바르지 않습니다.');
+  }
+  return {
+    assignmentStatus: result.assignmentStatus,
+    newRouteVersionId: result.newRouteVersionId,
+    routePlanId: result.routePlanId,
+    sellerOrderId: result.sellerOrderId,
+  };
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

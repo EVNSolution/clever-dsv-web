@@ -1,12 +1,8 @@
 export type {
-  Coordinate,
   Customer,
   CustomerUser,
   DeliveryStatus,
   DeliveryStop,
-  DemoCourier,
-  DemoRoute,
-  DemoVehicle,
   DevDb,
   Driver,
   ManagementAssignmentRelation,

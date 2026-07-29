@@ -1,10 +1,5 @@
-import { demoCustomerId, demoDeliveryDate, demoOrderKey, devDb } from '../data';
-import type { DeliveryStatus, Driver, Order, OrderItem, RouteEngineProvider, StatusTone, Vehicle } from '../model';
-
-export type RouteEngineConfig = {
-  provider: RouteEngineProvider;
-  endpoint: string;
-};
+import { demoCustomerId, demoDeliveryDate, devDb } from '../data';
+import type { DeliveryStatus, Order, OrderItem, StatusTone } from '../model';
 
 export type CargoViewModel = {
   name: string;
@@ -21,19 +16,13 @@ export type StopViewModel = {
   cargo: CargoViewModel[];
 };
 
-export type ControlPageViewModel = {
-  customerName: string;
-  routeEngine: RouteEngineConfig;
-  fleet: {
-    id: string;
-    plate: string;
-    driver: string;
-    statusKey: 'completed' | 'moving' | 'loading';
-    statusLabel: string;
-    chip: StatusTone;
-    eta: string;
-  }[];
-  order: OrderDetailViewModel;
+type VehicleViewModel = {
+  id: string;
+  label: string;
+  plate: string;
+  driver: string;
+  tone: StatusTone;
+  statusLabel: DeliveryStatus;
 };
 
 export type OrderDetailViewModel = {
@@ -42,20 +31,8 @@ export type OrderDetailViewModel = {
   title: string;
   routeName: string;
   isMultiVehicle: boolean;
-  vehicles: {
-    id: string;
-    label: string;
-    plate: string;
-    driver: string;
-    tone: StatusTone;
-    statusLabel: DeliveryStatus;
-  }[];
-  selectedVehicle: {
-    id: string;
-    label: string;
-    plate: string;
-    driver: string;
-    tone: StatusTone;
+  vehicles: VehicleViewModel[];
+  selectedVehicle?: VehicleViewModel & {
     remainingTime: string;
     arrivalEta: string;
     dwellUnloadEstimate: string;
@@ -63,16 +40,6 @@ export type OrderDetailViewModel = {
     cargo: CargoViewModel[];
   };
 };
-
-export function getControlPage(): ControlPageViewModel {
-  const customer = devDb.customers.find((entry) => entry.id === demoCustomerId);
-  return {
-    customerName: customer?.name ?? 'CLEVER - 고객사 Demo',
-    routeEngine: getRouteEngine(),
-    fleet: buildFleet(),
-    order: getOrderDetail(demoOrderKey),
-  };
-}
 
 export function getCustomerInquiryPage(customerId = demoCustomerId, dayOffset = 0, orderKey?: string, selectedVehicleId?: string) {
   const requestedCustomer = devDb.customers.find((entry) => entry.id === customerId);
@@ -84,10 +51,10 @@ export function getCustomerInquiryPage(customerId = demoCustomerId, dayOffset = 
     .filter((order) => order.deliveryDate === selectedDate);
   const selectedOrderKey = orders.find((order) => order.orderKey === orderKey)?.orderKey
     ?? orders[0]?.orderKey;
+
   return {
     customerId: customer?.id ?? demoCustomerId,
-    customerName: customer?.name ?? 'CLEVER - 고객사 Demo',
-    routeEngine: getRouteEngine(),
+    customerName: customer?.name ?? '고객사',
     selectedDate,
     dayOffset,
     dateOptions: [
@@ -116,98 +83,63 @@ export function getCustomerOrders(customerId: string) {
 
 export function getOrderDetail(orderKey: string, preferredVehicleId?: string): OrderDetailViewModel {
   const order = mustOrder(orderKey);
-  const visibleRouteStops = devDb.routePlanStops
+  const routeStops = devDb.routePlanStops
     .filter((routeStop) => routeStop.orderId === order.id)
     .filter((routeStop) => visibleStops(order).some((stop) => stop.id === routeStop.deliveryStopId))
     .sort((left, right) => left.plannedSequence - right.plannedSequence);
-
-  const vehicles = Array.from(new Set(visibleRouteStops.map((routeStop) => routeStop.vehicleId)))
-    .map((vehicleId) => {
-      const vehicle = mustVehicle(vehicleId);
-      const driver = mustDriverByVehicle(vehicleId);
-      return {
+  const vehicles = Array.from(new Set(routeStops.map((routeStop) => routeStop.vehicleId)))
+    .flatMap((vehicleId): VehicleViewModel[] => {
+      const vehicle = devDb.vehicles.find((entry) => entry.id === vehicleId);
+      const routeStop = routeStops.find((entry) => entry.vehicleId === vehicleId);
+      const driver = routeStop ? devDb.drivers.find((entry) => entry.id === routeStop.driverId) : undefined;
+      if (!vehicle || !driver) return [];
+      return [{
         id: vehicle.id,
         label: vehicle.label,
         plate: vehicle.plate,
         driver: driver.name,
         tone: statusTone(vehicle.status),
         statusLabel: vehicle.status,
-      };
+      }];
     });
-
-  const currentRouteStop = visibleRouteStops.find((routeStop) => statusTone(mustStop(routeStop.deliveryStopId).status) === 'green') ?? visibleRouteStops[0];
-  const selectedVehicleId = vehicles.some((vehicle) => vehicle.id === preferredVehicleId) ? preferredVehicleId : (currentRouteStop?.vehicleId ?? vehicles[0]?.id);
-  if (!selectedVehicleId) throw new Error(`No vehicle assigned to order ${orderKey}`);
-  const selectedVehicle = mustVehicle(selectedVehicleId);
-  const selectedDriver = mustDriverByVehicle(selectedVehicleId);
-  const selectedRouteStops = visibleRouteStops.filter((routeStop) => routeStop.vehicleId === selectedVehicleId);
-  const selectedCurrentRouteStop = selectedRouteStops.find((routeStop) => statusTone(mustStop(routeStop.deliveryStopId).status) === 'green') ?? selectedRouteStops[0];
-  const selectedStops = selectedRouteStops.map((routeStop, index) => buildStopViewModel(routeStop.deliveryStopId, index));
-
-  return {
+  const base: OrderDetailViewModel = {
     id: order.id,
     orderKey: order.orderKey,
     title: order.title,
     routeName: order.routeName,
     isMultiVehicle: vehicles.length > 1,
     vehicles,
+  };
+  const selectedVehicleId = vehicles.some((vehicle) => vehicle.id === preferredVehicleId)
+    ? preferredVehicleId
+    : vehicles[0]?.id;
+  if (!selectedVehicleId) return base;
+
+  const selectedVehicle = vehicles.find((vehicle) => vehicle.id === selectedVehicleId);
+  const selectedRouteStops = routeStops.filter((routeStop) => routeStop.vehicleId === selectedVehicleId);
+  if (!selectedVehicle) return base;
+  const destinations = selectedRouteStops.map((routeStop, index) => buildStopViewModel(routeStop.deliveryStopId, index));
+  const current = selectedRouteStops[0];
+  return {
+    ...base,
     selectedVehicle: {
-      id: selectedVehicle.id,
-      label: selectedVehicle.label,
-      plate: selectedVehicle.plate,
-      driver: selectedDriver.name,
-      tone: statusTone(selectedVehicle.status),
-      remainingTime: selectedCurrentRouteStop?.remainingTime ?? '대기',
-      arrivalEta: selectedCurrentRouteStop?.arrivalEta ?? '일정 없음',
-      dwellUnloadEstimate: selectedCurrentRouteStop?.dwellUnloadEstimate ?? '하차 정보 없음',
-      destinations: selectedStops,
-      cargo: selectedStops.flatMap((stop) => stop.cargo),
+      ...selectedVehicle,
+      remainingTime: current?.remainingTime ?? '대기',
+      arrivalEta: current?.arrivalEta ?? '일정 없음',
+      dwellUnloadEstimate: current?.dwellUnloadEstimate ?? '하차 정보 없음',
+      destinations,
+      cargo: destinations.flatMap((stop) => stop.cargo),
     },
   };
 }
 
-export function getOperationsPage() {
-  return { summary: '배차/업로드 작업은 dev DB 주문 모델에서 준비됩니다.', pendingOrders: getCustomerOrders(demoCustomerId).length };
-}
-
-export function getHistoryPage() {
-  return { recentOrders: getCustomerOrders(demoCustomerId) };
-}
-
-export function getSettingsPage() {
-  return { routeEngine: getRouteEngine(), users: devDb.customerUsers.filter((user) => user.customerId === demoCustomerId) };
-}
-
-function getRouteEngine(): RouteEngineConfig {
-  const prodEndpoint = import.meta.env.VITE_CLEVER_OSRM_ENDPOINT || '/api/osrm-engine';
-  return import.meta.env.DEV
-    ? { provider: 'public-osrm-dev', endpoint: 'https://router.project-osrm.org' }
-    : { provider: 'clever-route-server-prod', endpoint: prodEndpoint };
-}
-
-function buildFleet(): ControlPageViewModel['fleet'] {
-  return devDb.vehicles.map((vehicle) => {
-    const driver = mustDriverByVehicle(vehicle.id);
-    return {
-      id: vehicle.id,
-      plate: vehicle.plate,
-      driver: driver.name,
-      statusKey: statusKey(vehicle.status),
-      statusLabel: statusText(vehicle.status),
-      chip: statusTone(vehicle.status),
-      eta: fleetEta(vehicle),
-    };
-  });
-}
-
 function buildStopViewModel(deliveryStopId: string, index: number): StopViewModel {
-  const stop = mustStop(deliveryStopId);
+  const stop = devDb.deliveryStops.find((entry) => entry.id === deliveryStopId);
+  if (!stop) throw new Error(`Unknown stop: ${deliveryStopId}`);
   const cargo = stop.itemIds
     .map((itemId) => devDb.orderItems.find((item) => item.id === itemId))
-    .filter((item): item is OrderItem => item !== undefined)
-    .filter((item) => item.customerId === stop.customerId)
+    .filter((item): item is OrderItem => item !== undefined && item.customerId === stop.customerId)
     .map((item) => ({ name: item.name, quantity: item.quantity }));
-
   return {
     sequence: index + 1,
     customerName: stop.customerName,
@@ -229,47 +161,8 @@ function statusTone(status: DeliveryStatus): StatusTone {
   return 'blue';
 }
 
-function statusKey(status: DeliveryStatus): 'completed' | 'moving' | 'loading' {
-  if (status === 'completed') return 'completed';
-  if (status === 'current') return 'moving';
-  return 'loading';
-}
-
-function statusText(status: DeliveryStatus): string {
-  if (status === 'completed') return '완료';
-  if (status === 'current') return '배송중';
-  return '대기';
-}
-
-function fleetEta(vehicle: Vehicle): string {
-  if (vehicle.status === 'completed') return '완료 오후 04:33';
-  if (vehicle.id === 'vehicle-330') return '24초';
-  if (vehicle.id === 'vehicle-303') return '1분 05초';
-  if (vehicle.id === 'vehicle-207') return '1분 06초';
-  return '1분 00초';
-}
-
 function mustOrder(orderKey: string): Order {
   const order = devDb.orders.find((entry) => entry.orderKey === orderKey);
   if (!order) throw new Error(`Unknown order: ${orderKey}`);
   return order;
-}
-
-function mustVehicle(vehicleId: string): Vehicle {
-  const vehicle = devDb.vehicles.find((entry) => entry.id === vehicleId);
-  if (!vehicle) throw new Error(`Unknown vehicle: ${vehicleId}`);
-  return vehicle;
-}
-
-function mustDriverByVehicle(vehicleId: string): Driver {
-  const routePlanStop = devDb.routePlanStops.find((entry) => entry.vehicleId === vehicleId);
-  const driver = routePlanStop ? devDb.drivers.find((entry) => entry.id === routePlanStop.driverId) : undefined;
-  if (!driver) throw new Error(`Unknown driver for vehicle: ${vehicleId}`);
-  return driver;
-}
-
-function mustStop(deliveryStopId: string) {
-  const stop = devDb.deliveryStops.find((entry) => entry.id === deliveryStopId);
-  if (!stop) throw new Error(`Unknown stop: ${deliveryStopId}`);
-  return stop;
 }

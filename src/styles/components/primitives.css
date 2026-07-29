@@ -1,0 +1,27 @@
+.tab-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 900; letter-spacing: -.03em; }
+.tab-copy { margin: 8px 0 0; color: var(--color-muted); font-size: 13px; line-height: 1.35; }
+.btn {
+  min-height: 44px; border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: 0 18px;
+  background: rgba(255,255,255,.82); color: var(--color-ink); cursor: pointer;
+  transition: transform .18s ease, background .18s ease, opacity .18s ease;
+}
+.btn:active { transform: scale(.97); }
+.btn:focus-visible { outline: 3px solid rgba(0,102,204,.28); outline-offset: 2px; }
+.btn.primary { border: 0; background: var(--color-primary); color: var(--color-white); font-weight: 700; padding: 0 24px; }
+.btn.danger { border: 0; background: var(--color-risk); color: var(--color-white); font-weight: 800; padding: 0 24px; }
+.btn[disabled] { cursor: not-allowed; opacity: .58; }
+.grid { display: block; width: 100%; height: 100%; }
+.card { background: rgba(255,255,255,.86); border: 1px solid rgba(255,255,255,.72); border-radius: var(--radius-shell); box-shadow: var(--shadow-floating); backdrop-filter: blur(18px); overflow: hidden; }
+
+.map-card { position: absolute; inset: 0; min-height: 0; border: 0; border-radius: 0; box-shadow: none; background: var(--color-map-canvas); }
+.side-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0; }
+.title { font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
+.sub { color: var(--color-muted); font-size: 13px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 10px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 800; background: var(--color-canvas); color: var(--color-muted); white-space: nowrap; }
+.chip.blue { color: var(--color-primary); background: var(--color-primary-soft); }
+.chip.green { color: var(--color-success); background: var(--color-success-soft); }
+.chip.gray { color: var(--color-complete); background: var(--color-complete-soft); }
+.chip.risk { color: var(--color-risk); background: var(--color-risk-soft); }
+.chip.amber { color: #9a5a00; background: var(--color-warning-soft); }
+.chip.mini { min-height: 24px; font-size: 11px; color: #3a3a3c; background: #f2f2f7; }
+.dot { width: 7px; height: 7px; border-radius: 99px; background: currentColor; box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 14%, transparent); }

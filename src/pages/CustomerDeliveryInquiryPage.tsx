@@ -2,9 +2,7 @@ import type { ReactElement } from 'react';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { getCustomerInquiryPage } from '../dev-db/queries';
 import type { OrderDetailViewModel } from '../dev-db/queries';
-import { defaultShellControls, ProductHeader } from '../components/MapControls';
-import type { ShellControlsState } from '../components/MapControls';
-import { mapVehicleIdForCustomerVehicle } from '../demo/identity';
+import { ProductHeader } from '../components/MapControls';
 import { apiConfig } from '../api/config';
 import { loadRemoteCustomerDeliveries } from '../services/customer-deliveries';
 import type { RemoteCustomerDeliveries } from '../services/customer-deliveries';
@@ -26,9 +24,7 @@ function MockCustomerDeliveryInquiryPage(): ReactElement {
   });
   const [selectedOrderKey, setSelectedOrderKey] = useState<string>();
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>();
-  const [controls, setControls] = useState<ShellControlsState>(defaultShellControls);
   const page = getCustomerInquiryPage(selectedCustomerId, selectedDayOffset, selectedOrderKey, selectedVehicleId);
-  const selectedMapVehicleId = page.order ? mapVehicleIdForCustomerVehicle(page.order.selectedVehicle.id) : undefined;
   const selectDay = (dayOffset: number) => {
     const url = new URL(window.location.href);
     url.searchParams.set('customer', page.customerId);
@@ -43,11 +39,11 @@ function MockCustomerDeliveryInquiryPage(): ReactElement {
   return (
     <main className="page customer-delivery-demo">
       <div className="top-cluster">
-        <ProductHeader title="CLEVER 배송조회" section={page.customerName.replace(' Demo', '')} showDestinationMode={false} controls={controls} onChange={setControls} />
+        <ProductHeader title="CLEVER 배송조회" section={page.customerName.replace(' Demo', '')} />
       </div>
       <section className="grid" aria-label="고객사 배송 조회">
         <Suspense fallback={<article className="card map-card" aria-label="지도 불러오는 중" />}>
-          <MapCanvas ariaLabel={`고객 배송조회 지도 - OpenFreeMap route and marker layers - ${page.routeEngine.provider}`} endpoint={page.routeEngine.endpoint} mapMode={controls.mapMode} destinationMode={controls.destinationMode} vehicleId={selectedMapVehicleId} />
+          <MapCanvas ariaLabel="고객 배송조회 지도 - OpenFreeMap" />
         </Suspense>
         <CustomerOrderPanel
           order={page.order}
@@ -101,7 +97,7 @@ function CustomerOrderPanel({
         </div>
       </div>
 
-      {order && selectedVehicle ? <>
+      {order ? <>
         <div className="customer-section" aria-label="주문 목록">
           <div className="customer-section-head"><span>주문 목록</span><span>{orders.length}건</span></div>
           <div className="customer-list">
@@ -119,9 +115,10 @@ function CustomerOrderPanel({
           <strong>{order.title}</strong>
           <small>{order.orderKey} ({order.routeName})</small>
         </div>
-        <span className="chip green">{order.isMultiVehicle ? '다중 차량' : '단일 차량'}</span>
+        <span className="chip gray">{selectedVehicle ? (order.isMultiVehicle ? '다중 차량' : '단일 차량') : '미배차'}</span>
       </div>
 
+      {selectedVehicle ? <>
       <div className="customer-status-grid">
         <div className="customer-status-item remaining"><span>남은 시간</span><b>{selectedVehicle.remainingTime}</b></div>
         <div className="customer-status-item"><span>도착 예정</span><b>{selectedVehicle.arrivalEta}</b></div>
@@ -159,7 +156,7 @@ function CustomerOrderPanel({
           <div key={`${item.name}-${item.quantity}`} className="customer-cargo-row"><span>{item.name}</span><b>{item.quantity}</b></div>
         ))}
       </div>
-      <p className="customer-hint">개발 DB seed에서 고객, 주문, 배송지, 차량, 기사, 증빙 모델을 조합한 화면입니다. OSRM 네트워크 호출은 하지 않습니다.</p>
+      </> : <div className="customer-empty-state" role="status"><strong>배차 정보 없음</strong><span>고정차량배차리스트를 기준으로 차량과 배송원을 다시 연결합니다.</span></div>}
       </> : <div className="customer-empty-state" role="status"><strong>주문 없음</strong><span>{selectedDate}에는 조회할 배송 주문이 없습니다.</span></div>}
     </section>
   );

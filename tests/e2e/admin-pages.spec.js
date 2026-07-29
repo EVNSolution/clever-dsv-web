@@ -10,86 +10,75 @@ test('all admin tabs and native controls use bundled Pretendard', async ({ page 
   }
 });
 
-test('master data page keeps resource data in one local workspace', async ({ page }) => {
+test('master data keeps both resource workspaces visible while operational data starts empty', async ({ page }) => {
   await page.goto('/master-data');
   await page.getByRole('button', { name: '사이드바 펼치기' }).click();
 
   await expect(page.locator('h1', { hasText: 'CLEVER DSV' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '관리', exact: true })).toBeVisible();
-  await expect(page.getByLabel('배송원 리스트').getByText('13명')).toBeVisible();
-  await expect(page.getByLabel('배송원 리스트').getByText('김도윤')).toBeVisible();
-  await expect(page.getByLabel('배송원 리스트').getByText('이서연')).toBeVisible();
-  await expect(page.getByLabel('배송원 리스트').getByRole('columnheader', { name: '차량' })).toBeVisible();
-  await expect(page.getByLabel('배송원 리스트').getByRole('columnheader', { name: '연령', exact: true })).toBeVisible();
-  await expect(page.getByLabel('배송원 리스트').getByRole('columnheader', { name: '성별', exact: true })).toBeVisible();
-  await expect(page.getByLabel('배송원 리스트').getByText('42세', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('배송원 리스트').getByText('남성', { exact: true }).first()).toBeVisible();
-  const courierPanelTopGaps = await page.locator('.courier-grid > .page-panel').evaluateAll((panels) => panels.map((panel) => panel.querySelector('.section-heading').getBoundingClientRect().top - panel.getBoundingClientRect().top));
-  expect(courierPanelTopGaps.every((gap) => gap <= 11)).toBe(true);
-  await expect(page.getByLabel('배송원 리스트').getByText('21사 6101')).toBeVisible();
-  await expect(page.getByLabel('배송원 리스트').getByText('1대')).toHaveCount(0);
-  await expect(page.locator('.courier-list-table td strong').first()).toHaveCSS('font-size', '14px');
-  await expect(page.locator('.courier-list-table td').first()).toHaveCSS('font-size', '13px');
-  await expect(page.locator('.courier-list-table th').first()).toHaveCSS('font-size', '13px');
-  await page.locator('[data-courier-id="c02"]').click();
-  await expect(page.locator('[data-courier-id="c02"]')).toHaveClass(/\bactive\b/);
-  await expect(page.locator('[data-courier-id="c01"]')).not.toHaveClass(/\bactive\b/);
-  await page.locator('[data-courier-id="c01"]').click();
-  await expect(page.getByLabel('배송원 상세').getByText('등급 A+')).toBeVisible();
-  await expect(page.getByLabel('배송원 상세').getByRole('button', { name: /21사 6101/ })).toBeVisible();
-  await expect(page.getByLabel('배송원 상세').getByText('배송 기록', { exact: true })).toBeVisible();
-  await page.locator('[data-courier-id="c13"]').click();
-  await expect(page.getByLabel('배송원 상세').getByRole('cell', { name: '잠실역', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '고객사' }).click();
-  await expect(page.getByText('고객사 상세')).toBeVisible();
+  await expect(page.getByRole('button', { name: '운송자원', exact: true })).toBeVisible();
+  await expect(page.getByLabel('배송원 리스트')).toBeVisible();
+  await expect(page.getByLabel('배송원 상세')).toBeVisible();
+  await expect(page.getByText('등록된 배송원이 없습니다.')).toBeVisible();
+  await expect(page.getByLabel('차량 리스트')).toBeVisible();
+  await expect(page.getByLabel('차량 상세')).toBeVisible();
+  await expect(page.getByText('등록된 차량이 없습니다.')).toBeVisible();
+  await expect(page.locator('.management-subnav')).toHaveCount(0);
+  await page.getByRole('button', { name: '고객사', exact: true }).click();
+  await expect(page.getByText('고객사를 등록하세요.').first()).toBeVisible();
   const [customerBox, destinationBox] = await Promise.all([
-    page.locator('.master-network-grid > .page-panel').nth(0).boundingBox(),
-    page.locator('.master-network-grid > .page-panel').nth(1).boundingBox(),
+    page.locator('.master-network-grid > .management-entity-column').nth(0).boundingBox(),
+    page.locator('.master-network-grid > .management-entity-column').nth(1).boundingBox(),
   ]);
   expect(Math.abs(customerBox.width - destinationBox.width)).toBeLessThanOrEqual(1);
-  await expect(page.getByRole('link', { name: 'CLEVER - 고객사 Demo 배송조회' })).toHaveAttribute('href', '/customer/delivery-inquiry?customer=customer-dsv');
-  await expect(page.locator('.master-customer-table tbody tr').first().getByText('3건', { exact: true })).toBeVisible();
+  await expect(page.locator('.master-customer-table tbody tr')).toHaveCount(0);
+  await expect(page.locator('.master-destination-table tbody tr')).toHaveCount(0);
   await page.getByRole('button', { name: '운송조건' }).click();
   await expect(page.getByRole('cell', { name: 'COLD', exact: true })).toBeVisible();
   await expect(page.getByText('조건 상세')).toBeVisible();
-  await expect(page.getByText('김민수')).toHaveCount(0);
+  await expect(page.getByText('CLEVER 고객사')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => performance.getEntriesByType('resource').filter((entry) => entry.name.includes('/MapCanvas-')).length)).toBe(0);
 });
-test('admin tabs render canonical demo data from reference html', async ({ page }) => {
+
+test('resource workspaces prioritize the list at intermediate width without page overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.goto('/master-data');
+
+  const workspaces = page.locator('.resource-workspace');
+  await expect(workspaces).toHaveCount(2);
+  for (const workspace of await workspaces.all()) {
+    const [listBox, detailBox] = await Promise.all([
+      workspace.locator('.management-list-panel').boundingBox(),
+      workspace.locator('.management-detail-panel').boundingBox(),
+    ]);
+    expect(listBox.width).toBeGreaterThan(detailBox.width);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1024);
+});
+test('operational mock fixtures stay absent until fixed dispatch data is rebuilt', async ({ page }) => {
   await page.goto('/control');
-  await expect(page.getByText('8대')).toBeVisible();
-  await expect(page.locator('[data-vehicle-id^="load"]')).toHaveCount(0);
-  await expect(page.locator('#fleetList [data-vehicle-id]').first()).toHaveAttribute('data-vehicle-id', 'final12');
-  await expect(page.locator('#fleetList [data-vehicle-id]').last()).toHaveAttribute('data-vehicle-id', 'complete12');
-  const departedVehicle = page.locator('[data-vehicle-id="depart01"]');
-  await expect(departedVehicle.locator('.status-pill')).toHaveText(['이동중', '1번']);
-  await expect(departedVehicle.locator('.row-meta')).toHaveCount(0);
-  await expect(departedVehicle).not.toContainText('상차');
-  await expect(page.getByText('12개', { exact: true })).toBeVisible();
-  await expect(page.locator('.plate-text', { hasText: '21사 6101' })).toBeVisible();
-  await expect(page.locator('#destinationList').getByText('강남역')).toBeVisible();
+  await expect(page.getByText('예정 차량이 없습니다.')).toBeVisible();
+  await expect(page.getByText('등록된 제조사 주문이 없습니다.')).toBeVisible();
+  await expect(page.locator('[data-vehicle-id]')).toHaveCount(0);
 
   await page.goto('/dispatch');
   await expect(page.getByRole('heading', { name: '배차' })).toBeVisible();
-  await expect(page.getByText('배차 현황', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: '지도' })).toBeVisible();
+  await expect(page.getByRole('region', { name: '배송원' })).toBeVisible();
+  await expect(page.getByText('표시할 배송지가 없습니다.')).toBeVisible();
   await expect(page.getByRole('columnheader', { name: '배송원' })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: '차량' })).toBeVisible();
-  await expect(page.getByRole('columnheader', { name: '상태' })).toHaveCount(0);
-  await expect(page.getByRole('columnheader', { name: '진행' })).toHaveCount(0);
-  await expect(page.getByText('군포복합물류센터 준비')).toBeVisible();
-  await expect(page.getByText('군포복합물류센터 출발')).toBeVisible();
-  await expect(page.getByText('배송 상세', { exact: true })).toBeVisible();
-  await expect(page.getByText('POD', { exact: true })).toBeVisible();
+  await expect(page.getByRole('img', { name: /출발 위치: 경기도 군포시 번영로 82/ })).toBeVisible();
+  await expect(page.getByText('군포복합물류센터 준비')).toHaveCount(0);
+  await expect(page.getByText('군포복합물류센터 출발')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: '주문' })).toHaveCount(0);
 
   await page.goto('/records');
-  await expect(page.getByRole('heading', { name: '이력' })).toBeVisible();
+  await expect(page).toHaveURL(/\/records$/);
+  await expect(page.getByRole('heading', { name: '이력', exact: true })).toBeVisible();
   await expect(page.getByText('완료 배송 기록')).toBeVisible();
-  await expect(page.getByText('100건 저장됨')).toBeVisible();
-  await expect.poll(() => page.getByRole('cell', { name: '정문 하차 불가' }).count()).toBeGreaterThan(0);
-  await page.locator('.record-row').nth(1).click();
-  await expect(page.getByText('#002')).toBeVisible();
-  await expect(page.locator('.page-panel').filter({ hasText: '메모 기록' }).getByText('DMC 누리꿈스퀘어')).toBeVisible();
-  await expect(page.locator('.page-panel').filter({ hasText: '메모 기록' }).getByText('지하주차장 높이 제한')).toBeVisible();
+  await expect(page.getByText('배송 이력이 없습니다.')).toBeVisible();
+  await expect(page.getByText('0건 저장됨')).toBeVisible();
 
   await page.goto('/settings');
   await expect(page.getByRole('heading', { name: '설정' })).toBeVisible();
@@ -127,7 +116,6 @@ test('dispatch uses the shared planned departure setting', async ({ page }) => {
   await page.goto('/dispatch');
 
   await expect(page.getByLabel('출발 시간')).toHaveValue('08:10');
-  await expect(page.getByLabel('배송 전체 타임라인').getByText('07:40', { exact: true })).toBeVisible();
   await page.getByLabel('출발 시간').fill('08:25');
   await page.getByRole('button', { name: '저장', exact: true }).first().click();
   await page.goto('/settings');
@@ -136,10 +124,8 @@ test('dispatch uses the shared planned departure setting', async ({ page }) => {
 
 test('runtime scroll owners remain scrollable without visible scrollbars', async ({ page }) => {
   const ownership = [
-    ['/control', '.notification-stack, .left-expansion, .event-log, #fleetList, #destinationList'],
-    ['/master-data', '.courier-list, .courier-history-scroll'],
-    ['/dispatch', '.work-scroll, .work-timeline-list, .work-cargo-table, .proof-image-grid'],
-    ['/records', '.record-scroll, .timeline'],
+    ['/control', '.notification-stack, #fleetList, #destinationList'],
+    ['/master-data', '.courier-list'],
     ['/customer/delivery-inquiry', '.customer-order-card'],
   ];
 
@@ -159,6 +145,7 @@ test('runtime scroll owners remain scrollable without visible scrollbars', async
     await page.setViewportSize(viewport);
     for (const path of ['/control', '/dispatch', '/records', '/master-data', '/settings', '/customer/delivery-inquiry']) {
       await page.goto(path);
+      if (viewport.width === 390) expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
       if (path === '/control') await page.getByLabel('알림 열기').click();
       const auditIds = await page.evaluate(() => [...document.querySelectorAll('.overlay-scroll')]
         .filter((element) => {
@@ -201,7 +188,7 @@ test('runtime scroll owners remain scrollable without visible scrollbars', async
 });
 
 test('admin section headings use one visual system', async ({ page }) => {
-  for (const path of ['/control', '/dispatch', '/records', '/master-data', '/settings']) {
+  for (const path of ['/dispatch', '/records', '/master-data', '/settings']) {
     await page.goto(path);
     const headings = page.locator('.section-heading');
     await expect.poll(() => headings.count()).toBeGreaterThan(0);
@@ -215,34 +202,45 @@ test('admin section headings use one visual system', async ({ page }) => {
   }
 });
 
-test('operations uses a half table and stacked timeline with 24-hour arrivals', async ({ page }) => {
+test('mock dispatch keeps the upload entry and empty map workspace', async ({ page }) => {
   await page.goto('/dispatch');
-  await expect(page.locator('.work-courier-table th').first()).toHaveCSS('font-weight', '700');
-  await expect(page.locator('.work-courier-table th')).toHaveCount(2);
-  await expect(page.locator('.work-courier-table td strong').first()).toHaveCSS('font-weight', '700');
-  await expect(page.locator('.work-courier-table td small').first()).toHaveCSS('font-weight', '500');
-  await expect(page.locator('.work-courier-table tbody tr').first().locator('td').nth(1).locator('small')).toHaveCount(0);
-  await expect(page.locator('.work-status-text, .work-progress')).toHaveCount(0);
-  const leftTable = page.getByLabel('배송원 선택');
-  const rightStack = page.locator('.work-right-stack');
-  const [leftBox, rightBox] = await Promise.all([leftTable.boundingBox(), rightStack.boundingBox()]);
-  expect(Math.abs(leftBox.width - rightBox.width)).toBeLessThanOrEqual(1);
+  await expect(page.getByRole('button', { name: '주문 업로드', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: '지도' })).toBeVisible();
+  await expect(page.getByRole('region', { name: '배송원' })).toBeVisible();
+  await expect(page.getByText('표시할 배송지가 없습니다.')).toBeVisible();
+  await expect(page.getByRole('region', { name: '주문' })).toHaveCount(0);
+  await expect(page.locator('table.remote-dispatch-table')).toHaveCount(0);
+  await expect(page.getByText('김도윤')).toHaveCount(0);
+  await expect(page.getByText('21사 6101')).toHaveCount(0);
+});
 
-  const rightPanels = rightStack.locator(':scope > .work-column');
-  const [timelineBox, proofBox] = await Promise.all([rightPanels.nth(0).boundingBox(), rightPanels.nth(1).boundingBox()]);
-  expect(Math.abs(timelineBox.height - proofBox.height)).toBeLessThanOrEqual(1);
+test('compact dispatch stacks the map and driver workspace without horizontal overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 449, height: 835 });
+  await page.goto('/dispatch');
 
-  const timelineEdge = await page.getByLabel('배송 전체 타임라인').evaluate((list) => {
-    const row = list.querySelector('.work-timeline-row');
-    return list.getBoundingClientRect().right - row.getBoundingClientRect().right;
+  const layout = await page.evaluate(() => {
+    const workspace = document.querySelector('.dispatch-map-workspace');
+    const panels = [...document.querySelectorAll('.dispatch-workspace-panel')];
+    const workspaceBox = workspace.getBoundingClientRect();
+    const headerBox = document.querySelector('.left-tabs').getBoundingClientRect();
+    const contentBox = document.querySelector('.page-content').getBoundingClientRect();
+    return {
+      bodyWidth: document.body.scrollWidth,
+      contentY: contentBox.y,
+      headerWidth: headerBox.width,
+      workspaceWidth: workspaceBox.width,
+      panels: panels.map((panel) => {
+        const box = panel.getBoundingClientRect();
+        return { height: box.height, width: box.width };
+      }),
+    };
   });
-  expect(timelineEdge).toBeGreaterThanOrEqual(1);
-  await expect(page.getByLabel('배송 전체 타임라인').locator('small')).toHaveCount(0);
 
-  await page.getByLabel('출발 시간').fill('23:50');
-  await expect(page.getByLabel('배송 전체 타임라인').getByText('09:05', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '저장', exact: true }).first().click();
-  await expect(page.getByLabel('배송 전체 타임라인').getByText('00:25', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: /역삼역/ }).click();
-  await expect(page.getByLabel('선택 배송 상세').getByText(/00:31 도착 예정/)).toBeVisible();
+  expect(layout.bodyWidth).toBe(449);
+  expect(layout.headerWidth).toBe(196);
+  expect(layout.contentY).toBeGreaterThanOrEqual(80);
+  expect(layout.panels).toHaveLength(2);
+  expect(layout.panels.every((panel) => Math.abs(panel.width - layout.workspaceWidth) <= 1)).toBe(true);
+  expect(layout.panels[0].height).toBeGreaterThanOrEqual(560);
+  expect(layout.panels[1].height).toBeGreaterThanOrEqual(420);
 });

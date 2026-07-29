@@ -12,26 +12,21 @@ type V1ListPage<TItem> = {
 };
 
 type V1DriverListItem = {
-  age?: number;
-  career?: string;
   displayName: string;
   driverId: string;
-  gender?: string;
   phone?: string;
-  score?: string;
   status?: string;
-  traits?: string[];
-  zone?: string;
 };
 
 type V1VehicleListItem = {
   displayName: string;
   driverAssignments?: V1VehicleDriverAssignment[];
-  note?: string;
   status?: string;
-  type?: string;
+  telematicsCapabilities?: string[];
+  telematicsSerialNumber?: string;
   vehicleId: string;
   vehiclePlate?: string;
+  vehicleType?: string;
 };
 
 type V1VehicleDriverAssignment = {
@@ -95,14 +90,24 @@ export async function loadControlManagementSnapshot(): Promise<ManagementData> {
 
 export async function loadDispatchReferenceSnapshot(): Promise<ManagementData> {
   if (apiConfig.mode === 'mock') return loadManagementData();
-  const [customers, destinations] = await Promise.all([
+  const [drivers, vehicles, customers, destinations] = await Promise.all([
+    readV1List('drivers', isV1DriverListItem),
+    readV1List('vehicles', isV1VehicleListItem),
     readV1List('customers', isV1CustomerListItem),
     readV1List('destinations', isV1DestinationListItem),
   ]);
   return {
     ...emptyManagementData,
+    assignments: vehicles.flatMap((vehicle) => (vehicle.driverAssignments ?? []).map((assignment) => ({
+      driverId: assignment.driverId,
+      id: assignment.assignmentId,
+      kind: '기본 배정' as const,
+      vehicleId: vehicle.vehicleId,
+    }))),
     customers: customers.map(customerViewModel),
     destinations: destinations.map(destinationViewModel),
+    drivers: drivers.map(driverViewModel),
+    vehicles: vehicles.map(vehicleViewModel),
   };
 }
 
@@ -166,6 +171,7 @@ async function loadRemoteManagementSnapshot(): Promise<ManagementData> {
     readV1List('conditions', isV1ConditionListItem),
   ]);
   return {
+    ...emptyManagementData,
     assignments: vehicles.flatMap((vehicle) => (vehicle.driverAssignments ?? []).map((assignment) => ({
       driverId: assignment.driverId,
       id: assignment.assignmentId,
@@ -198,23 +204,26 @@ async function readV1List<TItem>(endpoint: string, isItem: (value: unknown) => v
 
 function driverViewModel(driver: V1DriverListItem): ManagementDriver {
   return {
-    age: driver.age ?? 30,
-    career: driver.career ?? '미등록',
-    gender: driver.gender ?? '미등록',
+    age: 0,
+    career: '미제공',
+    gender: '미제공',
     id: driver.driverId,
     name: driver.displayName,
-    score: driver.score ?? '미등록',
-    traits: driver.traits ?? (driver.phone ? [`연락처 ${driver.phone}`] : []),
-    zone: driver.zone ?? '미등록',
+    phone: driver.phone,
+    score: '미제공',
+    traits: driver.phone ? [`연락처 ${driver.phone}`] : [],
+    zone: '미제공',
   };
 }
 
 function vehicleViewModel(vehicle: V1VehicleListItem): ManagementVehicle {
   return {
     id: vehicle.vehicleId,
-    note: vehicle.note ?? '',
+    note: '',
     plate: vehicle.vehiclePlate ?? '',
-    type: vehicle.type ?? vehicle.displayName,
+    telematicsCapabilities: vehicle.telematicsCapabilities,
+    telematicsSerialNumber: vehicle.telematicsSerialNumber,
+    type: vehicle.vehicleType === 'OTHER' ? '' : (vehicle.vehicleType ?? vehicle.displayName),
   };
 }
 
@@ -257,29 +266,33 @@ function isV1ListPage<TItem>(value: unknown, isItem: (item: unknown) => item is 
 }
 
 function isV1DriverListItem(value: unknown): value is V1DriverListItem {
-  return hasOnlyKeys(value, ['age', 'career', 'displayName', 'driverId', 'gender', 'phone', 'score', 'status', 'traits', 'zone'])
+  return hasOnlyKeys(value, ['displayName', 'driverId', 'phone', 'status'])
     && isNonEmptyString(value.driverId)
     && isNonEmptyString(value.displayName)
-    && (value.age === undefined || (typeof value.age === 'number' && Number.isInteger(value.age)))
-    && isOptionalString(value.career)
-    && isOptionalString(value.gender)
     && isOptionalString(value.phone)
-    && isOptionalString(value.score)
-    && isOptionalString(value.status)
-    && (value.traits === undefined || (Array.isArray(value.traits) && value.traits.every((item) => typeof item === 'string')))
-    && isOptionalString(value.zone);
+    && isOptionalString(value.status);
 }
 
 function isV1VehicleListItem(value: unknown): value is V1VehicleListItem {
-  return hasOnlyKeys(value, ['displayName', 'driverAssignments', 'note', 'status', 'type', 'vehicleId', 'vehiclePlate'])
+  return hasOnlyKeys(value, [
+    'displayName',
+    'driverAssignments',
+    'status',
+    'telematicsCapabilities',
+    'telematicsSerialNumber',
+    'vehicleId',
+    'vehiclePlate',
+    'vehicleType',
+  ])
     && isNonEmptyString(value.vehicleId)
     && isNonEmptyString(value.displayName)
     && (value.driverAssignments === undefined
       || (Array.isArray(value.driverAssignments) && value.driverAssignments.every(isV1VehicleDriverAssignment)))
-    && isOptionalString(value.note)
     && isOptionalString(value.status)
-    && isOptionalString(value.type)
-    && isOptionalString(value.vehiclePlate);
+    && isOptionalStringArray(value.telematicsCapabilities)
+    && isOptionalString(value.telematicsSerialNumber)
+    && isOptionalString(value.vehiclePlate)
+    && isOptionalString(value.vehicleType);
 }
 
 function isV1VehicleDriverAssignment(value: unknown): value is V1VehicleDriverAssignment {
@@ -328,14 +341,21 @@ function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
 }
 
+function isOptionalStringArray(value: unknown): value is string[] | undefined {
+  return value === undefined || (Array.isArray(value) && value.every((item) => typeof item === 'string'));
+}
+
 function driverPayload(driver: ManagementDriver): Omit<ManagementDriver, 'id'> {
   const { id: _id, ...payload } = driver;
   return payload;
 }
 
-function vehiclePayload(vehicle: ManagementVehicle): Omit<ManagementVehicle, 'id'> {
-  const { id: _id, ...payload } = vehicle;
-  return payload;
+function vehiclePayload(vehicle: ManagementVehicle): Pick<ManagementVehicle, 'note' | 'plate' | 'type'> {
+  return {
+    note: vehicle.note,
+    plate: vehicle.plate,
+    type: vehicle.type,
+  };
 }
 
 function conditionWritePayload(condition: ManagementCondition): Pick<ManagementCondition, 'code' | 'description' | 'name'> {

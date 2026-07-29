@@ -5,13 +5,18 @@ import { loadManagementData, managementId, saveManagementData } from '../dev-db/
 
 export type DispatchImportRow = {
   address: string;
+  addressResolutionStatus?: 'ADDRESS_ONLY' | 'AMBIGUOUS' | 'NOT_FOUND' | 'RESOLVED' | 'UNAVAILABLE';
   conditionCode: string;
   customerCode: string;
+  detailAddress?: string | null;
   destinationName: string;
   driverName: string;
+  jibunAddress?: string | null;
   latitude: number | null;
   longitude: number | null;
   notes: string | null;
+  postalCode?: string | null;
+  rawAddress?: string;
   rowNumber: number;
   sellerOrderKey: string;
   shippedBoxes: number;
@@ -24,6 +29,16 @@ export type DispatchImportInput = {
   rows: DispatchImportRow[];
 };
 
+export type DispatchFileParseResult = {
+  error: string;
+  planDate: string | null;
+  rows: DispatchImportRow[];
+  sheet: {
+    cells: string[][];
+    name: string;
+  };
+};
+
 export type DispatchImportIssue = {
   code: string;
   field: keyof DispatchImportRow | 'row';
@@ -34,6 +49,11 @@ export type DispatchImportIssue = {
 export type DispatchImportPreviewRow = DispatchImportRow & {
   driverId: string | null;
   issues: DispatchImportIssue[];
+  normalized?: Omit<DispatchImportRow, 'conditionCode' | 'rowNumber'> & {
+    conditionComparisonKey: string;
+    planDate: string;
+    sourceKind: string;
+  };
   status: 'READY' | 'NEEDS_REVIEW';
   vehicleId: string | null;
 };
@@ -57,7 +77,8 @@ export type DispatchImportView = {
   status: 'READY' | 'NEEDS_REVIEW';
 };
 
-const requiredHeaders = ['driver', 'vehicle', '배송처', 'condition', 'shippedbox', '주소', 'customer', 'SellerOrderKey'] as const;
+const requiredHeaders = ['driver', '배송처', 'condition', 'shippedbox', '주소', 'customer', 'SellerOrderKey'] as const;
+const planDateHeaders = ['배차일', '배차일자', '배송일', '배송일자'] as const;
 
 export function parseDispatchCsv(source: string): DispatchImportRow[] {
   const table = parseCsvTable(source.replace(/^\uFEFF/u, ''));
@@ -87,6 +108,115 @@ export function parseDispatchCsv(source: string): DispatchImportRow[] {
       vehiclePlate: textCell(cells, index, 'vehicle'),
     };
   });
+}
+
+export function parseDispatchSource(source: string, sheetName = 'CSV', fileName = ''): DispatchFileParseResult {
+  const normalizedSource = source.replace(/^\uFEFF/u, '');
+  const cells = parseCsvTable(normalizedSource).filter((row) => row.some((cell) => cell.trim() !== ''));
+  let planDate = inferPlanDateFromFileName(fileName);
+  try {
+    planDate = inferPlanDate(cells, fileName);
+  } catch (error) {
+    return {
+      error: parseErrorMessage(error),
+      planDate,
+      rows: [],
+      sheet: { cells, name: sheetName },
+    };
+  }
+  try {
+    return { error: '', planDate, rows: parseDispatchCsv(normalizedSource), sheet: { cells, name: sheetName } };
+  } catch (error) {
+    return { error: parseErrorMessage(error), planDate, rows: [], sheet: { cells, name: sheetName } };
+  }
+}
+
+export function parseDispatchSheet(cells: string[][], sheetName = 'CSV', fileName = ''): DispatchFileParseResult {
+  return parseDispatchSource(cells.map((row) => row.map(csvCell).join(',')).join('\n'), sheetName, fileName);
+}
+
+export async function parseDispatchFile(file: File): Promise<DispatchFileParseResult> {
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  if (extension === 'csv') return parseDispatchSource(await file.text(), 'CSV', file.name);
+  if (extension === 'xlsx') {
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.read(await file.arrayBuffer());
+    const firstSheetName = workbook.SheetNames[0];
+    if (firstSheetName === undefined) throw new Error('XLSX 파일에 시트가 없습니다.');
+    const firstSheet = workbook.Sheets[firstSheetName];
+    if (firstSheet === undefined) throw new Error('XLSX 첫 번째 시트를 읽을 수 없습니다.');
+    const cells = XLSX.utils.sheet_to_json<unknown[]>(firstSheet, {
+      dateNF: 'yyyy-mm-dd',
+      defval: '',
+      header: 1,
+      raw: false,
+    }).map((row) => row.map((cell) => String(cell ?? '')));
+    return parseDispatchSheet(cells, firstSheetName, file.name);
+  }
+  throw new Error('CSV 또는 XLSX 파일만 업로드할 수 있습니다.');
+}
+
+function inferPlanDate(cells: string[][], fileName: string): string | null {
+  const header = cells[0]?.map((cell) => cell.trim()) ?? [];
+  const dateColumn = header.findIndex((name) => planDateHeaders.some((candidate) => candidate === name));
+  if (dateColumn < 0) return inferPlanDateFromFileName(fileName);
+  const values = cells.slice(1)
+    .map((row) => row[dateColumn]?.trim() ?? '')
+    .filter((value) => value !== '');
+  if (values.length === 0) return inferPlanDateFromFileName(fileName);
+  const dates = new Set(values.map((value) => normalizePlanDate(value)));
+  if (dates.has(null)) throw new Error('배차일 형식을 확인하세요. YYYY-MM-DD 형식으로 입력해야 합니다.');
+  const uniqueDates = [...dates].filter((date): date is string => date !== null);
+  if (uniqueDates.length > 1) throw new Error(`배차일 값이 여러 날짜로 섞여 있습니다: ${uniqueDates.join(', ')}`);
+  return uniqueDates[0] ?? inferPlanDateFromFileName(fileName);
+}
+
+function inferPlanDateFromFileName(fileName: string): string | null {
+  const baseName = fileName.replace(/\.[^.]+$/u, '');
+  const candidates = [...baseName.matchAll(/(?:^|[^0-9])((?:19|20)\d{6}|\d{6})(?=$|[^0-9])/gu)];
+  for (const candidate of candidates.reverse()) {
+    const normalized = normalizePlanDate(candidate[1] ?? '');
+    if (normalized !== null) return normalized;
+  }
+  return null;
+}
+
+function normalizePlanDate(value: string): string | null {
+  const normalized = value.trim()
+    .replace(/[년/.]/gu, '-')
+    .replace(/월/gu, '-')
+    .replace(/일/gu, '')
+    .replace(/\s+/gu, '')
+    .replace(/-+$/gu, '');
+  let year: number;
+  let month: number;
+  let day: number;
+  if (/^\d{8}$/u.test(normalized)) {
+    year = Number(normalized.slice(0, 4));
+    month = Number(normalized.slice(4, 6));
+    day = Number(normalized.slice(6, 8));
+  } else if (/^\d{6}$/u.test(normalized)) {
+    year = 2000 + Number(normalized.slice(0, 2));
+    month = Number(normalized.slice(2, 4));
+    day = Number(normalized.slice(4, 6));
+  } else {
+    const match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/u);
+    if (match === null) return null;
+    year = Number(match[1]);
+    month = Number(match[2]);
+    day = Number(match[3]);
+  }
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function parseErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : '배차 파일을 해석할 수 없습니다.';
+}
+
+function csvCell(value: string): string {
+  return /[",\r\n]/u.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
 export async function previewDispatchImport(input: DispatchImportInput): Promise<DispatchImportPreview> {
@@ -123,6 +253,64 @@ export async function registerTransportCondition(input: { code: string; descript
     return;
   }
   persistMockTransportCondition(input);
+}
+
+export async function registerDispatchDriver(name: string): Promise<void> {
+  const normalizedName = name.trim();
+  if (normalizedName === '') throw new Error('배송원 이름을 입력하세요.');
+  if (apiConfig.mode === 'remote') {
+    await requestLegacyJson<{ driver: unknown }>('drivers', {
+      json: {
+        age: 18,
+        career: '미제공',
+        gender: '미제공',
+        name: normalizedName,
+        score: '미제공',
+        traits: [],
+        zone: '미제공',
+      },
+      method: 'POST',
+    });
+    return;
+  }
+  const management = loadManagementData();
+  if (management.drivers.some((driver) => driver.name === normalizedName)) return;
+  saveManagementData({
+    ...management,
+    drivers: [...management.drivers, {
+      age: 18,
+      career: '미제공',
+      gender: '미제공',
+      id: managementId('driver'),
+      name: normalizedName,
+      score: '미제공',
+      traits: [],
+      zone: '미제공',
+    }],
+  });
+}
+
+export async function registerDispatchVehicle(plate: string): Promise<void> {
+  const normalizedPlate = plate.trim();
+  if (normalizedPlate === '') throw new Error('차량 번호를 입력하세요.');
+  if (apiConfig.mode === 'remote') {
+    await requestLegacyJson<{ vehicle: unknown }>('vehicles', {
+      json: { note: '', plate: normalizedPlate, type: '미지정' },
+      method: 'POST',
+    });
+    return;
+  }
+  const management = loadManagementData();
+  if (management.vehicles.some((vehicle) => vehicle.plate === normalizedPlate)) return;
+  saveManagementData({
+    ...management,
+    vehicles: [...management.vehicles, {
+      id: managementId('vehicle'),
+      note: '',
+      plate: normalizedPlate,
+      type: '미지정',
+    }],
+  });
 }
 
 function persistMockTransportCondition(input: { code: string; description: string; name: string }): void {
@@ -173,21 +361,22 @@ function previewLocally(input: DispatchImportInput): DispatchImportPreview {
   const registeredConditions = new Set(management.conditions.map((condition) => condition.code));
   const conditionCandidates = unique(input.rows.map((row) => row.conditionCode)).filter((code) => !registeredConditions.has(code));
   const duplicateOrders = duplicateValues(input.rows.map((row) => row.sellerOrderKey));
-  const driverConflicts = conflictingMappings(input.rows, (row) => row.driverName, (row) => row.vehiclePlate);
-  const vehicleConflicts = conflictingMappings(input.rows, (row) => row.vehiclePlate, (row) => row.driverName);
+  const rowsWithVehicles = input.rows.filter((row) => row.vehiclePlate !== '');
+  const driverConflicts = conflictingMappings(rowsWithVehicles, (row) => row.driverName, (row) => row.vehiclePlate);
+  const vehicleConflicts = conflictingMappings(rowsWithVehicles, (row) => row.vehiclePlate, (row) => row.driverName);
   const rows = input.rows.map((row): DispatchImportPreviewRow => {
     const issues: DispatchImportIssue[] = [];
     const drivers = management.drivers.filter((driver) => driver.name === row.driverName);
-    const vehicles = management.vehicles.filter((vehicle) => vehicle.plate === row.vehiclePlate);
+    const vehicles = row.vehiclePlate === '' ? [] : management.vehicles.filter((vehicle) => vehicle.plate === row.vehiclePlate);
     for (const [field, value] of [
-      ['driverName', row.driverName], ['vehiclePlate', row.vehiclePlate], ['destinationName', row.destinationName],
+      ['driverName', row.driverName], ['destinationName', row.destinationName],
       ['conditionCode', row.conditionCode], ['address', row.address], ['customerCode', row.customerCode],
       ['sellerOrderKey', row.sellerOrderKey],
     ] as const) if (!value) issues.push(errorIssue('REQUIRED', field, '필수 값입니다.'));
     if (!Number.isInteger(row.shippedBoxes) || row.shippedBoxes <= 0) issues.push(errorIssue('SHIPPED_BOXES_INVALID', 'shippedBoxes', '박스 수량은 1 이상의 정수여야 합니다.'));
-    if (drivers.length === 0) issues.push(errorIssue('DRIVER_NOT_FOUND', 'driverName', '등록된 배송원을 찾을 수 없습니다.'));
+    if (row.driverName !== '' && drivers.length === 0) issues.push(errorIssue('DRIVER_NOT_FOUND', 'driverName', '등록된 배송원을 찾을 수 없습니다.'));
     if (drivers.length > 1) issues.push(errorIssue('DRIVER_AMBIGUOUS', 'driverName', '같은 이름의 배송원이 둘 이상입니다.'));
-    if (vehicles.length === 0) issues.push(errorIssue('VEHICLE_NOT_FOUND', 'vehiclePlate', '등록된 차량 번호를 찾을 수 없습니다.'));
+    if (row.vehiclePlate !== '' && vehicles.length === 0) issues.push(errorIssue('VEHICLE_NOT_FOUND', 'vehiclePlate', '등록된 차량 번호를 찾을 수 없습니다.'));
     if (duplicateOrders.has(row.sellerOrderKey)) issues.push(errorIssue('SELLER_ORDER_DUPLICATED', 'sellerOrderKey', '파일 안에서 SellerOrderKey가 중복됩니다.'));
     if (driverConflicts.has(row.driverName)) issues.push(errorIssue('DRIVER_VEHICLE_CONFLICT', 'vehiclePlate', '한 배송원에게 여러 차량이 지정되었습니다.'));
     if (vehicleConflicts.has(row.vehiclePlate)) issues.push(errorIssue('VEHICLE_DRIVER_CONFLICT', 'driverName', '한 차량에 여러 배송원이 지정되었습니다.'));

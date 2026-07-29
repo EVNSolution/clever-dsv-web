@@ -1,0 +1,48 @@
+@media (max-width: 900px) {
+  .master-network-grid { grid-template-columns:1fr; }
+  .master-network-grid { grid-template-rows:auto; }
+  .management-entity-column { grid-template-rows:auto; }
+  .master-detail-grid { grid-template-columns:1fr; }
+  .management-form-grid { grid-template-columns:1fr; }
+  .management-form-grid label.wide { grid-column:auto; }
+  .condition-candidate { grid-template-columns:1fr; }
+  .upload-resource-candidate { grid-template-columns:1fr; }
+  .upload-resource-candidate button { width:100%; }
+  .dispatch-upload-choice { padding:34px 20px 24px; }
+  .dispatch-upload-review { grid-template-columns:1fr; align-items:stretch; }
+  .dispatch-upload-review .dispatch-upload-file { width:100%; }
+  .dispatch-upload-review label,
+  .dispatch-upload-review input,
+  .dispatch-upload-review .btn { width:100%; }
+  .dispatch-upload-review .dispatch-upload-error { width:100%; max-width:none; }
+  .dispatch-upload-complete { align-items:flex-start; flex-direction:column; }
+  .dispatch-upload-complete small { margin-left:0; }
+}
+@media (max-width: 1120px) {
+  .page-content.master-data-page .resource-workspace {
+    min-height:300px;
+  }
+  .page-content.master-data-page .resource-workspace.is-idle {
+    grid-template-columns:minmax(280px, 3fr) minmax(180px, 1fr);
+  }
+  .page-content.master-data-page .resource-workspace.has-selection {
+    grid-template-columns:minmax(180px, 1fr) minmax(280px, 3fr);
+  }
+}
+@media (max-width: 1500px) and (min-width: 1121px) {
+  .page-content.master-data-page .courier-grid { grid-template-columns:minmax(280px, .9fr) minmax(420px, 1.1fr); }
+}
+@media (max-width: 920px) {
+  #destinationList { max-height: 260px; }
+  .page-content.master-data-page .management-resource-shell {
+    grid-template-rows:repeat(2, minmax(320px, auto));
+  }
+}
+@media (max-width: 768px) {
+  .page-content.master-data-page .resource-workspace.is-idle {
+    grid-template-columns:minmax(0, 3fr) minmax(0, 1fr);
+  }
+  .page-content.master-data-page .resource-workspace.has-selection {
+    grid-template-columns:minmax(0, 1fr) minmax(0, 3fr);
+  }
+}

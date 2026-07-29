@@ -1,5 +1,10 @@
 export type ApiMode = 'mock' | 'remote';
 
+function resolveApiMode(value: string | undefined): ApiMode {
+  if (value === 'mock' || value === 'remote') return value;
+  throw new Error('VITE_DSV_API_MODE must be explicitly set to "mock" or "remote".');
+}
+
 function normalizeBaseUrl(value: string): string {
   const normalized = value.trim().replace(/\/+$/, '');
   return normalized || '/api/dsv';
@@ -11,6 +16,6 @@ const v1BaseUrl = normalizeBaseUrl(import.meta.env.VITE_DSV_V1_API_BASE_URL ?? `
 export const apiConfig = {
   legacyBaseUrl,
   v1BaseUrl,
-  mode: import.meta.env.VITE_DSV_API_MODE === 'remote' ? 'remote' : 'mock' as ApiMode,
-  shopDomain: (import.meta.env.VITE_DSV_SHOP_DOMAIN ?? 'tomatonofood.com').trim(),
+  mode: resolveApiMode(import.meta.env.VITE_DSV_API_MODE),
+  shopDomain: (import.meta.env.VITE_DSV_SHOP_DOMAIN ?? 'dsv-demo.local').trim(),
 };

@@ -10,13 +10,30 @@ const canonicalSentinels = {
 };
 
 const adminSession = {
-  csrfToken: 'g006-admin-csrf',
   principalType: 'DSV_ADMIN',
   shopId: 'shop-g006',
+  actorId: 'admin-actor-g006',
+  displayName: 'G006 Admin Operator',
   scopes: ['dsv:session:read', 'dsv:control:read'],
 };
+const fullAdminSession = {
+  principalType: 'DSV_ADMIN',
+  shopId: 'shop-g006',
+  actorId: 'admin-actor-g006',
+  displayName: 'G006 Admin Operator',
+  scopes: [
+    'dsv:session:read',
+    'dsv:control:read',
+    'dsv:dispatches:read',
+    'dsv:records:read',
+    'dsv:resources:read',
+    'dsv:customers:read',
+    'dsv:destinations:read',
+    'dsv:conditions:read',
+    'dsv:settings:read',
+  ],
+};
 const customerSession = {
-  csrfToken: 'g006-customer-csrf',
   principalType: 'CUSTOMER_USER',
   shopId: 'shop-g006',
   scopes: ['dsv:session:read', 'dsv:customer-deliveries:read'],
@@ -30,6 +47,30 @@ const controlSummary = {
   pendingEtaCount: 1,
   failedEtaCount: 1,
   readyEtaCount: 3,
+};
+const mapProviderProfile = {
+  attribution: 'OpenFreeMap © OpenMapTiles Data from OpenStreetMap',
+  bounds: [124.5, 33, 132, 39.5],
+  initialView: { center: [126.995, 37.43], zoom: 10.35 },
+  profileId: 'dsv-korea-v1',
+  providerMode: 'public_allowlisted',
+  regionCode: 'KR',
+  styleUrl: '/map/styles/dsv-korea-v1.json',
+  version: '2026-07',
+};
+const operationalSettings = {
+  departureAddress: '경기도 군포시 번영로 82 군포복합물류센터',
+  departureLatitude: 37.330948,
+  departureLongitude: 126.9372235,
+  dwellMinutes: 5,
+  etaDelayMinutes: 10,
+  forwardDelayAlerts: true,
+  gpsSilenceSeconds: 30,
+  loadingStartTime: '07:30',
+  plannedDepartureTime: '08:30',
+  recordMissingProof: true,
+  showTemperatureAlerts: true,
+  temperatureLimit: 8,
 };
 const demoIdentifierPattern = /DSV-2026-0709-(?:01|02)|DSV-SCHEDULED-03|CR-(?:101|204|207|303|330|410)|(?:11바 1201|12바 2302|13사 3403|14자 4504|15바 5605|21사 6101|22자 6202|23바 6303|24사 6404|31자 7104|32바 7207|33사 7311|34자 7412)|김도윤|역삼 진단센터/iu;
 const forbiddenCustomerAuthorityParams = ['customer', 'customerId', 'accountId'];
@@ -46,6 +87,11 @@ function v1Error(status, message) {
 }
 
 async function installApiFixtures(page, fixtures) {
+  const resolvedFixtures = {
+    'GET /api/dsv/v1/map/profile': v1Envelope(mapProviderProfile, 'g006-map-profile'),
+    'GET /api/dsv/settings/operations': { data: operationalSettings, error: null },
+    ...fixtures,
+  };
   const calls = [];
   const unexpected = [];
   await page.route('**/api/**', async (route) => {
@@ -54,7 +100,7 @@ async function installApiFixtures(page, fixtures) {
     const call = { method: request.method(), path: url.pathname, search: url.search };
     calls.push(call);
     const key = `${call.method} ${call.path}`;
-    const fixture = fixtures[key] ?? fixtures[`${call.method} ${call.path}${call.search}`];
+    const fixture = resolvedFixtures[key] ?? resolvedFixtures[`${call.method} ${call.path}${call.search}`];
     if (fixture === undefined) {
       unexpected.push(call);
       await route.fulfill({
@@ -64,7 +110,7 @@ async function installApiFixtures(page, fixtures) {
       });
       return;
     }
-    const resolved = typeof fixture === 'function' ? fixture({ request, url, call }) : fixture;
+    const resolved = await (typeof fixture === 'function' ? fixture({ request, url, call }) : fixture);
     await route.fulfill({
       contentType: 'application/json',
       status: resolved.status ?? 200,
@@ -78,6 +124,20 @@ async function seedCanonicalSentinels(page) {
   await page.addInitScript((sentinels) => {
     for (const [key, value] of Object.entries(sentinels)) window.localStorage.setItem(key, value);
   }, canonicalSentinels);
+}
+
+async function seedTransportStorage(page) {
+  await page.addInitScript(() => {
+    window.sessionStorage.setItem('clever.auth.token', 'stale-token-g006');
+    window.sessionStorage.setItem('clever.auth.csrf', 'stale-csrf-g006');
+  });
+}
+
+async function expectTransportStorage(page, expected) {
+  await expect(page.evaluate(() => ({
+    csrf: window.sessionStorage.getItem('clever.auth.csrf'),
+    token: window.sessionStorage.getItem('clever.auth.token'),
+  }))).resolves.toEqual(expected);
 }
 
 async function expectCanonicalSentinelsUntouched(page) {
@@ -121,10 +181,58 @@ function extractAllowlist(source, name) {
 
 function executableClientSource() {
   const source = readFileSync(new URL('../../src/api/client.ts', import.meta.url), 'utf8')
-    .replace("import { apiConfig } from './config';", "const apiConfig = { legacyBaseUrl: '/api/dsv', v1BaseUrl: '/api/dsv/v1' };");
+    .replace("import { apiConfig } from './config';", "const apiConfig = { legacyBaseUrl: '/api/dsv', v1BaseUrl: '/api/dsv/v1' };")
+    .replace(
+      "import { expireTransportSession, readAuthToken, readCsrfToken, storeCsrfToken } from './auth-session';",
+      [
+        "const readAuthToken = () => window.sessionStorage.getItem('clever.auth.token');",
+        "const readCsrfToken = () => window.sessionStorage.getItem('clever.auth.csrf');",
+        "const storeCsrfToken = (token) => window.sessionStorage.setItem('clever.auth.csrf', token);",
+        "const expireTransportSession = () => {",
+        "  window.sessionStorage.removeItem('clever.auth.token');",
+        "  window.sessionStorage.removeItem('clever.auth.csrf');",
+        "  window.dispatchEvent(new Event('clever:auth-expired'));",
+        "};",
+      ].join('\n'),
+    );
   return transpileModule(source, {
     compilerOptions: { module: ModuleKind.ES2022, target: ScriptTarget.ES2022 },
   }).outputText;
+}
+
+function executableAuthSource() {
+  const source = readFileSync(new URL('../../src/services/auth.ts', import.meta.url), 'utf8')
+    .replace(
+      "import { ApiError, requestJson, requestV1ReadJson } from '../api/client';",
+      [
+        'class ApiError extends Error {',
+        '  constructor(status, message, body) {',
+        '    super(message);',
+        '    this.status = status;',
+        '    this.body = body;',
+        '  }',
+        '}',
+        'const requestJson = async () => ({});',
+        'const requestV1ReadJson = async () => ({});',
+      ].join('\n'),
+    )
+    .replace(
+      "import { clearTransportSession, storeAuthToken, storeCsrfToken } from '../api/auth-session';",
+      [
+        'const clearTransportSession = () => undefined;',
+        'const storeAuthToken = () => undefined;',
+        'const storeCsrfToken = () => undefined;',
+      ].join('\n'),
+    )
+    .replace("import { apiConfig } from '../api/config';", "const apiConfig = { mode: 'remote', shopDomain: 'dsv-demo.local' };")
+    .replace('function principalFromSession', 'export function principalFromSession');
+  return transpileModule(source, {
+    compilerOptions: { module: ModuleKind.ES2022, target: ScriptTarget.ES2022 },
+  }).outputText;
+}
+
+async function loadExecutableAuthModule() {
+  return import(`data:text/javascript;charset=utf-8,${encodeURIComponent(executableAuthSource())}`);
 }
 
 async function callAssignmentCommand(page, { body, path, status }) {
@@ -172,6 +280,35 @@ test('mandatory G006 boundary scenarios are not skipped in this spec', () => {
   }
 });
 
+test('maps DSV admin principal id from actorId and preserves displayName', async () => {
+  const auth = await loadExecutableAuthModule();
+  expect(auth.principalFromSession(adminSession)).toMatchObject({
+    id: 'admin-actor-g006',
+    principalType: 'DSV_ADMIN',
+    shopId: 'shop-g006',
+    displayName: 'G006 Admin Operator',
+  });
+});
+
+test('rejects a DSV admin session without actorId instead of falling back to shopId', async () => {
+  const auth = await loadExecutableAuthModule();
+  expect(() => auth.principalFromSession({
+    principalType: 'DSV_ADMIN',
+    shopId: 'shop-g006',
+    scopes: ['dsv:session:read', 'dsv:control:read'],
+  })).toThrow('세션 API 응답 형식이 올바르지 않습니다.');
+});
+
+test('keeps customer principal id mapping unchanged', async () => {
+  const auth = await loadExecutableAuthModule();
+  expect(auth.principalFromSession(customerSession)).toMatchObject({
+    id: 'customer-g006',
+    principalType: 'CUSTOMER_USER',
+    shopId: 'shop-g006',
+    displayName: null,
+  });
+});
+
 test('accepts a valid admin session only through the strict v1 session envelope', async ({ page }) => {
   const api = await installApiFixtures(page, {
     'GET /api/dsv/v1/session': v1Envelope(adminSession),
@@ -200,9 +337,80 @@ test('accepts a valid admin session only through the strict v1 session envelope'
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/control');
   await expect(page.getByLabel('지원되는 관제 요약')).toContainText(controlSummary.serviceDate);
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+  await expect(page.getByRole('img', { name: /출발 위치: 경기도 군포시 번영로 82/ })).toBeVisible();
   await expect(page.getByLabel('예정 차량 리스트')).toContainText('99테 6006');
   await expect(page.getByLabel('제조사별 주문 리스트')).toBeVisible();
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session')).toBe(true);
+  expect(api.unexpected).toEqual([]);
+});
+
+test('keeps both control side overlays above the map preview while the session is pending', async ({ page }) => {
+  let releaseSession;
+  const sessionPending = new Promise((resolve) => {
+    releaseSession = resolve;
+  });
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': async () => {
+      await sessionPending;
+      return v1Envelope(adminSession);
+    },
+    'GET /api/dsv/v1/control': v1Envelope(controlSummary),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({ items: [], page: { hasMore: false } }),
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({ items: [], page: { hasMore: false } }),
+    'GET /api/dsv/v1/dispatches': v1Envelope({ items: [], page: { hasMore: false } }),
+  });
+
+  await page.goto('/control');
+
+  await expect(page.getByLabel('주 메뉴')).toBeVisible();
+  await expect(page.getByLabel('알림 열기')).toBeVisible();
+  await expect(page.getByRole('button', { name: '2D', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '3D', exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('관제 운영 패널')).toBeVisible();
+  await expect(page.getByLabel('지도 불러오는 중')).toBeVisible();
+  await expect(page.locator('.maplibregl-canvas')).toHaveCount(0);
+  expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/control')).toBe(false);
+  expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/vehicles')).toBe(false);
+  expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/dispatches')).toBe(false);
+
+  releaseSession();
+
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByLabel('주 메뉴')).toBeVisible();
+  await expect(page.getByLabel('관제 운영 패널')).toBeVisible();
+  expect(api.unexpected).toEqual([]);
+});
+
+test('blocks a protected route before data calls when the route read scope is missing', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope({ ...adminSession, scopes: ['dsv:session:read'] }),
+  });
+
+  await page.goto('/control');
+
+  await expect(page).toHaveURL(/\/control$/u);
+  await expect(page.getByRole('alert')).toContainText('조회 권한이 없습니다');
+  expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session')).toBe(true);
+  expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/control')).toBe(false);
+  expect(api.unexpected).toEqual([]);
+});
+
+test('requires every read scope used by the remote master-data page before management calls', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope({
+      ...fullAdminSession,
+      scopes: fullAdminSession.scopes.filter((scope) => scope !== 'dsv:conditions:read'),
+    }),
+  });
+
+  await page.goto('/master-data');
+
+  await expect(page).toHaveURL(/\/master-data$/u);
+  await expect(page.getByRole('alert')).toContainText('조회 권한이 없습니다');
+  expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session')).toBe(true);
+  for (const path of ['/api/dsv/v1/drivers', '/api/dsv/v1/vehicles', '/api/dsv/v1/customers', '/api/dsv/v1/destinations', '/api/dsv/v1/conditions']) {
+    expect(api.calls.some((call) => call.method === 'GET' && call.path === path), `${path} must be blocked by the route gate`).toBe(false);
+  }
   expect(api.unexpected).toEqual([]);
 });
 
@@ -342,10 +550,97 @@ test('blocks unauthenticated remote customer with no demo-visible content', asyn
   expect(api.unexpected).toEqual([]);
 });
 
+test('runtime 401 clears transport storage and redirects an admin route to login', async ({ page }) => {
+  await seedTransportStorage(page);
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Envelope(controlSummary),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Error(401, 'runtime session expired'),
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({ items: [], page: { hasMore: false } }),
+    'GET /api/dsv/v1/dispatches': v1Envelope({ items: [], page: { hasMore: false } }),
+  });
+
+  await page.goto('/control');
+
+  await expect(page).toHaveURL(/\/login$/u);
+  await expectTransportStorage(page, { csrf: null, token: null });
+  expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/vehicles')).toBe(true);
+  expect(api.unexpected).toEqual([]);
+});
+
+test('runtime 403 does not clear transport storage or redirect', async ({ page }) => {
+  await seedTransportStorage(page);
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Error(403, 'control scope denied'),
+  });
+
+  await page.goto('/control');
+
+  await expect(page).toHaveURL(/\/control$/u);
+  await expect(page.getByRole('alert')).toContainText('control scope denied');
+  await expectTransportStorage(page, { csrf: 'stale-csrf-g006', token: 'stale-token-g006' });
+  expect(api.unexpected).toEqual([]);
+});
+
+test('failed remote login clears stale transport storage', async ({ page }) => {
+  await seedTransportStorage(page);
+  const api = await installApiFixtures(page, {
+    'POST /api/dsv/auth/login': v1Error(401, 'login failed'),
+  });
+
+  await page.goto('/login');
+  await page.getByLabel('ID').fill('admin-g006');
+  await page.getByLabel('Password').fill('bad-password');
+  await page.getByRole('button', { name: '로그인', exact: true }).click();
+
+  await expect(page.getByRole('alert')).toContainText('login failed');
+  await expectTransportStorage(page, { csrf: null, token: null });
+  expect(api.unexpected).toEqual([]);
+});
+
+test('remote logout sends CSRF, clears transport storage, and returns to login', async ({ page }) => {
+  let logoutCsrf = null;
+  const api = await installApiFixtures(page, {
+    'POST /api/dsv/auth/login': {
+      data: {
+        csrfToken: 'current-csrf-g006',
+        expiresAt: '2026-07-27T08:37:22.456Z',
+        shopDomain: 'dsv-demo.local',
+      },
+      error: null,
+    },
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Envelope(controlSummary),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({ items: [], page: { hasMore: false } }),
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({ items: [], page: { hasMore: false } }),
+    'GET /api/dsv/v1/dispatches': v1Envelope({ items: [], page: { hasMore: false } }),
+    'POST /api/dsv/auth/logout': ({ request }) => {
+      logoutCsrf = request.headers()['x-csrf-token'] ?? null;
+      return { data: { loggedOut: true }, error: null };
+    },
+  });
+
+  await page.goto('/login');
+  await page.getByLabel('ID').fill('admin-g006');
+  await page.getByLabel('Password').fill('correct-password');
+  await page.getByRole('button', { name: '로그인', exact: true }).click();
+  await expect(page).toHaveURL(/\/control$/u);
+  await page.getByRole('button', { name: '사이드바 펼치기' }).click();
+  await page.getByRole('button', { name: '로그아웃', exact: true }).click();
+
+  await expect(page).toHaveURL(/\/login$/u);
+  await expectTransportStorage(page, { csrf: null, token: null });
+  expect(logoutCsrf).toBe('current-csrf-g006');
+  expect(api.unexpected).toEqual([]);
+});
+
 test('rejects legacy resource snapshots and new legacy read-model endpoints outside the bounded allowlist', () => {
   const clientSource = readFileSync(new URL('../../src/api/client.ts', import.meta.url), 'utf8');
   expect(extractAllowlist(clientSource, 'legacyAllowlist')).toEqual([
     'POST auth/login',
+    'POST auth/logout',
+    'GET auth/session',
     'POST dispatch-imports/preview',
     'POST dispatch-imports',
     'POST conditions',
@@ -353,6 +648,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'DELETE conditions/[^/]+',
     'GET settings/operations',
     'PATCH settings/operations',
+    'POST settings/operations/geocode',
     'POST drivers',
     'PATCH drivers/[^/]+',
     'DELETE drivers/[^/]+',
@@ -383,6 +679,7 @@ test('pins the exact normalized G005 v1 read allowlist', () => {
   const clientSource = readFileSync(new URL('../../src/api/client.ts', import.meta.url), 'utf8');
   expect(extractAllowlist(clientSource, 'v1ReadAllowlist')).toEqual([
     'GET session',
+    'GET map/profile',
     'GET control',
     'GET dispatches',
     'GET records',
@@ -543,6 +840,7 @@ test('leaves canonical localStorage sentinel keys untouched during remote read f
 
   await expectNoDemoVisible(page);
   await expectCanonicalSentinelsUntouched(page);
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/control');
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/control')).toBe(true);
   expect(api.unexpected).toEqual([]);
 });

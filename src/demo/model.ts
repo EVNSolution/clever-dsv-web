@@ -99,35 +99,6 @@ export type DevDb = {
   proofMedia: ProofMedia[];
 };
 
-export type DemoCourier = {
-  id: string;
-  name: string;
-  avatar: string;
-  age: number;
-  gender: string;
-  career: string;
-  zone: string;
-  score: string;
-  traits: string[];
-};
-
-export type DemoVehicle = {
-  id: string;
-  plate: string;
-  route: DemoRoute;
-  courierId: string;
-  location: string;
-  eta: string;
-  status: '상차' | '이동중' | '하차중' | '완료';
-  routeStartedAt: string | null;
-  actualArrivals?: string[];
-  done: number;
-  history: string[];
-};
-
-export type DemoRoute = 'gangnam' | 'west' | 'songpa' | 'central' | 'south';
-export type Coordinate = [number, number];
-
 export type ManagementAssignmentRelation = {
   id: string;
   driverId: string;

@@ -1,9 +1,9 @@
-import { demoCouriers, demoVehicles, devDb } from './data';
 import type { ManagementAssignmentRelation } from './model';
 
 export type ManagementDriver = {
   id: string;
   name: string;
+  phone?: string;
   age: number;
   gender: string;
   career: string;
@@ -17,6 +17,8 @@ export type ManagementVehicle = {
   plate: string;
   type: string;
   note: string;
+  telematicsCapabilities?: string[];
+  telematicsSerialNumber?: string;
 };
 
 export type ManagementAssignment = ManagementAssignmentRelation;
@@ -54,24 +56,15 @@ export type ManagementData = {
   conditions: ManagementCondition[];
 };
 
-const storageKey = 'clever.management.data.v1';
+const storageKey = 'clever.management.data.v3';
+const legacyStorageKeys = ['clever.management.data.v2', 'clever.management.data.v1'];
 
 const seed: ManagementData = {
-  drivers: demoCouriers.map(({ avatar: _avatar, ...driver }) => driver),
-  vehicles: demoVehicles.map((vehicle) => ({
-    id: vehicle.id,
-    plate: vehicle.plate,
-    type: vehicle.route === 'west' ? '윙바디' : '냉장탑차',
-    note: vehicle.location.replace(/^상차 중\s*/, ''),
-  })),
-  assignments: demoVehicles.map((vehicle) => ({
-    id: `assignment-${vehicle.id}`,
-    driverId: vehicle.courierId,
-    vehicleId: vehicle.id,
-    kind: '기본 배정',
-  })),
-  customers: devDb.customers.map((customer) => ({ ...customer })),
-  destinations: uniqueDestinations(),
+  drivers: [],
+  vehicles: [],
+  assignments: [],
+  customers: [],
+  destinations: [],
   conditions: [
     { id: 'condition-ambient', code: 'AMBIENT', name: '상온 운송', description: '상온 조건으로 운송합니다.', temperature: '실온', vehicle: '윙바디 또는 일반 화물', proof: 'POD' },
     { id: 'condition-cold', code: 'COLD', name: '냉장 운송', description: '냉장 상태를 유지하여 운송합니다.', temperature: '2–8℃', vehicle: '냉장탑차', proof: '온도기록, 인수증' },
@@ -82,7 +75,17 @@ const seed: ManagementData = {
 // Backend handoff: replace this localStorage boundary only after the management API contract is approved.
 export function loadManagementData(): ManagementData {
   const raw = window.localStorage.getItem(storageKey);
-  if (!raw) return structuredClone(seed);
+  if (!raw) {
+    const migrated = legacyStorageKeys
+      .map((key) => window.localStorage.getItem(key))
+      .map(migrateLegacyManagementData)
+      .find((data): data is ManagementData => data !== null);
+    if (migrated) {
+      window.localStorage.setItem(storageKey, JSON.stringify(migrated));
+      return migrated;
+    }
+    return structuredClone(seed);
+  }
   try {
     const stored = JSON.parse(raw) as Partial<ManagementData> | null;
     if (stored && ['drivers', 'vehicles', 'assignments', 'customers', 'destinations', 'conditions'].every((key) => Array.isArray(stored[key as keyof ManagementData]))) {
@@ -102,6 +105,24 @@ export function loadManagementData(): ManagementData {
   }
   window.localStorage.setItem(`${storageKey}.invalid`, raw);
   return structuredClone(seed);
+}
+
+function migrateLegacyManagementData(raw: string | null): ManagementData | null {
+  if (!raw) return null;
+  try {
+    const stored = JSON.parse(raw) as Partial<ManagementData> | null;
+    if (!stored || !Array.isArray(stored.conditions)) return null;
+    return {
+      drivers: [],
+      vehicles: [],
+      assignments: [],
+      customers: [],
+      destinations: [],
+      conditions: stored.conditions,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function saveManagementData(data: ManagementData): void {
@@ -127,16 +148,6 @@ export function addressSimilarity(left: string, right: string): number {
   if (!leftTokens.size || !rightTokens.size) return 0;
   if ([...leftTokens].join(' ') === [...rightTokens].join(' ')) return 1;
   return jaccard(leftTokens, rightTokens);
-}
-
-function uniqueDestinations(): ManagementDestination[] {
-  const seen = new Set<string>();
-  return devDb.deliveryStops.flatMap((stop) => {
-    const key = `${stop.customerId}|${normalizeAddress(stop.address)}`;
-    if (seen.has(key)) return [];
-    seen.add(key);
-    return [{ id: `destination-${stop.id}`, customerId: stop.customerId, name: stop.customerName, address: stop.address }];
-  });
 }
 
 function addressTokens(address: string): Set<string> {

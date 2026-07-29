@@ -6,8 +6,11 @@ import { CustomerDeliveryInquiryPage } from './pages/CustomerDeliveryInquiryPage
 import { AdminShell } from './components/AdminShell';
 import { LoginPage } from './pages/LoginPage';
 import { apiConfig } from './api/config';
-import { hasRole, restoreSession } from './services/auth';
-import type { PrincipalRole } from './services/auth';
+import { AUTH_EXPIRED_EVENT } from './api/auth-session';
+import { ApiError } from './api/client';
+import { hasRole, logout, restoreSession } from './services/auth';
+import type { Principal, PrincipalRole } from './services/auth';
+import { MapPreview } from './components/MapPreview';
 
 type SessionGate = {
   status: 'checking' | 'ready' | 'blocked';
@@ -28,6 +31,7 @@ function navigate(path: AppPath): void {
 export function App(): ReactElement {
   const [path, setPath] = useState(readPath);
   const [sessionGate, setSessionGate] = useState<SessionGate>(() => apiConfig.mode === 'mock' ? { status: 'ready' } : { status: 'checking' });
+  const [principal, setPrincipal] = useState<Principal | null>(null);
 
   useEffect(() => {
     const sync = () => setPath(readPath());
@@ -37,61 +41,143 @@ export function App(): ReactElement {
   }, [path]);
 
   useEffect(() => {
+    const expire = () => {
+      setPrincipal(null);
+      const currentPath = readPath();
+      if (roleForPath(currentPath) === 'DSV_ADMIN') {
+        navigate('/login');
+        setPath('/login');
+        setSessionGate({ status: 'ready' });
+        return;
+      }
+      setSessionGate({ status: 'blocked', message: '고객 세션이 만료되어 배송 조회를 표시하지 않습니다.' });
+    };
+    window.addEventListener(AUTH_EXPIRED_EVENT, expire);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, expire);
+  }, []);
+
+  useEffect(() => {
     if (apiConfig.mode === 'mock' || path === '/login') {
       setSessionGate({ status: 'ready' });
       return;
     }
     const requiredRole = roleForPath(path);
+    if (principal) {
+      setSessionGate(accessGateFor(principal, path));
+      return;
+    }
     let active = true;
     setSessionGate({ status: 'checking' });
     restoreSession()
-      .then((principal) => {
+      .then((restoredPrincipal) => {
         if (!active) return;
-        if (hasRole(principal, requiredRole)) {
-          setSessionGate({ status: 'ready' });
+        if (!hasRole(restoredPrincipal, requiredRole)) {
+          setSessionGate({ status: 'blocked', message: '이 계정은 현재 화면을 볼 수 없습니다.' });
           return;
         }
-        if (requiredRole === 'DSV_ADMIN') {
-          navigate('/login');
-          setPath('/login');
-          setSessionGate({ status: 'ready' });
+        if (!hasRequiredScopes(restoredPrincipal, path)) {
+          setSessionGate({ status: 'blocked', message: '이 계정에는 현재 화면의 조회 권한이 없습니다.' });
           return;
         }
-        setSessionGate({ status: 'blocked', message: '고객 계정 권한이 확인되지 않아 배송 조회를 표시하지 않습니다.' });
+        setPrincipal(restoredPrincipal);
+        setSessionGate({ status: 'ready' });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!active) return;
-        if (requiredRole === 'DSV_ADMIN') {
+        if (requiredRole === 'DSV_ADMIN' && error instanceof ApiError && error.status === 401) {
           navigate('/login');
           setPath('/login');
           setSessionGate({ status: 'ready' });
           return;
         }
-        setSessionGate({ status: 'blocked', message: '고객 세션을 확인할 수 없어 배송 조회를 표시하지 않습니다.' });
+        setSessionGate({ status: 'blocked', message: '세션 정보를 확인할 수 없습니다.' });
       });
     return () => { active = false; };
-  }, [path]);
+  }, [path, principal]);
 
   function go(nextPath: AppPath): void {
     navigate(nextPath);
     setPath(nextPath);
   }
 
-  if (path === '/login') return <LoginPage onLogin={() => { setSessionGate({ status: 'checking' }); go(defaultPath); }} />;
-  if (sessionGate.status === 'checking') return <SessionState label={path === customerDeliveryPath ? '고객 세션 확인' : '관리자 세션 확인'} message={path === customerDeliveryPath ? '고객 세션 권한을 확인하고 있습니다.' : '관리자 세션 권한을 확인하고 있습니다.'} />;
-  if (sessionGate.status === 'blocked') return <SessionState label="세션 차단" message={sessionGate.message ?? '세션 권한을 확인할 수 없습니다.'} alert />;
+  function handleLogout(): void {
+    void logout().catch(() => undefined).then(() => {
+      setPrincipal(null);
+      setSessionGate({ status: 'ready' });
+      go('/login');
+    });
+  }
+
+  const effectiveSessionGate = apiConfig.mode === 'remote' && path !== '/login' && principal
+    ? accessGateFor(principal, path)
+    : sessionGate;
+
+  if (path === '/login') return <LoginPage onLogin={() => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(defaultPath); }} />;
+  if (effectiveSessionGate.status === 'checking') {
+    if (path === '/control') {
+      return (
+        <AdminShell
+          activePath="/control"
+          previewOnly
+          onNavigate={(nextPath) => go(nextPath)}
+          onLogout={handleLogout}
+        />
+      );
+    }
+    if (path === customerDeliveryPath) {
+      return (
+        <main className="session-map-preview" aria-busy="true" aria-label="세션 확인 중">
+          <MapPreview />
+        </main>
+      );
+    }
+    return <SessionState label="세션 확인 중" />;
+  }
+  if (effectiveSessionGate.status === 'blocked') return <SessionState label="세션 차단" message={effectiveSessionGate.message ?? '세션 권한을 확인할 수 없습니다.'} alert />;
   if (path === customerDeliveryPath) return <CustomerDeliveryInquiryPage />;
-  return <AdminShell activePath={path} onNavigate={(nextPath) => go(nextPath)} />;
+  return (
+    <AdminShell
+      activePath={path}
+      onNavigate={(nextPath) => go(nextPath)}
+      onLogout={handleLogout}
+    />
+  );
 }
 
 function roleForPath(path: AppPath): PrincipalRole {
   return path === customerDeliveryPath ? 'CUSTOMER_USER' : 'DSV_ADMIN';
 }
 
-function SessionState({ alert = false, label, message }: { alert?: boolean; label: string; message: string }): ReactElement {
+const requiredScopesByPath: Record<AppPath, string[]> = {
+  '/control': ['dsv:control:read'],
+  '/dispatch': ['dsv:dispatches:read'],
+  '/records': ['dsv:records:read'],
+  '/master-data': [
+    'dsv:resources:read',
+    'dsv:customers:read',
+    'dsv:destinations:read',
+    'dsv:conditions:read',
+  ],
+  '/settings': ['dsv:settings:read'],
+  [customerDeliveryPath]: ['dsv:customer-deliveries:read'],
+  '/login': [],
+};
+
+function hasRequiredScopes(principal: Principal, path: AppPath): boolean {
+  const scopes = requiredScopesByPath[path] ?? [];
+  return scopes.every((scope) => principal.scopes.includes(scope));
+}
+
+function accessGateFor(principal: Principal, path: AppPath): SessionGate {
+  if (!hasRole(principal, roleForPath(path))) return { status: 'blocked', message: '이 계정은 현재 화면을 볼 수 없습니다.' };
+  if (!hasRequiredScopes(principal, path)) return { status: 'blocked', message: '이 계정에는 현재 화면의 조회 권한이 없습니다.' };
+  return { status: 'ready' };
+}
+
+function SessionState({ alert = false, label, message }: { alert?: boolean; label: string; message?: string }): ReactElement {
   return (
-    <main className="login-screen" aria-label={label}>
-      <p role={alert ? 'alert' : 'status'}>{message}</p>
+    <main className="session-screen" aria-label={label}>
+      {message ? <p role={alert ? 'alert' : 'status'}>{message}</p> : null}
     </main>
   );
 }

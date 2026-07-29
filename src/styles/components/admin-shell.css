@@ -1,0 +1,20 @@
+.page-content {
+  position:absolute; left:100px; right:12px; top:12px; bottom:12px; z-index:3; overflow:auto;
+  padding:0 12px; border-radius:var(--radius-shell); background:rgba(255,255,255,.94); border:1px solid rgba(255,255,255,.72); backdrop-filter:blur(18px);
+}
+.nav-expanded .page-content { left:230px; }
+.page-content.dynamic-page { display:flex; flex-direction:column; overflow:hidden; }
+.static-page .page-content {
+  top:12px;
+  background:var(--color-white);
+  border-color:transparent;
+  box-shadow:none;
+}
+.page-hero { min-height:56px; display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:8px; }
+.page-content.dynamic-page .page-hero { flex:0 0 auto; margin-bottom:8px; }
+.page-hero > div:first-child { min-width:0; flex:1 1 auto; display:flex; align-items:baseline; gap:12px; }
+.page-hero h2 { flex:0 0 auto; margin:0; font-size:var(--text-page-title); letter-spacing:-.05em; white-space:nowrap; }
+.page-hero p {
+  min-width:0; margin:0; overflow:hidden; color:var(--color-muted); font-size:var(--text-body);
+  text-overflow:ellipsis; white-space:nowrap;
+}
