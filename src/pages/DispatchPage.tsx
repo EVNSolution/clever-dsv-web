@@ -471,6 +471,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
                 </summary>
                 <div className="dispatch-upload-issue-list">
                   {uploadIssueEntries.map((entry) => {
+                    const addressDetails = uploadAddressDetails(uploadPreview, entry);
                     const suggestions = uploadAddressSuggestions(uploadPreview, entry);
                     return (
                       <div className="dispatch-upload-issue-row" key={`${entry.rowNumber}:${entry.issue.code}:${entry.issue.field}`}>
@@ -486,6 +487,12 @@ export function DispatchPage({ title, description }: { title: string; descriptio
                         </button>
                         <div className="dispatch-upload-issue-content">
                           <span className="dispatch-upload-issue-message">{uploadIssueMessage(entry.issue)}</span>
+                          {addressDetails ? (
+                            <dl className="dispatch-address-details">
+                              <div><dt>기본 주소</dt><dd>{addressDetails.address || '-'}</dd></div>
+                              <div><dt>상세주소</dt><dd>{addressDetails.detailAddress || '-'}</dd></div>
+                            </dl>
+                          ) : null}
                           {suggestions.length > 0 ? (
                             <div className="dispatch-address-suggestions" aria-label={`${entry.rowNumber}행 배송처 검색 후보`}>
                               {suggestions.map((suggestion) => (
@@ -1548,8 +1555,21 @@ function uploadAddressSuggestions(
   preview: DispatchImportPreview | null,
   entry: UploadIssueEntry,
 ): DispatchAddressSuggestion[] {
-  if (preview === null || entry.issue.code !== 'ADDRESS_NOT_FOUND') return [];
+  if (preview === null || !isAddressIssue(entry.issue.code)) return [];
   return preview.rows.find((row) => row.rowNumber === entry.rowNumber)?.addressSuggestions ?? [];
+}
+
+function uploadAddressDetails(
+  preview: DispatchImportPreview | null,
+  entry: UploadIssueEntry,
+): { address: string; detailAddress: string | null } | null {
+  if (preview === null || !isAddressIssue(entry.issue.code)) return null;
+  const row = preview.rows.find((candidate) => candidate.rowNumber === entry.rowNumber);
+  if (row === undefined) return null;
+  return {
+    address: row.normalized?.address ?? row.address,
+    detailAddress: row.normalized?.detailAddress ?? row.detailAddress ?? null,
+  };
 }
 
 function formatAddressSuggestion(suggestion: DispatchAddressSuggestion): string {
@@ -1559,6 +1579,7 @@ function formatAddressSuggestion(suggestion: DispatchAddressSuggestion): string 
 
 function isAddressIssue(code: string): boolean {
   return code === 'ADDRESS_AMBIGUOUS'
+    || code === 'ADDRESS_COORDINATES_NOT_RESOLVED'
     || code === 'ADDRESS_NOT_FOUND'
     || code === 'ADDRESS_ONLY'
     || code === 'ADDRESS_SERVICE_UNAVAILABLE'

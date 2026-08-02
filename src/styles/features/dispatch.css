@@ -148,6 +148,16 @@
 .dispatch-upload-issue-location svg { width:13px; height:13px; stroke-width:2.25; }
 .dispatch-upload-issue-content { min-width:0; display:grid; gap:6px; align-self:center; }
 .dispatch-upload-issue-message { min-width:0; line-height:1.35; }
+.dispatch-address-details {
+  min-width:0; display:grid; grid-template-columns:minmax(0, 1fr) minmax(160px, .45fr); gap:1px;
+  margin:0; overflow:hidden; border:1px solid rgba(163,52,34,.14); border-radius:8px; background:rgba(163,52,34,.14);
+}
+.dispatch-address-details > div {
+  min-width:0; display:grid; grid-template-columns:64px minmax(0, 1fr); align-items:center; gap:8px;
+  min-height:34px; padding:0 9px; background:var(--color-white);
+}
+.dispatch-address-details dt { color:var(--color-muted); font-size:11px; font-weight:800; white-space:nowrap; }
+.dispatch-address-details dd { min-width:0; margin:0; overflow:hidden; color:var(--color-ink); font-weight:750; text-overflow:ellipsis; white-space:nowrap; }
 .dispatch-address-suggestions { min-width:0; display:grid; gap:4px; }
 .dispatch-address-suggestion {
   min-width:0; min-height:40px; display:grid; grid-template-columns:minmax(0, 1fr) auto auto; align-items:center; gap:10px;

@@ -1039,7 +1039,9 @@ test('dispatch applies a destination search candidate and previews the corrected
             postalCode: '04050',
             rawAddress: suggestedAddress,
           } : {
-            addressResolutionStatus: 'NOT_FOUND',
+            address: '서울 마포구 양화로 155',
+            addressResolutionStatus: 'ADDRESS_ONLY',
+            detailAddress: '5층',
             addressSuggestions: [{
               address: '서울특별시 마포구 양화로 166',
               detailAddress: '5층',
@@ -1055,7 +1057,7 @@ test('dispatch applies a destination search candidate and previews the corrected
           }),
           driverId: 'driver-g006',
           issues: corrected ? [] : [{
-            code: 'ADDRESS_NOT_FOUND',
+            code: 'ADDRESS_COORDINATES_NOT_RESOLVED',
             field: 'address',
             message: '도로명주소와 우편번호를 확인하지 못했습니다.',
             severity: 'review',
@@ -1079,6 +1081,10 @@ test('dispatch applies a destination search candidate and previews the corrected
   });
 
   await page.locator('details.dispatch-upload-issues > summary').click();
+  await expect(page.getByText('기본 주소', { exact: true })).toBeVisible();
+  await expect(page.getByText('서울 마포구 양화로 155', { exact: true })).toBeVisible();
+  await expect(page.getByText('상세주소', { exact: true })).toBeVisible();
+  await expect(page.getByText('5층', { exact: true })).toBeVisible();
   await expect(page.getByText('제이필의원', { exact: true })).toBeVisible();
   await expect(page.getByText(suggestedAddress, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '적용', exact: true }).click();
