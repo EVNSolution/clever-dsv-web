@@ -297,7 +297,22 @@ test('dispatch assigns an unassigned order to the selected driver and vehicle', 
   })));
 
   await page.goto('/dispatch');
-  await page.getByRole('button', { name: '1 배송지' }).click();
+  await page.locator('.map-canvas.ready').waitFor({ state: 'visible' });
+  const viewportBeforeSelection = await page.evaluate(() => ({
+    center: window.dsvMap.getCenter().toArray(),
+    zoom: window.dsvMap.getZoom(),
+  }));
+  await page.getByRole('button', { name: '영역 선택', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => ({
+    center: window.dsvMap.getCenter().toArray(),
+    zoom: window.dsvMap.getZoom(),
+  }))).toEqual(viewportBeforeSelection);
+  const mapCanvas = page.locator('.maplibregl-canvas');
+  const mapBox = await mapCanvas.boundingBox();
+  expect(mapBox).not.toBeNull();
+  for (const [x, y] of [[0.02, 0.02], [0.98, 0.02], [0.98, 0.98], [0.02, 0.98], [0.02, 0.02]]) {
+    await mapCanvas.click({ position: { x: mapBox.width * x, y: mapBox.height * y } });
+  }
   const driverRegion = page.getByRole('region', { name: '배송원' });
   await expect(driverRegion).toContainText('Canonical Destination G006');
   await driverRegion.getByRole('button', { name: '선택 배정', exact: true }).click();
@@ -368,6 +383,10 @@ test('dispatch selects multiple destinations with a map polygon', async ({ page 
 
   await page.goto('/dispatch');
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible' });
+  const viewportBeforeSelection = await page.evaluate(() => ({
+    center: window.dsvMap.getCenter().toArray(),
+    zoom: window.dsvMap.getZoom(),
+  }));
   await page.getByRole('button', { name: '영역 선택', exact: true }).click();
   const mapCanvas = page.locator('.maplibregl-canvas');
   const box = await mapCanvas.boundingBox();
@@ -375,12 +394,50 @@ test('dispatch selects multiple destinations with a map polygon', async ({ page 
   for (const [x, y] of [[0.02, 0.02], [0.98, 0.02], [0.98, 0.98], [0.02, 0.98]]) {
     await mapCanvas.click({ position: { x: box.width * x, y: box.height * y } });
   }
-  await page.getByRole('button', { name: '선택 적용', exact: true }).click();
+  await page.mouse.move(box.x + box.width * 0.02, box.y + box.height * 0.02);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.04, box.y + box.height * 0.04, { steps: 3 });
+  await page.mouse.up();
+  await page.waitForTimeout(250);
+  await mapCanvas.click({ position: { x: box.width * 0.98, y: box.height * 0.02 } });
 
   const driverRegion = page.getByRole('region', { name: '배송원' });
+  await expect(page.getByLabel('영역 선택 도구')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() =>
+    window.dsvMap.querySourceFeatures('dispatch-selection-source')
+      .some((feature) => feature.geometry.type === 'Polygon'))).toBe(true);
   await expect(driverRegion).toContainText('2곳');
+  const finalizedPolygon = await page.evaluate(() => JSON.stringify(
+    window.dsvMap.querySourceFeatures('dispatch-selection-source')
+      .find((feature) => feature.geometry.type === 'Polygon')?.geometry,
+  ));
+  await page.mouse.move(box.x + box.width * 0.98, box.y + box.height * 0.02);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.9, box.y + box.height * 0.08, { steps: 3 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => JSON.stringify(
+    window.dsvMap.querySourceFeatures('dispatch-selection-source')
+      .find((feature) => feature.geometry.type === 'Polygon')?.geometry,
+  ))).not.toBe(finalizedPolygon);
+
+  await page.getByRole('button', { name: '선택 지우기', exact: true }).click();
+  await page.getByRole('button', { name: '영역 선택', exact: true }).click();
+  for (const [x, y] of [[0.02, 0.02], [0.98, 0.02], [0.98, 0.98]]) {
+    await mapCanvas.click({ position: { x: box.width * x, y: box.height * y } });
+  }
+  await mapCanvas.dblclick({ position: { x: box.width * 0.02, y: box.height * 0.98 } });
+  await expect(page.getByLabel('영역 선택 도구')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() =>
+    window.dsvMap.querySourceFeatures('dispatch-selection-source')
+      .some((feature) => feature.geometry.type === 'Polygon'))).toBe(true);
+  await expect(driverRegion).toContainText('2곳');
+
   await driverRegion.getByRole('button', { name: '선택 배정', exact: true }).click();
   await expect.poll(() => assignmentPayloads.length).toBe(2);
+  await expect.poll(() => page.evaluate(() => ({
+    center: window.dsvMap.getCenter().toArray(),
+    zoom: window.dsvMap.getZoom(),
+  }))).toEqual(viewportBeforeSelection);
   expect(assignmentPayloads[1]).toMatchObject({ targetRoutePlanId: 'route-plan-g006-polygon' });
   expectOnlyFixtureCalls(api);
 });
@@ -473,6 +530,51 @@ test('records route stays visible and renders an empty canonical record list', a
   expectOnlyFixtureCalls(api);
 });
 
+test('records route renders proof metadata and event details for the selected delivery', async ({ page }) => {
+  const api = await installApiFixtures(page, adminFixtures({
+    'GET /api/dsv/v1/records': v1Envelope({
+      items: [{
+        deliveryStatus: 'DELIVERED',
+        destinationAddress: '서울특별시 중구 퇴계로 131 5층',
+        destinationDisplayName: '명동 병원',
+        estimatedArrivalAt: '2026-07-29T00:30:00.000Z',
+        etaStatus: 'READY',
+        eventSummary: [{
+          driverDisplayName: '김도윤',
+          eventId: 'event-1',
+          latitude: 37.5601,
+          longitude: 126.9902,
+          occurredAt: '2026-07-29T00:34:00.000Z',
+          type: 'STOP_DELIVERED',
+        }],
+        proofs: [{
+          contentType: 'image/jpeg',
+          driverDisplayName: '김도윤',
+          kind: 'PHOTO',
+          originalFilename: 'delivery.jpg',
+          proofId: 'proof-1',
+          sizeBytes: 2048,
+          source: 'CAMERA',
+          status: 'AVAILABLE',
+          uploadedAt: '2026-07-29T00:35:00.000Z',
+        }],
+        proofStatus: 'AVAILABLE',
+        sellerOrderId: 'order-1',
+        sellerOrderKey: 'SO-001',
+      }],
+      page: { hasMore: false },
+    }, 'records-detail'),
+  }));
+
+  await page.goto('/records');
+
+  await expect(page.getByText('서울특별시 중구 퇴계로 131 5층', { exact: true })).toBeVisible();
+  await expect(page.getByText('delivery.jpg', { exact: true })).toBeVisible();
+  await expect(page.getByText('배송 완료', { exact: true })).toBeVisible();
+  await expect(page.getByText('37.56010, 126.99020', { exact: true })).toBeVisible();
+  expectOnlyFixtureCalls(api);
+});
+
 test('admin tab navigation preserves the sidebar node and expanded state', async ({ page }) => {
   const api = await installApiFixtures(page, adminFixtures({
     'GET /api/dsv/v1/records': v1Envelope({ items: [], page: { hasMore: false } }, 'g006-stable-shell-records'),
@@ -533,6 +635,13 @@ test('management renders customer, destination, and condition reference lists', 
   await page.getByRole('button', { name: '고객사', exact: true }).click();
   await expect(page.getByText('Canonical Customer G006', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Canonical Destination G006', { exact: true }).first()).toBeVisible();
+  const customerWorkspace = page.getByLabel('고객사 관리');
+  await expect(customerWorkspace.getByLabel('고객사 목록').getByRole('button', { name: '고객사 등록', exact: true })).toBeDisabled();
+  await customerWorkspace.getByRole('row').filter({ hasText: 'Canonical Customer G006' }).click();
+  await expect(customerWorkspace).toHaveClass(/has-selection/u);
+  await expect(customerWorkspace.getByLabel('고객사 상세').getByRole('button', { name: '고객사 수정', exact: true })).toBeDisabled();
+  await customerWorkspace.getByRole('button', { name: '선택 취소', exact: true }).click();
+  await expect(customerWorkspace).toHaveClass(/is-idle/u);
   await page.getByRole('button', { name: '운송조건', exact: true }).click();
   await expect(page.getByText('냉장 운송', { exact: true }).first()).toBeVisible();
   const conditionRow = page.locator('.master-condition-grid tbody tr').filter({ hasText: '냉장 운송' });
@@ -562,6 +671,30 @@ test('management rejects unknown v1 list page keys without rendering canonical d
       page: { hasMore: false },
       total: 1,
     }, 'g006-customers-extra-key'),
+  })));
+
+  await page.goto('/master-data');
+
+  await expect(page.getByRole('alert')).toContainText('API v1 관리 목록 형식이 올바르지 않습니다.');
+  await expectNoConcreteDemo(page);
+  expectOnlyFixtureCalls(api);
+});
+
+test('management rejects multiple default driver assignments for one vehicle', async ({ page }) => {
+  const api = await installApiFixtures(page, adminFixtures(managementListFixtures({
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
+      items: [{
+        displayName: 'Canonical Vehicle G006',
+        driverAssignments: [
+          { assignmentId: 'assignment-g006-a', driverId: 'driver-g006-a' },
+          { assignmentId: 'assignment-g006-b', driverId: 'driver-g006-b' },
+        ],
+        status: 'ACTIVE',
+        vehicleId: 'vehicle-g006',
+        vehiclePlate: '60가 6006',
+      }],
+      page: { hasMore: false },
+    }, 'g006-vehicles-invalid-assignments'),
   })));
 
   await page.goto('/master-data');
@@ -882,6 +1015,125 @@ test('dispatch registers missing drivers and vehicles from the upload review', a
   expectOnlyFixtureCalls(api);
 });
 
+test('dispatch applies a destination search candidate and previews the corrected address again', async ({ page }) => {
+  const previewBodies = [];
+  const suggestedAddress = '서울특별시 마포구 양화로 166, 5층';
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+    'POST /api/dsv/dispatch-imports/preview': ({ request }) => {
+      const input = request.postDataJSON();
+      previewBodies.push(input);
+      const corrected = input.rows[0]?.address === suggestedAddress;
+      return legacyEnvelope({
+        canCommit: corrected,
+        conditionCandidates: [],
+        fileName: input.fileName,
+        planDate: input.planDate,
+        rows: input.rows.map((row) => ({
+          ...row,
+          ...(corrected ? {
+            address: '서울특별시 마포구 양화로 166',
+            addressResolutionStatus: 'RESOLVED',
+            detailAddress: '5층',
+            jibunAddress: '서울특별시 마포구 동교동 165-4',
+            postalCode: '04050',
+            rawAddress: suggestedAddress,
+          } : {
+            addressResolutionStatus: 'NOT_FOUND',
+            addressSuggestions: [{
+              address: '서울특별시 마포구 양화로 166',
+              detailAddress: '5층',
+              jibunAddress: '서울특별시 마포구 동교동 165-4',
+              latitude: 37.5561,
+              longitude: 126.9238,
+              providerPlaceId: 'place-g006',
+              recommended: true,
+              score: 94,
+              title: '제이필의원',
+            }],
+            rawAddress: row.address,
+          }),
+          driverId: 'driver-g006',
+          issues: corrected ? [] : [{
+            code: 'ADDRESS_NOT_FOUND',
+            field: 'address',
+            message: '도로명주소와 우편번호를 확인하지 못했습니다.',
+            severity: 'review',
+          }],
+          status: corrected ? 'READY' : 'NEEDS_REVIEW',
+          vehicleId: 'vehicle-g006',
+        })),
+        summary: corrected
+          ? { errorRows: 0, readyRows: input.rows.length, reviewRows: 0, totalRows: input.rows.length }
+          : { errorRows: 0, readyRows: 0, reviewRows: input.rows.length, totalRows: input.rows.length },
+      });
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '주문 업로드', exact: true }).click();
+  await page.getByLabel('배차 파일').setInputFiles({
+    buffer: Buffer.from(dispatchCsv('SELLER-G006-ADDRESS-CANDIDATE')),
+    mimeType: 'text/csv',
+    name: 'g006-address-candidate.csv',
+  });
+
+  await page.locator('details.dispatch-upload-issues > summary').click();
+  await expect(page.getByText('제이필의원', { exact: true })).toBeVisible();
+  await expect(page.getByText(suggestedAddress, { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '적용', exact: true }).click();
+
+  await expect(page.getByRole('button', { name: '업로드 확정', exact: true })).toBeEnabled();
+  expect(previewBodies).toHaveLength(2);
+  expect(previewBodies[1].rows[0]).toMatchObject({ address: suggestedAddress });
+  expect(previewBodies[1].rows[0]).not.toHaveProperty('addressResolutionStatus');
+  expectOnlyFixtureCalls(api);
+});
+
+test('dispatch separates existing order changes from validation errors and allows a safe update preview', async ({ page }) => {
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+    'POST /api/dsv/dispatch-imports/preview': ({ request }) => {
+      const input = request.postDataJSON();
+      return legacyEnvelope({
+        canCommit: true,
+        conditionCandidates: [],
+        fileName: input.fileName,
+        planDate: input.planDate,
+        rows: input.rows.map((row) => ({
+          ...row,
+          candidateDiff: [{ existing: '2026-07-30', field: 'deliveryDate', incoming: input.planDate }],
+          diffKind: 'UPDATE_CANDIDATE',
+          driverId: null,
+          issues: [],
+          status: 'READY',
+          vehicleId: null,
+        })),
+        summary: {
+          errorRows: 0,
+          readyRows: input.rows.length,
+          reviewRows: 0,
+          totalRows: input.rows.length,
+          updateCandidateRows: input.rows.length,
+        },
+      });
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '주문 업로드', exact: true }).click();
+  await page.getByLabel('배차 파일').setInputFiles({
+    buffer: Buffer.from(dispatchCsv('SELLER-G006-UPDATE')),
+    mimeType: 'text/csv',
+    name: 'g006-update.csv',
+  });
+
+  await expect(page.getByRole('status').filter({ hasText: '변경 1' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: '오류 0' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '업로드 확정', exact: true })).toBeEnabled();
+  expectOnlyFixtureCalls(api);
+});
+
 test('dispatch blocks a malformed structured condition candidate without changing its sentinel', async ({ page }) => {
   const key = 'clever.dispatch.last-import';
   const sentinel = 'g006-malformed-condition-candidate-sentinel';
@@ -933,7 +1185,22 @@ test('failed dispatch apply leaves the dispatch sentinel untouched', async ({ pa
         summary: { errorRows: 0, readyRows: input.rows.length, reviewRows: 0, totalRows: input.rows.length },
       });
     },
-    'POST /api/dsv/dispatch-imports': legacyError(500, 'dispatch apply failed'),
+    'POST /api/dsv/dispatch-imports': ({ request }) => {
+      const input = request.postDataJSON();
+      return legacyEnvelope({
+        dispatchImport: {
+          createdAt: '2026-07-30T00:00:00.000Z',
+          fileName: input.fileName,
+          id: 'import-g006',
+          planDate: input.planDate,
+          rowCount: input.rows.length,
+          rows: input.rows,
+          sourceHash: 'a'.repeat(64),
+          status: 'READY',
+        },
+      });
+    },
+    'POST /api/dsv/dispatch-imports/import-g006/apply': legacyError(500, 'dispatch apply failed'),
   })));
 
   await page.goto('/dispatch');
@@ -950,6 +1217,7 @@ test('failed dispatch apply leaves the dispatch sentinel untouched', async ({ pa
   await expect(page.getByText('1건 업로드 완료')).toHaveCount(0);
   await expectSentinel(page, key, sentinel);
   expect(api.calls.some((call) => call.key === 'POST /api/dsv/dispatch-imports')).toBe(true);
+  expect(api.calls.some((call) => call.key === 'POST /api/dsv/dispatch-imports/import-g006/apply')).toBe(true);
   expectOnlyFixtureCalls(api);
 });
 }

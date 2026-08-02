@@ -6,6 +6,7 @@ import { loadManagementData, managementId, saveManagementData } from '../dev-db/
 export type DispatchImportRow = {
   address: string;
   addressResolutionStatus?: 'ADDRESS_ONLY' | 'AMBIGUOUS' | 'NOT_FOUND' | 'RESOLVED' | 'UNAVAILABLE';
+  addressSuggestions?: DispatchAddressSuggestion[];
   conditionCode: string;
   customerCode: string;
   detailAddress?: string | null;
@@ -21,6 +22,18 @@ export type DispatchImportRow = {
   sellerOrderKey: string;
   shippedBoxes: number;
   vehiclePlate: string;
+};
+
+export type DispatchAddressSuggestion = {
+  address: string;
+  detailAddress: string | null;
+  jibunAddress: string | null;
+  latitude: number;
+  longitude: number;
+  providerPlaceId: string | null;
+  recommended: boolean;
+  score: number;
+  title: string;
 };
 
 export type DispatchImportInput = {
@@ -64,7 +77,13 @@ export type DispatchImportPreview = {
   fileName: string;
   planDate: string;
   rows: DispatchImportPreviewRow[];
-  summary: { errorRows: number; readyRows: number; reviewRows: number; totalRows: number };
+  summary: {
+    errorRows: number;
+    readyRows: number;
+    reviewRows: number;
+    totalRows: number;
+    updateCandidateRows?: number;
+  };
 };
 
 export type DispatchImportView = {
@@ -74,11 +93,15 @@ export type DispatchImportView = {
   planDate: string;
   rowCount: number;
   rows: DispatchImportPreviewRow[];
-  status: 'READY' | 'NEEDS_REVIEW';
+  sourceHash?: string;
+  status: 'APPLIED' | 'APPLYING' | 'FAILED' | 'NEEDS_REVIEW' | 'READY' | 'STAGED';
 };
+
+type XlsxModule = typeof import('xlsx');
 
 const requiredHeaders = ['driver', '배송처', 'condition', 'shippedbox', '주소', 'customer', 'SellerOrderKey'] as const;
 const planDateHeaders = ['배차일', '배차일자', '배송일', '배송일자'] as const;
+let xlsxModulePromise: Promise<XlsxModule> | null = null;
 
 export function parseDispatchCsv(source: string): DispatchImportRow[] {
   const table = parseCsvTable(source.replace(/^\uFEFF/u, ''));
@@ -139,7 +162,7 @@ export async function parseDispatchFile(file: File): Promise<DispatchFileParseRe
   const extension = file.name.split('.').pop()?.toLowerCase();
   if (extension === 'csv') return parseDispatchSource(await file.text(), 'CSV', file.name);
   if (extension === 'xlsx') {
-    const XLSX = await import('xlsx');
+    const XLSX = await loadXlsxModule();
     const workbook = XLSX.read(await file.arrayBuffer());
     const firstSheetName = workbook.SheetNames[0];
     if (firstSheetName === undefined) throw new Error('XLSX 파일에 시트가 없습니다.');
@@ -154,6 +177,18 @@ export async function parseDispatchFile(file: File): Promise<DispatchFileParseRe
     return parseDispatchSheet(cells, firstSheetName, file.name);
   }
   throw new Error('CSV 또는 XLSX 파일만 업로드할 수 있습니다.');
+}
+
+export function preloadDispatchFileParser(): void {
+  void loadXlsxModule().catch(() => undefined);
+}
+
+function loadXlsxModule(): Promise<XlsxModule> {
+  xlsxModulePromise ??= import('xlsx').catch((error: unknown) => {
+    xlsxModulePromise = null;
+    throw error;
+  });
+  return xlsxModulePromise;
 }
 
 function inferPlanDate(cells: string[][], fileName: string): string | null {
@@ -230,7 +265,23 @@ export async function previewDispatchImport(input: DispatchImportInput): Promise
 export async function commitDispatchImport(input: DispatchImportInput): Promise<DispatchImportView> {
   if (apiConfig.mode === 'remote') {
     const response = await requestLegacyJson<{ dispatchImport: DispatchImportView }>('dispatch-imports', { json: input, method: 'POST' });
-    return response.dispatchImport;
+    const dispatchImport = response.dispatchImport;
+    if (dispatchImport.sourceHash === undefined || dispatchImport.sourceHash === '') {
+      throw new Error('배차 업로드 적용에 필요한 sourceHash가 없습니다.');
+    }
+    const commandId = crypto.randomUUID();
+    await requestLegacyJson<{ applyResult: { status: 'APPLIED' } }>(
+      `dispatch-imports/${encodeURIComponent(dispatchImport.id)}/apply`,
+      {
+        headers: { 'Idempotency-Key': commandId },
+        json: {
+          commandId,
+          expectedSourceHash: dispatchImport.sourceHash,
+        },
+        method: 'POST',
+      },
+    );
+    return { ...dispatchImport, status: 'APPLIED' };
   }
   const preview = previewLocally(input);
   if (!preview.canCommit) throw new Error('사전 검사 오류를 먼저 수정해야 합니다.');
@@ -241,7 +292,7 @@ export async function commitDispatchImport(input: DispatchImportInput): Promise<
     planDate: input.planDate,
     rowCount: input.rows.length,
     rows: preview.rows,
-    status: preview.rows.some((row) => row.status === 'NEEDS_REVIEW') ? 'NEEDS_REVIEW' : 'READY',
+    status: preview.rows.some((row) => row.status === 'NEEDS_REVIEW') ? 'NEEDS_REVIEW' : 'APPLIED',
   };
   saveLastDispatchImport(result);
   return result;

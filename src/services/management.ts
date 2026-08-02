@@ -77,12 +77,7 @@ export async function loadControlManagementSnapshot(): Promise<ManagementData> {
   ]);
   return {
     ...emptyManagementData,
-    assignments: vehicles.flatMap((vehicle) => (vehicle.driverAssignments ?? []).map((assignment) => ({
-      driverId: assignment.driverId,
-      id: assignment.assignmentId,
-      kind: '기본 배정' as const,
-      vehicleId: vehicle.vehicleId,
-    }))),
+    assignments: vehicles.flatMap(assignmentRelationForVehicle),
     customers: customers.map(customerViewModel),
     vehicles: vehicles.map(vehicleViewModel),
   };
@@ -98,12 +93,7 @@ export async function loadDispatchReferenceSnapshot(): Promise<ManagementData> {
   ]);
   return {
     ...emptyManagementData,
-    assignments: vehicles.flatMap((vehicle) => (vehicle.driverAssignments ?? []).map((assignment) => ({
-      driverId: assignment.driverId,
-      id: assignment.assignmentId,
-      kind: '기본 배정' as const,
-      vehicleId: vehicle.vehicleId,
-    }))),
+    assignments: vehicles.flatMap(assignmentRelationForVehicle),
     customers: customers.map(customerViewModel),
     destinations: destinations.map(destinationViewModel),
     drivers: drivers.map(driverViewModel),
@@ -172,12 +162,7 @@ async function loadRemoteManagementSnapshot(): Promise<ManagementData> {
   ]);
   return {
     ...emptyManagementData,
-    assignments: vehicles.flatMap((vehicle) => (vehicle.driverAssignments ?? []).map((assignment) => ({
-      driverId: assignment.driverId,
-      id: assignment.assignmentId,
-      kind: '기본 배정' as const,
-      vehicleId: vehicle.vehicleId,
-    }))),
+    assignments: vehicles.flatMap(assignmentRelationForVehicle),
     conditions: conditions.map(conditionViewModel),
     customers: customers.map(customerViewModel),
     destinations: destinations.map(destinationViewModel),
@@ -225,6 +210,16 @@ function vehicleViewModel(vehicle: V1VehicleListItem): ManagementVehicle {
     telematicsSerialNumber: vehicle.telematicsSerialNumber,
     type: vehicle.vehicleType === 'OTHER' ? '' : (vehicle.vehicleType ?? vehicle.displayName),
   };
+}
+
+function assignmentRelationForVehicle(vehicle: V1VehicleListItem): ManagementData['assignments'] {
+  const assignment = vehicle.driverAssignments?.[0];
+  return assignment === undefined ? [] : [{
+    driverId: assignment.driverId,
+    id: assignment.assignmentId,
+    kind: '기본 배정',
+    vehicleId: vehicle.vehicleId,
+  }];
 }
 
 function customerViewModel(customer: V1CustomerListItem): ManagementData['customers'][number] {
@@ -287,7 +282,7 @@ function isV1VehicleListItem(value: unknown): value is V1VehicleListItem {
     && isNonEmptyString(value.vehicleId)
     && isNonEmptyString(value.displayName)
     && (value.driverAssignments === undefined
-      || (Array.isArray(value.driverAssignments) && value.driverAssignments.every(isV1VehicleDriverAssignment)))
+      || (Array.isArray(value.driverAssignments) && value.driverAssignments.length <= 1 && value.driverAssignments.every(isV1VehicleDriverAssignment)))
     && isOptionalString(value.status)
     && isOptionalStringArray(value.telematicsCapabilities)
     && isOptionalString(value.telematicsSerialNumber)

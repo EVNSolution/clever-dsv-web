@@ -1,16 +1,20 @@
 import type { ReactElement } from 'react';
+import { lazy, Suspense } from 'react';
 import type { AdminPath } from '../app-routes';
 import { AdminPageHeader } from '../components/AdminUi';
-import { MasterDataPage } from './MasterDataPage';
-import { DispatchPage } from './DispatchPage';
-import { RecordsPage } from './RecordsPage';
-import { SettingsPage } from './SettingsPage';
+
+const DispatchPage = lazy(() => import('./DispatchPage').then((module) => ({ default: module.DispatchPage })));
+const MasterDataPage = lazy(() => import('./MasterDataPage').then((module) => ({ default: module.MasterDataPage })));
+const RecordsPage = lazy(() => import('./RecordsPage').then((module) => ({ default: module.RecordsPage })));
+const SettingsPage = lazy(() => import('./SettingsPage').then((module) => ({ default: module.SettingsPage })));
 
 export function AdminContent({ activePath, title, description }: { activePath: AdminPath; title: string; description: string }): ReactElement {
   return (
     <section className={`page-content dynamic-page admin-content overlay-scroll ${classNameForPath(activePath)}`} aria-label={`${title} 페이지`}>
       {activePath === '/dispatch' || activePath === '/settings' ? null : <AdminPageHeader title={title} description={description} />}
-      {contentForPath(activePath, title, description)}
+      <Suspense fallback={null}>
+        {contentForPath(activePath, title, description)}
+      </Suspense>
     </section>
   );
 }

@@ -8,6 +8,7 @@ export const adminTabs = [
 
 export const defaultPath = '/control';
 export const customerDeliveryPath = '/customer/delivery-inquiry';
+export const adminCustomerDeliveryPath = '/customer/delivery-inquiry/admin';
 export const legacyPathMap = {
   '/관제': '/control',
   '/배송원': '/master-data',
@@ -21,4 +22,4 @@ export const legacyPathMap = {
 } as const;
 
 export type AdminPath = (typeof adminTabs)[number]['path'];
-export type AppPath = AdminPath | '/login' | typeof customerDeliveryPath;
+export type AppPath = AdminPath | '/login' | typeof adminCustomerDeliveryPath | typeof customerDeliveryPath;

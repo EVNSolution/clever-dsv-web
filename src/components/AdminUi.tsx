@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
+import { X } from 'lucide-react';
 
 export function AdminPageHeader({
   actions,
@@ -42,25 +43,37 @@ export function AdminTableFrame({ children, className = '' }: { children: ReactN
 
 export function ManagementListActions({
   canDelete,
+  disabled = false,
   name,
   onCreate,
   onDelete,
 }: {
   canDelete: boolean;
+  disabled?: boolean;
   name: string;
   onCreate: () => void;
   onDelete: () => void;
 }): ReactElement {
   return (
     <span className="management-actions">
-      <button type="button" aria-label={`${name} 등록`} onClick={onCreate}>등록</button>
-      <button className="danger" type="button" aria-label={`${name} 삭제`} disabled={!canDelete} onClick={onDelete}>삭제</button>
+      <button type="button" aria-label={`${name} 등록`} disabled={disabled} onClick={onCreate}>등록</button>
+      <button className="danger" type="button" aria-label={`${name} 삭제`} disabled={disabled || !canDelete} onClick={onDelete}>삭제</button>
     </span>
   );
 }
 
-export function ManagementDetailAction({ name, onEdit }: { name: string; onEdit: () => void }): ReactElement {
-  return <span className="management-actions"><button type="button" aria-label={`${name} 수정`} onClick={onEdit}>수정</button></span>;
+export function ManagementDetailAction({ disabled = false, name, onEdit }: { disabled?: boolean; name: string; onEdit: () => void }): ReactElement {
+  return <span className="management-actions"><button type="button" aria-label={`${name} 수정`} disabled={disabled} onClick={onEdit}>수정</button></span>;
+}
+
+export function ManagementSelectionClear({ onClick }: { onClick: () => void }): ReactElement {
+  return (
+    <span className="management-actions">
+      <button className="management-selection-clear" type="button" aria-label="선택 취소" title="선택 취소" onClick={onClick}>
+        <X aria-hidden="true" />
+      </button>
+    </span>
+  );
 }
 
 export function ManagementFormActions({ onCancel }: { onCancel: () => void }): ReactElement {

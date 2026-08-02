@@ -338,9 +338,194 @@ test('accepts a valid admin session only through the strict v1 session envelope'
   await expect(page.getByLabel('지원되는 관제 요약')).toContainText(controlSummary.serviceDate);
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
   await expect(page.getByRole('img', { name: /출발 위치: 경기도 군포시 번영로 82/ })).toBeVisible();
-  await expect(page.getByLabel('예정 차량 리스트')).toContainText('99테 6006');
+  await expect(page.getByLabel('예정 차량 리스트')).not.toContainText('99테 6006');
+  await expect(page.getByLabel('예정 차량 리스트')).toContainText('예정 차량이 없습니다.');
   await expect(page.getByLabel('제조사별 주문 리스트')).toBeVisible();
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session')).toBe(true);
+  expect(api.unexpected).toEqual([]);
+});
+
+test('shows only vehicles referenced by assigned dispatches in the scheduled fleet', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Envelope(controlSummary),
+    'GET /api/dsv/v1/control/routes': v1Envelope({
+      routes: [
+        {
+          coordinates: [[126.9372235, 37.330948], [127.036545, 37.500643], [127.06316, 37.508844]],
+          generatedAt: '2026-07-23T00:00:00.000Z',
+          geometryStatus: 'fresh',
+          legDurationsSeconds: [1800, 600],
+          routePlanId: 'route-plan-g006-scheduled',
+        },
+        {
+          coordinates: [[126.9372235, 37.330948], [126.889083, 37.57963]],
+          generatedAt: '2026-07-23T00:00:00.000Z',
+          geometryStatus: 'fresh',
+          legDurationsSeconds: [2400],
+          routePlanId: 'route-plan-g006-second',
+        },
+      ],
+      serviceDate: controlSummary.serviceDate,
+    }),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
+      items: [
+        {
+          displayName: 'Scheduled Truck',
+          driverAssignments: [],
+          status: 'ACTIVE',
+          vehicleId: 'vehicle-g006-scheduled',
+          vehiclePlate: '99테 6006',
+        },
+        {
+          displayName: 'Second Scheduled Truck',
+          driverAssignments: [],
+          status: 'ACTIVE',
+          vehicleId: 'vehicle-g006-second',
+          vehiclePlate: '77테 4004',
+        },
+        {
+          displayName: 'Unscheduled Truck',
+          driverAssignments: [],
+          status: 'ACTIVE',
+          vehicleId: 'vehicle-g006-unscheduled',
+          vehiclePlate: '88테 5005',
+        },
+      ],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({
+      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Manufacturer', status: 'ACTIVE' }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/dispatches': v1Envelope({
+      items: [
+        {
+          assignmentStatus: 'ASSIGNED',
+          customerId: 'customer-g006-control',
+          destinationId: 'destination-g006-control',
+          driverId: 'driver-g006-control',
+          etaStatus: 'PENDING',
+          latitude: 37.500643,
+          longitude: 127.036545,
+          routePlanId: 'route-plan-g006-scheduled',
+          routeStopSequence: 1,
+          sellerOrderId: 'seller-order-g006-control',
+          sellerOrderKey: 'SELLER-G006-CONTROL',
+          vehicleId: 'vehicle-g006-scheduled',
+        },
+        {
+          assignmentStatus: 'ASSIGNED',
+          customerId: 'customer-g006-control',
+          destinationId: 'destination-g006-control-2',
+          driverId: 'driver-g006-control',
+          etaStatus: 'PENDING',
+          latitude: 37.508844,
+          longitude: 127.06316,
+          routePlanId: 'route-plan-g006-scheduled',
+          routeStopSequence: 2,
+          sellerOrderId: 'seller-order-g006-control-2',
+          sellerOrderKey: 'SELLER-G006-CONTROL-2',
+          vehicleId: 'vehicle-g006-scheduled',
+        },
+        {
+          assignmentStatus: 'ASSIGNED',
+          customerId: 'customer-g006-control',
+          destinationId: 'destination-g006-second',
+          driverId: 'driver-g006-second',
+          etaStatus: 'PENDING',
+          latitude: 37.57963,
+          longitude: 126.889083,
+          routePlanId: 'route-plan-g006-second',
+          routeStopSequence: 1,
+          sellerOrderId: 'seller-order-g006-second',
+          sellerOrderKey: 'SELLER-G006-SECOND',
+          vehicleId: 'vehicle-g006-second',
+        },
+      ],
+      page: { hasMore: false },
+    }),
+  });
+
+  await page.goto('/control');
+
+  const scheduledFleet = page.getByLabel('예정 차량 리스트');
+  await expect(scheduledFleet).toContainText('99테 6006');
+  await expect(scheduledFleet).toContainText('77테 4004');
+  await expect(scheduledFleet).not.toContainText('88테 5005');
+  await expect.poll(() => page.evaluate(() => {
+    const destinationSource = window.dsvMap?.getSource('operational-destinations');
+    const routeSource = window.dsvMap?.getSource('operational-routes');
+    const vehicleSource = window.dsvMap?.getSource('operational-vehicles');
+    if (!destinationSource || !routeSource || !vehicleSource) return null;
+    return {
+      destinations: destinationSource.serialize().data.features.map((feature) => ({
+        color: feature.properties.color,
+        label: feature.properties.label,
+        pinImage: feature.properties.pinImage,
+        pointId: feature.properties.pointId,
+      })),
+      destinationSymbol: {
+        hasTextField: window.dsvMap.getLayoutProperty('operational-destination-markers', 'text-field') !== undefined,
+        iconAllowOverlap: window.dsvMap.getLayoutProperty('operational-destination-markers', 'icon-allow-overlap'),
+        iconOptional: window.dsvMap.getLayoutProperty('operational-destination-markers', 'icon-optional'),
+      },
+      routes: routeSource.serialize().data.features.map((feature) => ({
+        color: feature.properties.color,
+        routeId: feature.properties.routeId,
+      })),
+      vehicles: vehicleSource.serialize().data.features.map((feature) => feature.properties.label),
+    };
+  })).toMatchObject({
+    destinations: [
+      { label: '1', pinImage: expect.stringMatching(/-1$/), pointId: 'seller-order-g006-control' },
+      { label: '2', pinImage: expect.stringMatching(/-2$/), pointId: 'seller-order-g006-control-2' },
+      { label: '1', pinImage: expect.stringMatching(/-1$/), pointId: 'seller-order-g006-second' },
+    ],
+    destinationSymbol: {
+      hasTextField: false,
+      iconAllowOverlap: false,
+      iconOptional: false,
+    },
+    routes: [
+      { routeId: 'route-plan-g006-scheduled' },
+      { routeId: 'route-plan-g006-second' },
+    ],
+    vehicles: ['2대 예정'],
+  });
+  const colors = await page.evaluate(() => (
+    window.dsvMap.getSource('operational-routes').serialize().data.features.map((feature) => feature.properties.color)
+  ));
+  expect(new Set(colors).size).toBe(2);
+
+  const selectedVehicle = scheduledFleet.getByRole('button', { name: /99테 6006/ });
+  await selectedVehicle.click();
+  await expect(selectedVehicle).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => page.evaluate(() => ({
+    destinations: window.dsvMap.getSource('operational-destinations').serialize().data.features.map((feature) => ({
+      pointId: feature.properties.pointId,
+      sortKey: feature.properties.sortKey,
+    })),
+    iconAllowOverlap: window.dsvMap.getLayoutProperty('operational-destination-markers', 'icon-allow-overlap'),
+    routeIds: window.dsvMap.getSource('operational-routes').serialize().data.features.map((feature) => feature.properties.routeId),
+  }))).toEqual({
+    destinations: [
+      { pointId: 'seller-order-g006-control', sortKey: -1 },
+      { pointId: 'seller-order-g006-control-2', sortKey: -2 },
+    ],
+    iconAllowOverlap: true,
+    routeIds: ['route-plan-g006-scheduled'],
+  });
+
+  await selectedVehicle.click();
+  await expect(selectedVehicle).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(() => page.evaluate(() => ({
+    destinationCount: window.dsvMap.getSource('operational-destinations').serialize().data.features.length,
+    iconAllowOverlap: window.dsvMap.getLayoutProperty('operational-destination-markers', 'icon-allow-overlap'),
+  }))).toEqual({
+    destinationCount: 3,
+    iconAllowOverlap: false,
+  });
   expect(api.unexpected).toEqual([]);
 });
 
@@ -482,6 +667,7 @@ test('requests customer deliveries only after a valid customer v1 session', asyn
       return v1Envelope({
         items: [
           {
+            sellerOrderId: 'order-g006-authorized',
             sellerOrderKey: 'SELLER-G006-AUTHORIZED',
             destinationDisplayName: 'G006 Authorized Clinic',
             deliveryStatus: 'IN_TRANSIT',
@@ -643,6 +829,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'GET auth/session',
     'POST dispatch-imports/preview',
     'POST dispatch-imports',
+    'POST dispatch-imports/[^/]+/apply',
     'POST conditions',
     'PATCH conditions/[^/]+',
     'DELETE conditions/[^/]+',

@@ -5,13 +5,14 @@ import type { OrderDetailViewModel } from '../dev-db/queries';
 import { ProductHeader } from '../components/MapControls';
 import { apiConfig } from '../api/config';
 import { loadRemoteCustomerDeliveries } from '../services/customer-deliveries';
-import type { RemoteCustomerDeliveries } from '../services/customer-deliveries';
-import type { DeliverySummary } from '../services/records';
+import type { CustomerDeliveryItem, RemoteCustomerDeliveries } from '../services/customer-deliveries';
+import type { MapCanvasPoint } from '../components/MapCanvas';
 
 const MapCanvas = lazy(() => import('../components/MapCanvas').then((module) => ({ default: module.MapCanvas })));
+const locationRefreshIntervalMs = 60_000;
 
-export function CustomerDeliveryInquiryPage(): ReactElement {
-  if (apiConfig.mode === 'remote') return <RemoteCustomerDeliveryInquiryPage />;
+export function CustomerDeliveryInquiryPage({ adminCustomerId }: { adminCustomerId?: string } = {}): ReactElement {
+  if (apiConfig.mode === 'remote') return <RemoteCustomerDeliveryInquiryPage adminCustomerId={adminCustomerId} />;
   return <MockCustomerDeliveryInquiryPage />;
 }
 
@@ -173,24 +174,40 @@ type RemoteInquiryState =
   | { status: 'ready'; data: RemoteCustomerDeliveries }
   | { status: 'error'; message: string };
 
-function RemoteCustomerDeliveryInquiryPage(): ReactElement {
+function RemoteCustomerDeliveryInquiryPage({ adminCustomerId }: { adminCustomerId?: string }): ReactElement {
   const [state, setState] = useState<RemoteInquiryState>({ status: 'loading' });
   const [selectedKey, setSelectedKey] = useState<string>();
+  const serviceDate = new URLSearchParams(window.location.search).get('serviceDate') ?? undefined;
 
   useEffect(() => {
     const controller = new AbortController();
-    setState({ status: 'loading' });
-    loadRemoteCustomerDeliveries(controller.signal)
-      .then((data) => {
+    let initial = true;
+    let refreshing = false;
+    const refresh = async () => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const data = await loadRemoteCustomerDeliveries({ adminCustomerId, serviceDate, signal: controller.signal });
         setState({ status: 'ready', data });
         setSelectedKey((current) => current && data.deliveries.some((delivery) => delivery.sellerOrderKey === current) ? current : data.deliveries[0]?.sellerOrderKey);
-      })
-      .catch((error: unknown) => {
+        initial = false;
+      } catch (error: unknown) {
         if (controller.signal.aborted) return;
-        setState({ status: 'error', message: error instanceof Error ? error.message : '고객 배송 조회를 불러올 수 없습니다.' });
-      });
-    return () => controller.abort();
-  }, []);
+        if (initial) {
+          setState({ status: 'error', message: error instanceof Error ? error.message : '고객 배송 조회를 불러올 수 없습니다.' });
+        }
+      } finally {
+        refreshing = false;
+      }
+    };
+    setState({ status: 'loading' });
+    void refresh();
+    const refreshTimer = window.setInterval(() => void refresh(), locationRefreshIntervalMs);
+    return () => {
+      controller.abort();
+      window.clearInterval(refreshTimer);
+    };
+  }, [adminCustomerId, serviceDate]);
 
   if (state.status === 'loading') {
     return (
@@ -212,22 +229,39 @@ function RemoteCustomerDeliveryInquiryPage(): ReactElement {
     );
   }
 
-  const selected = state.data.deliveries.find((delivery) => delivery.sellerOrderKey === selectedKey) ?? state.data.deliveries[0];
+  const deliveries = customerVisibleDeliveries(state.data.deliveries);
+  const selected = deliveries.find((delivery) => delivery.sellerOrderKey === selectedKey) ?? deliveries[0];
+  const points = customerMapPoints(deliveries);
+  const vehicles = customerVehiclePoints(deliveries);
 
   return (
     <main className="page customer-delivery-demo">
-      <section className="customer-order-card overlay-scroll" aria-label="고객 배송 조회">
+      <section className="grid" aria-label="제조사 배송 조회">
+        <Suspense fallback={<article className="card map-card" aria-label="지도 불러오는 중" />}>
+          <MapCanvas
+            ariaLabel="제조사 배송지 지도"
+            onPointSelect={(sellerOrderId) => {
+              const delivery = deliveries.find((item) => item.sellerOrderId === sellerOrderId);
+              if (delivery !== undefined) setSelectedKey(delivery.sellerOrderKey);
+            }}
+            points={points}
+            selectedPointId={selected?.sellerOrderId}
+            showEveryPoint
+            vehicles={vehicles}
+          />
+        </Suspense>
+        <section className="customer-order-card overlay-scroll" aria-label="고객 배송 조회">
         <div className="customer-section" aria-label="배송조회">
-          <div className="customer-section-head"><span>배송조회</span><span>{remoteCountLabel(state.data)}</span></div>
+          <div className="customer-section-head"><span>배송조회</span><span>{deliveries.length}건</span></div>
         </div>
-        {state.data.deliveries.length ? <>
-          <div className="customer-section" aria-label="주문 목록">
-            <div className="customer-section-head"><span>주문 목록</span><span>{state.data.deliveries.length}건</span></div>
+        {deliveries.length ? <>
+          <div className="customer-section" aria-label="배송지 목록">
+            <div className="customer-section-head"><span>배송지 목록</span><span>자사 배송 순서</span></div>
             <div className="customer-list">
-              {state.data.deliveries.map((delivery) => (
+              {deliveries.map((delivery) => (
                 <button key={delivery.sellerOrderKey} type="button" className={`customer-route-group${delivery.sellerOrderKey === selected?.sellerOrderKey ? ' active' : ''}`} onClick={() => setSelectedKey(delivery.sellerOrderKey)}>
-                  <span className="customer-route-head"><strong>{delivery.sellerOrderKey}</strong><span>{delivery.deliveryStatus}</span></span>
-                  <small>{delivery.destinationDisplayName}</small>
+                  <span className="customer-route-head"><strong>{delivery.customerSequence}. {delivery.destinationDisplayName}</strong><span>{formatCustomerTime(delivery.estimatedArrivalAt)}</span></span>
+                  <small><span>{delivery.vehicleDisplayName ?? '배정 차량 확인 중'}</span><span>{delivery.sellerOrderKey}</span></small>
                 </button>
               ))}
             </div>
@@ -235,26 +269,27 @@ function RemoteCustomerDeliveryInquiryPage(): ReactElement {
 
           {selected ? <RemoteCustomerDeliveryDetail delivery={selected} /> : null}
         </> : <div className="customer-empty-state" role="status"><strong>배송 없음</strong><span>{state.data.emptyReason ?? '세션 범위에서 조회할 배송이 없습니다.'}</span></div>}
+        </section>
       </section>
     </main>
   );
 }
 
-function RemoteCustomerDeliveryDetail({ delivery }: { delivery: DeliverySummary }): ReactElement {
+function RemoteCustomerDeliveryDetail({ delivery }: { delivery: SequencedCustomerDelivery }): ReactElement {
   return (
     <>
       <div className="customer-order-head">
         <div>
-          <strong>{delivery.destinationDisplayName}</strong>
-          <small>{delivery.sellerOrderKey}</small>
+          <strong>{delivery.customerSequence}. {delivery.destinationDisplayName}</strong>
+          <small>{delivery.destinationAddress ?? delivery.sellerOrderKey}</small>
         </div>
         <span className="chip green">{delivery.deliveryStatus}</span>
       </div>
 
       <div className="customer-status-grid">
-        <div className="customer-status-item remaining"><span>ETA 상태</span><b>{delivery.etaStatus}</b></div>
-        <div className="customer-status-item"><span>도착 예정</span><b>{delivery.estimatedArrivalAt ?? '요약 없음'}</b></div>
-        <div className="customer-status-item"><span>확인 상태</span><b>{delivery.proofStatus}</b></div>
+        <div className="customer-status-item remaining"><span>배정 차량</span><b>{delivery.vehicleDisplayName ?? '배정 확인 중'}</b></div>
+        <div className="customer-status-item"><span>현재 ETA</span><b>{formatCustomerTime(delivery.estimatedArrivalAt)}</b></div>
+        <div className="customer-status-item"><span>실제 완료</span><b>{formatCustomerTime(delivery.actualCompletedAt)}</b></div>
       </div>
 
       <div className="customer-section">
@@ -275,6 +310,71 @@ function RemoteCustomerDeliveryDetail({ delivery }: { delivery: DeliverySummary 
   );
 }
 
-function remoteCountLabel(data: RemoteCustomerDeliveries): string {
-  return `${data.deliveries.length}건`;
+type SequencedCustomerDelivery = CustomerDeliveryItem & { customerSequence: number };
+
+function customerVisibleDeliveries(deliveries: CustomerDeliveryItem[]): SequencedCustomerDelivery[] {
+  return [...deliveries]
+    .sort(compareCustomerDeliveryOrder)
+    .map((delivery, index) => ({ ...delivery, customerSequence: index + 1 }));
+}
+
+function compareCustomerDeliveryOrder(left: CustomerDeliveryItem, right: CustomerDeliveryItem): number {
+  const leftTime = deliveryOrderTime(left);
+  const rightTime = deliveryOrderTime(right);
+  if (leftTime !== rightTime) return leftTime - rightTime;
+  return left.sellerOrderKey.localeCompare(right.sellerOrderKey, 'ko');
+}
+
+function deliveryOrderTime(delivery: CustomerDeliveryItem): number {
+  const value = delivery.actualCompletedAt ?? delivery.estimatedArrivalAt;
+  if (value === undefined) return Number.MAX_SAFE_INTEGER;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
+}
+
+function customerMapPoints(deliveries: SequencedCustomerDelivery[]): MapCanvasPoint[] {
+  return deliveries.flatMap((delivery) => (
+    delivery.latitude !== undefined && delivery.longitude !== undefined
+      ? [{
+          color: '#0066cc',
+          id: delivery.sellerOrderId,
+          label: String(delivery.customerSequence),
+          latitude: delivery.latitude,
+          longitude: delivery.longitude,
+          sortOrder: delivery.customerSequence,
+          tone: 'assigned' as const,
+        }]
+      : []
+  ));
+}
+
+function customerVehiclePoints(deliveries: SequencedCustomerDelivery[]) {
+  const seen = new Set<string>();
+  return deliveries.flatMap((delivery) => {
+    if (
+      delivery.vehicleId === undefined
+      || delivery.vehicleLatitude === undefined
+      || delivery.vehicleLongitude === undefined
+      || seen.has(delivery.vehicleId)
+    ) return [];
+    seen.add(delivery.vehicleId);
+    return [{
+      id: delivery.vehicleId,
+      label: delivery.vehicleDisplayName ?? '배송 차량',
+      latitude: delivery.vehicleLatitude,
+      longitude: delivery.vehicleLongitude,
+    }];
+  });
+}
+
+function formatCustomerTime(value?: string): string {
+  if (value === undefined) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Seoul',
+  }).format(date);
 }

@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import { apiConfig } from '../api/config';
 import { loadControlSummary } from '../services/control';
@@ -7,8 +7,9 @@ import { loadDispatchList } from '../services/dispatch';
 import type { DispatchListItem } from '../services/dispatch';
 import { loadControlManagementSnapshot } from '../services/management';
 import type { ManagementData } from '../demo/management';
+import { adminCustomerDeliveryPath } from '../app-routes';
 
-type MobileControlPanel = 'orders' | 'vehicles';
+type MobileControlPanel = 'destinations' | 'manufacturers' | 'vehicles';
 type ManufacturerOrderGroup = {
   id: string;
   name: string;
@@ -17,12 +18,35 @@ type ManufacturerOrderGroup = {
 
 const mobileControlQuery = '(max-width: 768px)';
 
-export function ControlPage(): ReactElement {
-  if (apiConfig.mode === 'remote') return <RemoteControlPage />;
+export function ControlPage({
+  estimatedArrivalByOrderId = new Map(),
+  onOrdersChange,
+  onVehicleSelect,
+  selectedVehicleId,
+  vehicleColors = new Map(),
+}: {
+  estimatedArrivalByOrderId?: ReadonlyMap<string, string>;
+  onOrdersChange?: (orders: DispatchListItem[], serviceDate?: string) => void;
+  onVehicleSelect?: (vehicleId: string) => void;
+  selectedVehicleId?: string;
+  vehicleColors?: ReadonlyMap<string, string>;
+} = {}): ReactElement {
+  if (apiConfig.mode === 'remote') {
+    return (
+      <RemoteControlPage
+        estimatedArrivalByOrderId={estimatedArrivalByOrderId}
+        onOrdersChange={onOrdersChange}
+        onVehicleSelect={onVehicleSelect}
+        selectedVehicleId={selectedVehicleId}
+        vehicleColors={vehicleColors}
+      />
+    );
+  }
   return (
     <ControlPanels
       loading={false}
       manufacturerOrders={[]}
+      orders={[]}
       ordersCount={0}
       vehicles={[]}
     />
@@ -34,13 +58,26 @@ export function ControlPreviewPanels(): ReactElement {
     <ControlPanels
       loading
       manufacturerOrders={[]}
+      orders={[]}
       ordersCount={0}
       vehicles={[]}
     />
   );
 }
 
-function RemoteControlPage(): ReactElement {
+function RemoteControlPage({
+  estimatedArrivalByOrderId,
+  onOrdersChange,
+  onVehicleSelect,
+  selectedVehicleId,
+  vehicleColors,
+}: {
+  estimatedArrivalByOrderId: ReadonlyMap<string, string>;
+  onOrdersChange?: (orders: DispatchListItem[], serviceDate?: string) => void;
+  onVehicleSelect?: (vehicleId: string) => void;
+  selectedVehicleId?: string;
+  vehicleColors: ReadonlyMap<string, string>;
+}): ReactElement {
   const [summary, setSummary] = useState<ControlSummary>();
   const [management, setManagement] = useState<ManagementData>();
   const [orders, setOrders] = useState<DispatchListItem[]>([]);
@@ -50,45 +87,65 @@ function RemoteControlPage(): ReactElement {
   useEffect(() => {
     const summaryController = new AbortController();
     const dispatchController = new AbortController();
+    let cachedManagement: ManagementData | undefined;
+    let refreshing = false;
     setPanelLoading(true);
     setPanelError('');
-    loadControlSummary(summaryController.signal)
-      .then(async (nextSummary) => {
+    const refresh = async (initial: boolean) => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const nextSummary = await loadControlSummary(summaryController.signal);
         if (summaryController.signal.aborted) return;
         setSummary(nextSummary);
         const [nextManagement, dispatch] = await Promise.all([
-          loadControlManagementSnapshot(),
-          loadDispatchList(nextSummary.serviceDate, dispatchController.signal),
+          cachedManagement === undefined ? loadControlManagementSnapshot() : Promise.resolve(cachedManagement),
+          loadDispatchList(nextSummary.serviceDate, {}, dispatchController.signal),
         ]);
         if (summaryController.signal.aborted || dispatchController.signal.aborted) return;
+        cachedManagement = nextManagement;
         setManagement(nextManagement);
         setOrders(dispatch.rows);
-      })
-      .catch((error: unknown) => {
+        onOrdersChange?.(dispatch.rows, nextSummary.serviceDate);
+        setPanelError('');
+      } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
-        setSummary(undefined);
-        setManagement(undefined);
-        setOrders([]);
-        setPanelError(error instanceof Error ? error.message : '관제 정보를 불러오지 못했습니다.');
-      })
-      .finally(() => {
-        if (!summaryController.signal.aborted && !dispatchController.signal.aborted) setPanelLoading(false);
-      });
+        if (initial) {
+          setSummary(undefined);
+          setManagement(undefined);
+          setOrders([]);
+          onOrdersChange?.([]);
+          setPanelError(error instanceof Error ? error.message : '관제 정보를 불러오지 못했습니다.');
+        }
+      } finally {
+        refreshing = false;
+        if (initial && !summaryController.signal.aborted && !dispatchController.signal.aborted) setPanelLoading(false);
+      }
+    };
+    void refresh(true);
+    const refreshTimer = window.setInterval(() => void refresh(false), 30_000);
     return () => {
+      window.clearInterval(refreshTimer);
       summaryController.abort();
       dispatchController.abort();
+      onOrdersChange?.([]);
     };
-  }, []);
+  }, [onOrdersChange]);
 
   return (
     <ControlPanels
       error={panelError}
       loading={panelLoading}
       manufacturerOrders={groupOrdersByManufacturer(orders, management)}
+      estimatedArrivalByOrderId={estimatedArrivalByOrderId}
+      orders={orders}
       ordersCount={orders.length}
       summary={summary}
-      vehicles={management?.vehicles ?? []}
+      vehicles={scheduledControlVehicles(orders, management)}
       assignments={management?.assignments ?? []}
+      onVehicleSelect={onVehicleSelect}
+      selectedVehicleId={selectedVehicleId}
+      vehicleColors={vehicleColors}
     />
   );
 }
@@ -96,21 +153,36 @@ function RemoteControlPage(): ReactElement {
 function ControlPanels({
   assignments = [],
   error = '',
+  estimatedArrivalByOrderId = new Map(),
   loading,
   manufacturerOrders,
+  orders,
   ordersCount,
   summary,
   vehicles,
+  onVehicleSelect,
+  selectedVehicleId,
+  vehicleColors = new Map(),
 }: {
   assignments?: ManagementData['assignments'];
   error?: string;
+  estimatedArrivalByOrderId?: ReadonlyMap<string, string>;
   loading: boolean;
   manufacturerOrders: ManufacturerOrderGroup[];
+  orders: DispatchListItem[];
   ordersCount: number;
   summary?: ControlSummary;
   vehicles: ManagementData['vehicles'];
+  onVehicleSelect?: (vehicleId: string) => void;
+  selectedVehicleId?: string;
+  vehicleColors?: ReadonlyMap<string, string>;
 }): ReactElement {
   const [mobilePanel, setMobilePanel] = useState<MobileControlPanel>();
+  const selectedVehicleOrders = selectedVehicleId === undefined
+    ? []
+    : orders
+      .filter((order) => order.vehicleId === selectedVehicleId)
+      .sort(compareControlStops);
 
   useEffect(() => {
     const compactViewport = window.matchMedia(mobileControlQuery);
@@ -120,6 +192,14 @@ function ControlPanels({
     compactViewport.addEventListener('change', closeOutsideMobile);
     return () => compactViewport.removeEventListener('change', closeOutsideMobile);
   }, []);
+
+  useEffect(() => {
+    setMobilePanel((current) => {
+      if (selectedVehicleId !== undefined && current === 'manufacturers') return undefined;
+      if (selectedVehicleId === undefined && current === 'destinations') return undefined;
+      return current;
+    });
+  }, [selectedVehicleId]);
 
   useEffect(() => {
     const panelOpen = window.matchMedia(mobileControlQuery).matches && mobilePanel !== undefined;
@@ -137,16 +217,16 @@ function ControlPanels({
 
   return (
     <aside className={`side control-side${mobilePanel ? ' mobile-panel-active' : ''}`} aria-label="관제 운영 패널">
-      <div className={`panel-view${mobilePanel ? ' mobile-panel-open' : ''}`}>
-        <section className={`card panel expand-card mobile-panel-${mobilePanel === 'vehicles' ? 'expanded' : 'collapsed'}`} id="vehicleCard" aria-label="예정 차량 리스트">
+      <div className={`panel-view ${selectedVehicleId === undefined ? 'vehicle-idle' : 'vehicle-focused'}${mobilePanel ? ' mobile-panel-open' : ''}`}>
+        <section className={`card panel expand-card mobile-panel-${mobilePanel === 'vehicles' ? 'expanded' : 'collapsed'}`} id="vehicleCard" aria-label="차량 리스트">
           <div className="tab-line section-heading">
-            <span className="desktop-panel-title">예정 차량</span>
-            <button className="mobile-panel-toggle" type="button" aria-expanded={mobilePanel === 'vehicles'} aria-label={`예정 차량 ${mobilePanel === 'vehicles' ? '닫기' : '펼치기'}`} onClick={() => setMobilePanel((current) => current === 'vehicles' ? undefined : 'vehicles')}>
-              <span>예정 차량</span><span className="chip mini">{vehicles.length}대</span><span className="mobile-panel-action">{mobilePanel === 'vehicles' ? '닫기' : '펼치기'}</span>
+            <span className="desktop-panel-title">차량 리스트</span>
+            <button className="mobile-panel-toggle" type="button" aria-expanded={mobilePanel === 'vehicles'} aria-label={`차량 리스트 ${mobilePanel === 'vehicles' ? '닫기' : '펼치기'}`} onClick={() => setMobilePanel((current) => current === 'vehicles' ? undefined : 'vehicles')}>
+              <span>차량 리스트</span><span className="chip mini">{vehicles.length}대</span><span className="mobile-panel-action">{mobilePanel === 'vehicles' ? '닫기' : '펼치기'}</span>
             </button>
             <span className="card-tools desktop-panel-tools"><span className="chip mini">{vehicles.length}대</span></span>
           </div>
-          {loading ? <div className="panel-state" role="status">예정 차량을 불러오는 중입니다.</div> : null}
+          {loading ? <div className="panel-state" role="status">차량을 불러오는 중입니다.</div> : null}
           {error ? <div className="panel-state error" role="alert">{error}</div> : null}
           {summary && !loading && !error ? (
             <div className="control-summary-strip" role="status" aria-label="지원되는 관제 요약">
@@ -158,39 +238,74 @@ function ControlPanels({
           {!loading && !error ? (
             <div className="control-vehicle-list fleet overlay-scroll" id="fleetList">
               {vehicles.map((vehicle) => (
-                <div className="control-vehicle-row" key={vehicle.id}>
+                <button
+                  aria-pressed={selectedVehicleId === vehicle.id}
+                  className={`control-vehicle-row${selectedVehicleId === vehicle.id ? ' selected' : ''}`}
+                  key={vehicle.id}
+                  onClick={() => onVehicleSelect?.(vehicle.id)}
+                  style={{ '--control-route-color': vehicleColors.get(vehicle.id) ?? '#0066cc' } as CSSProperties}
+                  type="button"
+                >
+                  <i aria-hidden="true" />
                   <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong><small>{vehicle.type || '차종 미등록'}</small></span>
                   <em>{assignments.some((assignment) => assignment.vehicleId === vehicle.id) ? '배차 준비' : '배송원 미배정'}</em>
-                </div>
+                </button>
               ))}
-              {!vehicles.length ? <div className="panel-state">예정 차량이 없습니다.</div> : null}
+              {!vehicles.length ? <div className="panel-state">차량이 없습니다.</div> : null}
             </div>
           ) : null}
         </section>
 
-        <section className={`card panel expand-card mobile-panel-${mobilePanel === 'orders' ? 'expanded' : 'collapsed'}`} id="destinationCard" aria-label="제조사별 주문 리스트">
+        {selectedVehicleId !== undefined ? <section className={`card panel expand-card mobile-panel-${mobilePanel === 'destinations' ? 'expanded' : 'collapsed'}`} id="destinationCard" aria-label="배송지 리스트">
+          <div className="tab-line section-heading">
+            <span className="destination-title desktop-panel-title">배송지 리스트</span>
+            <button className="mobile-panel-toggle" type="button" aria-expanded={mobilePanel === 'destinations'} aria-label={`배송지 리스트 ${mobilePanel === 'destinations' ? '닫기' : '펼치기'}`} onClick={() => setMobilePanel((current) => current === 'destinations' ? undefined : 'destinations')}>
+              <span>배송지 리스트</span><span className="chip mini">{selectedVehicleOrders.length}건</span><span className="mobile-panel-action">{mobilePanel === 'destinations' ? '닫기' : '펼치기'}</span>
+            </button>
+            <span className="chip mini desktop-panel-tools">{selectedVehicleOrders.length}건</span>
+          </div>
+          <div className="control-destination-list overlay-scroll">
+            <div className="control-destination-columns" aria-hidden="true"><span>배송지</span><span>예상 도착</span><span>실제 완료</span></div>
+            {selectedVehicleOrders.map((order) => (
+              <div className="control-destination-row" key={order.sellerOrderId}>
+                <i className="control-order-sequence" aria-label={`배송 순서 ${order.routeStopSequence ?? '미정'}`}>{order.routeStopSequence ?? '-'}</i>
+                <span><b>{order.destinationDisplayName || '배송지 미등록'}</b><small>{order.destinationAddress || order.sellerOrderKey}</small></span>
+                <time>{formatControlTime(controlEta(order, estimatedArrivalByOrderId))}</time>
+                <time className={order.actualCompletedAt === null ? 'empty' : 'completed'}>{formatControlTime(order.actualCompletedAt)}</time>
+              </div>
+            ))}
+            {!selectedVehicleOrders.length ? <div className="panel-state">선택한 차량에 배정된 배송지가 없습니다.</div> : null}
+          </div>
+        </section> : null}
+
+        {selectedVehicleId === undefined ? <section className={`card panel expand-card mobile-panel-${mobilePanel === 'manufacturers' ? 'expanded' : 'collapsed'}`} id="manufacturerCard" aria-label="제조사별 주문 리스트">
           <div className="tab-line section-heading">
             <span className="destination-title desktop-panel-title">제조사별 주문</span>
-            <button className="mobile-panel-toggle" type="button" aria-expanded={mobilePanel === 'orders'} aria-label={`제조사별 주문 ${mobilePanel === 'orders' ? '닫기' : '펼치기'}`} onClick={() => setMobilePanel((current) => current === 'orders' ? undefined : 'orders')}>
-              <span>제조사별 주문</span><span className="chip mini">{ordersCount}건</span><span className="mobile-panel-action">{mobilePanel === 'orders' ? '닫기' : '펼치기'}</span>
+            <button className="mobile-panel-toggle" type="button" aria-expanded={mobilePanel === 'manufacturers'} aria-label={`제조사별 주문 ${mobilePanel === 'manufacturers' ? '닫기' : '펼치기'}`} onClick={() => setMobilePanel((current) => current === 'manufacturers' ? undefined : 'manufacturers')}>
+              <span>제조사별 주문</span><span className="chip mini">{ordersCount}건</span><span className="mobile-panel-action">{mobilePanel === 'manufacturers' ? '닫기' : '펼치기'}</span>
             </button>
             <span className="chip mini desktop-panel-tools">{ordersCount}건</span>
           </div>
-          <div className="manufacturer-order-list stops overlay-scroll" id="destinationList">
+          <div className="manufacturer-order-list stops overlay-scroll" id="manufacturerList">
             {manufacturerOrders.map((group) => (
               <section className="manufacturer-order-group" key={group.id}>
-                <div><strong>{group.name}</strong><span>{group.orders.length}건</span></div>
+                <a href={manufacturerInquiryHref(group.id, summary?.serviceDate)}>
+                  <strong>{group.name}</strong><span>{group.orders.length}건 배송조회</span>
+                </a>
                 {group.orders.map((order) => (
                   <div className="manufacturer-order-row" key={order.sellerOrderId}>
+                    <i className="control-order-sequence" aria-label={`배송 순서 ${order.routeStopSequence ?? '미정'}`}>
+                      {order.routeStopSequence ?? '-'}
+                    </i>
                     <span><b>{order.sellerOrderKey}</b><small>{order.destinationId}</small></span>
-                    <em>{formatControlEta(order.estimatedArrivalAt)}</em>
+                    <em>{formatControlEta(controlEta(order, estimatedArrivalByOrderId))}</em>
                   </div>
                 ))}
               </section>
             ))}
             {!loading && !error && !manufacturerOrders.length ? <div className="panel-state">등록된 제조사 주문이 없습니다.</div> : null}
           </div>
-        </section>
+        </section> : null}
       </div>
     </aside>
   );
@@ -203,8 +318,27 @@ function groupOrdersByManufacturer(orders: DispatchListItem[], management?: Mana
   return [...groups].map(([id, groupedOrders]) => ({ id, name: names.get(id) ?? id, orders: groupedOrders }));
 }
 
+function scheduledControlVehicles(orders: DispatchListItem[], management?: ManagementData): ManagementData['vehicles'] {
+  if (!management || orders.length === 0) return [];
+  const scheduledVehicleIds = new Set(
+    orders
+      .filter((order) => order.assignmentStatus === 'ASSIGNED' && order.vehicleId !== null)
+      .map((order) => order.vehicleId),
+  );
+  return management.vehicles.filter((vehicle) => scheduledVehicleIds.has(vehicle.id));
+}
+
 function formatControlEta(value: string | null): string {
   if (!value) return '예정 확인';
+  return formatControlTime(value);
+}
+
+function controlEta(order: DispatchListItem, configuredEtas: ReadonlyMap<string, string>): string | null {
+  return order.estimatedArrivalAt ?? configuredEtas.get(order.sellerOrderId) ?? null;
+}
+
+function formatControlTime(value: string | null): string {
+  if (!value) return '-';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat('ko-KR', {
@@ -213,4 +347,14 @@ function formatControlEta(value: string | null): string {
     hour12: false,
     timeZone: 'Asia/Seoul',
   }).format(date);
+}
+
+function compareControlStops(left: DispatchListItem, right: DispatchListItem): number {
+  return (left.routeStopSequence ?? Number.MAX_SAFE_INTEGER) - (right.routeStopSequence ?? Number.MAX_SAFE_INTEGER);
+}
+
+function manufacturerInquiryHref(customerId: string, serviceDate?: string): string {
+  const query = new URLSearchParams({ customer: customerId });
+  if (serviceDate !== undefined) query.set('serviceDate', serviceDate);
+  return `${adminCustomerDeliveryPath}?${query.toString()}`;
 }

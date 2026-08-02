@@ -4,6 +4,7 @@ export type DispatchAssignmentStatus = 'ASSIGNED' | 'UNASSIGNED';
 export type DispatchEtaStatus = 'FAILED' | 'NOT_REQUIRED' | 'PENDING' | 'READY' | 'STALE';
 
 export type DispatchListItem = {
+  actualCompletedAt: string | null;
   assignmentStatus: DispatchAssignmentStatus;
   customerId: string;
   destinationAddress: string | null;
@@ -15,6 +16,7 @@ export type DispatchListItem = {
   latitude: number | null;
   longitude: number | null;
   routePlanId: string | null;
+  routeStopSequence: number | null;
   routeVersionId: string | null;
   sellerOrderId: string;
   sellerOrderKey: string;
@@ -37,7 +39,13 @@ export type DispatchListView = {
   };
 };
 
+export type DispatchSearch = {
+  destinationName: string;
+  orderNumber: string;
+};
+
 type RawDispatch = {
+  actualCompletedAt?: string;
   assignmentStatus: DispatchAssignmentStatus;
   customerId: string;
   destinationAddress?: string;
@@ -49,6 +57,7 @@ type RawDispatch = {
   latitude?: number;
   longitude?: number;
   routePlanId?: string;
+  routeStopSequence?: number;
   routeVersionId?: string;
   sellerOrderId: string;
   sellerOrderKey: string;
@@ -62,11 +71,19 @@ export type DispatchAssignmentResult = {
   sellerOrderId: string;
 };
 
-export async function loadDispatchList(serviceDate: string, signal?: AbortSignal): Promise<DispatchListView> {
+export async function loadDispatchList(
+  serviceDate: string,
+  search: Partial<DispatchSearch> = {},
+  signal?: AbortSignal,
+): Promise<DispatchListView> {
   const rows: DispatchListItem[] = [];
   let cursor: string | undefined;
   do {
     const query = new URLSearchParams({ limit: '100', serviceDate });
+    const destinationName = search.destinationName?.trim();
+    const orderNumber = search.orderNumber?.trim();
+    if (destinationName) query.set('destinationName', destinationName);
+    if (orderNumber) query.set('orderNumber', orderNumber);
     if (cursor !== undefined) query.set('cursor', cursor);
     const data = await requestV1ReadJson<unknown>(`dispatches?${query.toString()}`, { signal });
     const response = dispatchResponse(data);
@@ -145,6 +162,7 @@ function dispatchPage(value: unknown): DispatchListPage | undefined {
 function toDispatchListItem(raw: unknown): DispatchListItem {
   const dispatch = rawDispatch(raw);
   return {
+    actualCompletedAt: dispatch.actualCompletedAt ?? null,
     assignmentStatus: dispatch.assignmentStatus,
     customerId: dispatch.customerId,
     destinationAddress: dispatch.destinationAddress ?? null,
@@ -156,6 +174,7 @@ function toDispatchListItem(raw: unknown): DispatchListItem {
     latitude: dispatch.latitude ?? null,
     longitude: dispatch.longitude ?? null,
     routePlanId: dispatch.routePlanId ?? null,
+    routeStopSequence: dispatch.routeStopSequence ?? null,
     routeVersionId: dispatch.routeVersionId ?? null,
     sellerOrderId: dispatch.sellerOrderId,
     sellerOrderKey: dispatch.sellerOrderKey,
@@ -165,6 +184,7 @@ function toDispatchListItem(raw: unknown): DispatchListItem {
 
 function rawDispatch(value: unknown): RawDispatch {
   if (!hasOnlyKeys(value, [
+    'actualCompletedAt',
     'sellerOrderId',
     'sellerOrderKey',
     'customerId',
@@ -179,6 +199,7 @@ function rawDispatch(value: unknown): RawDispatch {
     'etaStatus',
     'estimatedArrivalAt',
     'routePlanId',
+    'routeStopSequence',
     'routeVersionId',
   ])) {
     throw new Error('배차 항목 응답 형식이 올바르지 않습니다.');
@@ -188,13 +209,17 @@ function rawDispatch(value: unknown): RawDispatch {
   }
   if (!['ASSIGNED', 'UNASSIGNED'].includes(value.assignmentStatus as string)) throw new Error('배차 항목의 assignmentStatus 필드가 올바르지 않습니다.');
   if (!['FAILED', 'NOT_REQUIRED', 'PENDING', 'READY', 'STALE'].includes(value.etaStatus as string)) throw new Error('배차 항목의 etaStatus 필드가 올바르지 않습니다.');
-  for (const field of ['destinationDisplayName', 'destinationAddress', 'driverId', 'vehicleId', 'estimatedArrivalAt', 'routePlanId', 'routeVersionId'] as const) {
+  for (const field of ['actualCompletedAt', 'destinationDisplayName', 'destinationAddress', 'driverId', 'vehicleId', 'estimatedArrivalAt', 'routePlanId', 'routeVersionId'] as const) {
     if (value[field] !== undefined && typeof value[field] !== 'string') throw new Error(`배차 항목의 ${field} 필드가 올바르지 않습니다.`);
   }
   for (const field of ['latitude', 'longitude'] as const) {
     if (value[field] !== undefined && (typeof value[field] !== 'number' || !Number.isFinite(value[field]))) {
       throw new Error(`배차 항목의 ${field} 필드가 올바르지 않습니다.`);
     }
+  }
+  if (value.routeStopSequence !== undefined
+    && (!Number.isInteger(value.routeStopSequence) || (value.routeStopSequence as number) < 1)) {
+    throw new Error('배차 항목의 routeStopSequence 필드가 올바르지 않습니다.');
   }
   return value as RawDispatch;
 }

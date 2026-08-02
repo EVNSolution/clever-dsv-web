@@ -1,8 +1,7 @@
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
-import { adminTabs, customerDeliveryPath, defaultPath, legacyPathMap } from './app-routes';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { adminCustomerDeliveryPath, adminTabs, customerDeliveryPath, defaultPath, legacyPathMap } from './app-routes';
 import type { AppPath } from './app-routes';
-import { CustomerDeliveryInquiryPage } from './pages/CustomerDeliveryInquiryPage';
 import { AdminShell } from './components/AdminShell';
 import { LoginPage } from './pages/LoginPage';
 import { apiConfig } from './api/config';
@@ -12,6 +11,8 @@ import { hasRole, logout, restoreSession } from './services/auth';
 import type { Principal, PrincipalRole } from './services/auth';
 import { MapPreview } from './components/MapPreview';
 
+const CustomerDeliveryInquiryPage = lazy(() => import('./pages/CustomerDeliveryInquiryPage').then((module) => ({ default: module.CustomerDeliveryInquiryPage })));
+
 type SessionGate = {
   status: 'checking' | 'ready' | 'blocked';
   message?: string;
@@ -20,7 +21,7 @@ type SessionGate = {
 function readPath(): AppPath {
   const decodedPath = decodeURI(window.location.pathname);
   const path: string = legacyPathMap[decodedPath as keyof typeof legacyPathMap] ?? decodedPath;
-  if (path === '/login' || path === customerDeliveryPath || adminTabs.some((tab) => tab.path === path)) return path as AppPath;
+  if (path === '/login' || path === adminCustomerDeliveryPath || path === customerDeliveryPath || adminTabs.some((tab) => tab.path === path)) return path as AppPath;
   return defaultPath;
 }
 
@@ -124,7 +125,7 @@ export function App(): ReactElement {
         />
       );
     }
-    if (path === customerDeliveryPath) {
+    if (path === customerDeliveryPath || path === adminCustomerDeliveryPath) {
       return (
         <main className="session-map-preview" aria-busy="true" aria-label="세션 확인 중">
           <MapPreview />
@@ -134,13 +135,34 @@ export function App(): ReactElement {
     return <SessionState label="세션 확인 중" />;
   }
   if (effectiveSessionGate.status === 'blocked') return <SessionState label="세션 차단" message={effectiveSessionGate.message ?? '세션 권한을 확인할 수 없습니다.'} alert />;
-  if (path === customerDeliveryPath) return <CustomerDeliveryInquiryPage />;
+  if (path === adminCustomerDeliveryPath) {
+    return (
+      <Suspense fallback={<CustomerDeliveryFallback />}>
+        <CustomerDeliveryInquiryPage adminCustomerId={new URLSearchParams(window.location.search).get('customer') ?? undefined} />
+      </Suspense>
+    );
+  }
+  if (path === customerDeliveryPath) {
+    return (
+      <Suspense fallback={<CustomerDeliveryFallback />}>
+        <CustomerDeliveryInquiryPage />
+      </Suspense>
+    );
+  }
   return (
     <AdminShell
       activePath={path}
       onNavigate={(nextPath) => go(nextPath)}
       onLogout={handleLogout}
     />
+  );
+}
+
+function CustomerDeliveryFallback(): ReactElement {
+  return (
+    <main className="session-map-preview" aria-busy="true" aria-label="배송 조회 불러오는 중">
+      <MapPreview />
+    </main>
   );
 }
 
@@ -159,6 +181,7 @@ const requiredScopesByPath: Record<AppPath, string[]> = {
     'dsv:conditions:read',
   ],
   '/settings': ['dsv:settings:read'],
+  [adminCustomerDeliveryPath]: ['dsv:customers:read', 'dsv:dispatches:read'],
   [customerDeliveryPath]: ['dsv:customer-deliveries:read'],
   '/login': [],
 };

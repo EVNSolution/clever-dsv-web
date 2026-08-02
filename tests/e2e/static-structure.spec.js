@@ -116,8 +116,13 @@ test('manual router, local state, layered plain CSS, and lazy map loading remain
   const app = readSrc('App.tsx');
   const routes = readSrc('app-routes.ts');
   const adminShell = readSrc('components/AdminShell.tsx');
+  const adminContent = readSrc('pages/AdminContent.tsx');
   const customerPage = readSrc('pages/CustomerDeliveryInquiryPage.tsx');
   const main = readSrc('main.tsx');
+  const settingsPage = readSrc('pages/SettingsPage.tsx');
+  const viteConfig = readRepo('vite.config.ts');
+  const dispatchImports = readSrc('services/dispatch-imports.ts');
+  const controlRoutes = readSrc('services/control-routes.ts');
 
   expect(app).toContain('pushState');
   expect(app).toContain('popstate');
@@ -127,6 +132,20 @@ test('manual router, local state, layered plain CSS, and lazy map loading remain
   expect(main).not.toMatch(/styles\/(?:00-foundation-shell|10-control-panels|20-admin-pages|30-customer-responsive|40-runtime-compat)\.css/);
   expect(adminShell).toMatch(/lazy\(\(\) => import\('\.\/MapCanvas'\)/);
   expect(customerPage).toMatch(/lazy\(\(\) => import\('\.\.\/components\/MapCanvas'\)/);
+  expect(app).toMatch(/lazy\(\(\) => import\('\.\/pages\/CustomerDeliveryInquiryPage'\)/);
+  expect(adminContent).toMatch(/lazy\(\(\) => import\('\.\/DispatchPage'\)/);
+  expect(adminContent).toMatch(/lazy\(\(\) => import\('\.\/MasterDataPage'\)/);
+  expect(adminContent).toMatch(/lazy\(\(\) => import\('\.\/RecordsPage'\)/);
+  expect(adminContent).toMatch(/lazy\(\(\) => import\('\.\/SettingsPage'\)/);
+  expect(settingsPage).toMatch(/lazy\(\(\) => import\('\.\.\/components\/DepartureLocationMap'\)/);
+  expect(settingsPage).not.toMatch(/import\s+\{\s*DepartureLocationMap\s*\}\s+from/);
+  expect(dispatchImports).toMatch(/import\('xlsx'\)/);
+  expect(viteConfig).toContain("manualChunks");
+  expect(viteConfig).toContain("return 'maplibre'");
+  expect(viteConfig).toContain("return 'xlsx'");
+  expect(controlRoutes).toContain('control/routes?');
+  expect(controlRoutes).not.toContain('router.project-osrm.org');
+  expect(controlRoutes).not.toContain('/route/v1/driving/');
 
   const routePairs = [
     ["path: '/control'", "label: '관제'"],

@@ -27,7 +27,7 @@ export const defaultAdminSettings: AdminSettings = {
   plannedDepartureTime: '08:30',
   temperatureLimit: 8,
   etaDelayMinutes: 10,
-  gpsSilenceSeconds: 30,
+  gpsSilenceSeconds: 180,
   dwellMinutes: 5,
   showTemperatureAlerts: true,
   forwardDelayAlerts: true,

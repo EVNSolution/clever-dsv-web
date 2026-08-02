@@ -1,21 +1,23 @@
 import type { DragEvent, KeyboardEvent, ReactElement } from 'react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, LoaderCircle } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
 import { loadDispatchList, reassignDispatchOrder, unassignDispatchOrder } from '../services/dispatch';
-import type { DispatchListItem, DispatchListView } from '../services/dispatch';
+import type { DispatchListItem, DispatchListView, DispatchSearch } from '../services/dispatch';
 import {
   commitDispatchImport,
   parseDispatchFile,
   parseDispatchSheet,
   parseDispatchSource,
+  preloadDispatchFileParser,
   previewDispatchImport,
   registerDispatchDriver,
   registerDispatchVehicle,
   registerTransportCondition,
 } from '../services/dispatch-imports';
 import type {
+  DispatchAddressSuggestion,
   DispatchFileParseResult,
   DispatchImportInput,
   DispatchImportIssue,
@@ -35,6 +37,20 @@ type ConditionCandidate = {
   name: string;
 };
 
+type UploadActivity = 'geocoding' | 'idle' | 'parsing';
+
+type SheetCellFocusTarget = {
+  columnIndex: number;
+  requestId: number;
+  rowIndex: number;
+};
+
+type UploadIssueEntry = {
+  columnIndex: number | null;
+  issue: DispatchImportIssue;
+  rowNumber: number;
+};
+
 const DispatchMapCanvas = lazy(async () => {
   const module = await import('../components/MapCanvas');
   return { default: module.MapCanvas };
@@ -42,6 +58,8 @@ const DispatchMapCanvas = lazy(async () => {
 
 export function DispatchPage({ title, description }: { title: string; description: string }): ReactElement {
   const uploadFileInputRef = useRef<HTMLInputElement>(null);
+  const uploadCellFocusRequest = useRef(0);
+  const uploadPreviewRequest = useRef(0);
   const [mockSettings] = useState(() => apiConfig.mode === 'mock' ? loadAdminSettings() : null);
   const [loadingStartTime, setLoadingStartTime] = useState(() => mockSettings?.loadingStartTime ?? '');
   const [departureDraft, setDepartureDraft] = useState(() => mockSettings?.plannedDepartureTime ?? '');
@@ -59,7 +77,9 @@ export function DispatchPage({ title, description }: { title: string; descriptio
   const [uploadedImport, setUploadedImport] = useState<DispatchImportView | null>(null);
   const [uploadError, setUploadError] = useState('');
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadActivity, setUploadActivity] = useState<UploadActivity>('idle');
   const [uploadDragging, setUploadDragging] = useState(false);
+  const [uploadCellFocusTarget, setUploadCellFocusTarget] = useState<SheetCellFocusTarget | null>(null);
   const [conditionCandidates, setConditionCandidates] = useState<ConditionCandidate[]>([]);
   const [remoteDispatch, setRemoteDispatch] = useState<DispatchListView | null>(null);
   const [remoteReferences, setRemoteReferences] = useState<ManagementData | null>(null);
@@ -67,6 +87,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
   const [remoteError, setRemoteError] = useState('');
   const [remoteReloadKey, setRemoteReloadKey] = useState(0);
   const [serviceDate, setServiceDate] = useState(todayInKorea);
+  const [dispatchSearch, setDispatchSearch] = useState<DispatchSearch>({ destinationName: '', orderNumber: '' });
   const saveDepartureTime = async () => {
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(departureDraft)) {
       setDepartureError(true);
@@ -119,9 +140,8 @@ export function DispatchPage({ title, description }: { title: string; descriptio
     setRemoteStatus('loading');
     setRemoteError('');
     setRemoteDispatch(null);
-    setRemoteReferences(null);
     Promise.all([
-      loadDispatchList(serviceDate, controller.signal),
+      loadDispatchList(serviceDate, dispatchSearch, controller.signal),
       loadDispatchReferenceSnapshot(),
     ])
       .then(([view, references]) => {
@@ -132,24 +152,27 @@ export function DispatchPage({ title, description }: { title: string; descriptio
       .catch((error: unknown) => {
         if (isAbortError(error)) return;
         setRemoteDispatch(null);
-        setRemoteReferences(null);
         setRemoteError(errorMessage(error));
         setRemoteStatus('error');
       });
     return () => controller.abort();
-  }, [remoteReloadKey, serviceDate]);
+  }, [dispatchSearch, remoteReloadKey, serviceDate]);
+  useEffect(() => {
+    if (workAction === 'upload') preloadDispatchFileParser();
+  }, [workAction]);
   const uploadInput = (): DispatchImportInput | null => uploadFileName && uploadRows.length > 0
     ? { fileName: uploadFileName, planDate: uploadPlanDate, rows: uploadRows }
     : null;
   const applyUploadPreview = (preview: DispatchImportPreview) => {
     setUploadPreview(preview);
+    setUploadRows((current) => mergeResolvedPreviewRows(current, preview.rows));
     setConditionCandidates((current) => preview.conditionCandidates.map((code) =>
       current.find((candidate) => candidate.code === code) ?? { code, description: '', name: code }));
   };
   const refreshUploadPreview = async () => {
     const input = uploadInput();
     if (input === null) return;
-    applyUploadPreview(await previewDispatchImport(input));
+    await inspectUpload(input);
     if (apiConfig.mode === 'remote') setRemoteReloadKey((current) => current + 1);
   };
   const inspectUpload = async (input = uploadInput()) => {
@@ -157,17 +180,25 @@ export function DispatchPage({ title, description }: { title: string; descriptio
       setUploadError('배차 파일을 먼저 선택하세요.');
       return;
     }
+    const request = ++uploadPreviewRequest.current;
     setUploadBusy(true);
+    setUploadActivity('geocoding');
     setUploadError('');
     setUploadedImport(null);
     try {
-      applyUploadPreview(await previewDispatchImport(input));
+      const preview = await previewDispatchImport(input);
+      if (request !== uploadPreviewRequest.current) return;
+      applyUploadPreview(preview);
     } catch (error) {
+      if (request !== uploadPreviewRequest.current) return;
       setUploadPreview(null);
       setConditionCandidates([]);
       setUploadError(errorMessage(error));
     } finally {
-      setUploadBusy(false);
+      if (request === uploadPreviewRequest.current) {
+        setUploadBusy(false);
+        setUploadActivity('idle');
+      }
     }
   };
   const applyUploadParseResult = async (
@@ -175,21 +206,26 @@ export function DispatchPage({ title, description }: { title: string; descriptio
     result: DispatchFileParseResult,
     planDate = uploadPlanDate,
     useDetectedPlanDate = true,
+    preservePreview = false,
   ) => {
     const resolvedPlanDate = useDetectedPlanDate && result.planDate !== null ? result.planDate : planDate;
-    setUploadPreview(null);
+    const nextRows = preservePreview ? preserveResolvedRows(uploadRows, result.rows) : result.rows;
+    if (!preservePreview || result.error) setUploadPreview(null);
     setUploadedImport(null);
-    setConditionCandidates([]);
+    if (!preservePreview || result.error) setConditionCandidates([]);
     setUploadFileName(fileName);
-    setUploadRows(result.rows);
+    setUploadRows(nextRows);
     setUploadSheet(result.sheet);
     setUploadPlanDate(resolvedPlanDate);
     setUploadError(result.error);
     if (result.error) return;
-    await inspectUpload({ fileName, planDate: resolvedPlanDate, rows: result.rows });
+    await waitForPreviewPaint();
+    await inspectUpload({ fileName, planDate: resolvedPlanDate, rows: nextRows });
   };
   const loadUploadFile = async (file: File) => {
+    uploadPreviewRequest.current += 1;
     setUploadBusy(true);
+    setUploadActivity('parsing');
     setUploadFileName(file.name);
     setUploadRows([]);
     setUploadSheet(null);
@@ -205,6 +241,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
       setUploadError(errorMessage(error));
     } finally {
       setUploadBusy(false);
+      setUploadActivity('idle');
     }
   };
   const dropUploadFile = (event: DragEvent<HTMLDivElement>) => {
@@ -228,10 +265,32 @@ export function DispatchPage({ title, description }: { title: string; descriptio
       parseDispatchSheet(cells, uploadSheet.name, uploadFileName),
       uploadPlanDate,
       false,
+      true,
     );
   };
+  const applyAddressSuggestion = (rowNumber: number, suggestion: DispatchAddressSuggestion) => {
+    const columnIndex = uploadFieldColumn(uploadSheet, 'address');
+    if (columnIndex === null) return;
+    editUploadSheetCell(
+      rowNumber - 1,
+      columnIndex,
+      formatAddressSuggestion(suggestion),
+    );
+  };
+  const focusUploadIssue = (entry: UploadIssueEntry) => {
+    if (uploadSheet === null) return;
+    const rowIndex = Math.max(0, Math.min(uploadSheet.cells.length - 1, entry.rowNumber - 1));
+    const columnIndex = Math.max(0, entry.columnIndex ?? 0);
+    setUploadCellFocusTarget({
+      columnIndex,
+      requestId: ++uploadCellFocusRequest.current,
+      rowIndex,
+    });
+  };
   const loadExampleUpload = async () => {
+    uploadPreviewRequest.current += 1;
     setUploadBusy(true);
+    setUploadActivity('parsing');
     setUploadError('');
     try {
       const response = await fetch('/examples/dsv-fixed-dispatch-10.csv');
@@ -241,9 +300,11 @@ export function DispatchPage({ title, description }: { title: string; descriptio
       setUploadError(errorMessage(error));
     } finally {
       setUploadBusy(false);
+      setUploadActivity('idle');
     }
   };
   const cancelUpload = () => {
+    uploadPreviewRequest.current += 1;
     if (uploadFileInputRef.current !== null) uploadFileInputRef.current.value = '';
     setUploadFileName('');
     setUploadRows([]);
@@ -253,6 +314,9 @@ export function DispatchPage({ title, description }: { title: string; descriptio
     setUploadedImport(null);
     setUploadError('');
     setUploadDragging(false);
+    setUploadCellFocusTarget(null);
+    setUploadActivity('idle');
+    setUploadBusy(false);
     setConditionCandidates([]);
   };
   const updateConditionCandidate = (code: string, field: 'description' | 'name', value: string) => {
@@ -335,7 +399,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
         actions={<button className="btn primary operations-upload" type="button" onClick={() => setWorkAction(workAction === 'upload' ? '' : 'upload')}>주문 업로드</button>}
       />
       <div className="dispatch-upload-layer" hidden={workAction !== 'upload'}>
-        <section className="action-panel condition-upload-panel" aria-label="주문 업로드">
+        <section className="action-panel condition-upload-panel" aria-busy={uploadBusy} aria-label="주문 업로드">
           <div className="dispatch-upload-toolbar">
             {uploadSheet ? <p className="dispatch-upload-toolbar-note">*셀을 더블클릭하여 수정</p> : null}
             {uploadFileName ? <button className="btn" type="button" disabled={uploadBusy} onClick={cancelUpload}>취소</button> : null}
@@ -367,7 +431,18 @@ export function DispatchPage({ title, description }: { title: string; descriptio
                 </div>
               </div>
             ) : null}
-            {uploadSheet ? <DispatchSheetPreview issueCells={uploadIssueCells} onCellChange={editUploadSheetCell} sheet={uploadSheet} /> : null}
+            {uploadSheet ? (
+              <DispatchSheetPreview
+                activity={uploadActivity}
+                focusTarget={uploadCellFocusTarget}
+                issueCells={uploadIssueCells}
+                onCellChange={editUploadSheetCell}
+                sheet={uploadSheet}
+              />
+            ) : null}
+            {uploadSheet === null && uploadActivity !== 'idle'
+              ? <DispatchUploadActivity activity={uploadActivity} />
+              : null}
             {uploadFileName ? (
               <div className="dispatch-upload-review">
                 <p className="dispatch-upload-file"><strong>{uploadFileName}</strong><span>{Math.max(0, (uploadSheet?.cells.length ?? 1) - 1)}행</span></p>
@@ -382,7 +457,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
               </div>
             ) : null}
             {!uploadFileName && uploadError ? <p className="dispatch-upload-error" role="alert">{uploadError}</p> : null}
-            {uploadPreview ? <div className="dispatch-upload-summary" role="status"><span>전체 <b>{uploadPreview.summary.totalRows}</b></span><span>주소 확인 <b>{resolvedAddressRows}</b></span><span>정상 <b>{uploadPreview.summary.readyRows}</b></span><span>확인 <b>{uploadPreview.summary.reviewRows}</b></span><span>오류 <b>{uploadPreview.summary.errorRows}</b></span></div> : null}
+            {uploadPreview ? <div className="dispatch-upload-summary" role="status"><span>전체 <b>{uploadPreview.summary.totalRows}</b></span><span>주소 확인 <b>{resolvedAddressRows}</b></span><span>정상 <b>{uploadPreview.summary.readyRows}</b></span>{(uploadPreview.summary.updateCandidateRows ?? 0) > 0 ? <span>변경 <b>{uploadPreview.summary.updateCandidateRows}</b></span> : null}<span>확인 <b>{uploadPreview.summary.reviewRows}</b></span><span>오류 <b>{uploadPreview.summary.errorRows}</b></span></div> : null}
             {uploadIssueRows.length ? (
               <details className="dispatch-upload-issues">
                 <summary>
@@ -395,13 +470,46 @@ export function DispatchPage({ title, description }: { title: string; descriptio
                   <b>{uploadIssueEntries.length}건</b>
                 </summary>
                 <div className="dispatch-upload-issue-list">
-                  {uploadIssueEntries.map((entry) => (
-                    <p key={`${entry.rowNumber}:${entry.issue.code}:${entry.issue.field}`}>
-                      <strong>{entry.rowNumber}행</strong>
-                      <b>{entry.columnIndex === null ? '행 전체' : `${spreadsheetColumnName(entry.columnIndex)}열`}</b>
-                      <span>{uploadIssueMessage(entry.issue)}</span>
-                    </p>
-                  ))}
+                  {uploadIssueEntries.map((entry) => {
+                    const suggestions = uploadAddressSuggestions(uploadPreview, entry);
+                    return (
+                      <div className="dispatch-upload-issue-row" key={`${entry.rowNumber}:${entry.issue.code}:${entry.issue.field}`}>
+                        <button
+                          className="dispatch-upload-issue-location"
+                          type="button"
+                          title={`${entry.rowNumber}행 ${entry.columnIndex === null ? '첫 번째 셀' : `${spreadsheetColumnName(entry.columnIndex)}열`} 수정`}
+                          onClick={() => focusUploadIssue(entry)}
+                        >
+                          <strong>{entry.rowNumber}행</strong>
+                          <b>{entry.columnIndex === null ? '행 전체' : `${spreadsheetColumnName(entry.columnIndex)}열`}</b>
+                          <ArrowUpRight aria-hidden="true" />
+                        </button>
+                        <div className="dispatch-upload-issue-content">
+                          <span className="dispatch-upload-issue-message">{uploadIssueMessage(entry.issue)}</span>
+                          {suggestions.length > 0 ? (
+                            <div className="dispatch-address-suggestions" aria-label={`${entry.rowNumber}행 배송처 검색 후보`}>
+                              {suggestions.map((suggestion) => (
+                                <div className="dispatch-address-suggestion" key={`${suggestion.providerPlaceId ?? suggestion.address}:${suggestion.title}`}>
+                                  <span>
+                                    <strong>{suggestion.title}</strong>
+                                    <small>{formatAddressSuggestion(suggestion)}</small>
+                                  </span>
+                                  <em>{suggestion.recommended ? '추천' : `${suggestion.score}점`}</em>
+                                  <button
+                                    type="button"
+                                    disabled={uploadBusy}
+                                    onClick={() => applyAddressSuggestion(entry.rowNumber, suggestion)}
+                                  >
+                                    적용
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </details>
             ) : null}
@@ -436,6 +544,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
           }}
           onDepartureSave={() => void saveDepartureTime()}
           onRetry={() => setRemoteReloadKey((current) => current + 1)}
+          onSearchChange={setDispatchSearch}
           onServiceDateChange={setServiceDate}
           onAssignmentChanged={() => setRemoteReloadKey((current) => current + 1)}
           operationsBusy={operationsBusy}
@@ -444,6 +553,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
           status={remoteStatus}
           view={remoteDispatch}
           references={remoteReferences}
+          search={dispatchSearch}
           serviceDate={serviceDate}
         />
       ) : (
@@ -456,7 +566,9 @@ export function DispatchPage({ title, description }: { title: string; descriptio
             setDepartureError(false);
           }}
           onDepartureSave={() => void saveDepartureTime()}
+          onSearchChange={setDispatchSearch}
           onServiceDateChange={setServiceDate}
+          search={dispatchSearch}
           serviceDate={serviceDate}
         />
       )}
@@ -464,44 +576,115 @@ export function DispatchPage({ title, description }: { title: string; descriptio
   );
 }
 
+function DispatchUploadActivity({
+  activity,
+  floating = false,
+}: {
+  activity: Exclude<UploadActivity, 'idle'>;
+  floating?: boolean;
+}): ReactElement {
+  const parsing = activity === 'parsing';
+  return (
+    <div className={`dispatch-upload-activity${floating ? ' is-floating' : ''}`} role="status" aria-live="polite">
+      <LoaderCircle aria-hidden="true" />
+      <span>
+        <strong>{parsing ? '파일 미리보기 준비 중' : '주소 확인 중'}</strong>
+        <small>{parsing ? '업로드 파일을 읽고 있습니다.' : '지오코딩 작업을 진행하고 있습니다.'}</small>
+      </span>
+    </div>
+  );
+}
+
 function DispatchSheetPreview({
+  activity,
+  focusTarget,
   issueCells,
   onCellChange,
   sheet,
 }: {
+  activity: UploadActivity;
+  focusTarget: SheetCellFocusTarget | null;
   issueCells: Set<string>;
   onCellChange: (rowIndex: number, columnIndex: number, value: string) => void;
   sheet: DispatchFileParseResult['sheet'];
 }): ReactElement {
-  const [editingCell, setEditingCell] = useState<{ columnIndex: number; rowIndex: number; value: string } | null>(null);
-  const visibleRows = sheet.cells.slice(0, 101);
+  const sheetScrollRef = useRef<HTMLDivElement>(null);
+  const cancelBlurCommit = useRef(false);
+  const [editingCell, setEditingCell] = useState<{
+    columnIndex: number;
+    originalValue: string;
+    rowIndex: number;
+    value: string;
+  } | null>(null);
+  const [rowWindowStart, setRowWindowStart] = useState(0);
+  const visibleRows = sheet.cells.slice(rowWindowStart, rowWindowStart + 101);
   const columnCount = Math.max(1, ...visibleRows.map((row) => row.length));
   const columns = Array.from({ length: columnCount }, (_, index) => index);
   const columnWidths = columns.map((column) => spreadsheetColumnWidth(sheet.cells[0]?.[column] ?? ''));
   const tableWidth = 36 + columnWidths.reduce((total, width) => total + width, 0);
   const commitCell = (value: string) => {
     if (editingCell === null) return;
-    const { columnIndex, rowIndex } = editingCell;
+    const { columnIndex, originalValue, rowIndex } = editingCell;
     setEditingCell(null);
+    if (value === originalValue) return;
     onCellChange(rowIndex, columnIndex, value);
+  };
+  const beginEditing = (rowIndex: number, columnIndex: number, value: string) => {
+    cancelBlurCommit.current = false;
+    setEditingCell({ columnIndex, originalValue: value, rowIndex, value });
   };
   const handleEditorKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      commitCell(event.currentTarget.value);
+      event.stopPropagation();
+      event.nativeEvent.stopImmediatePropagation();
+      event.currentTarget.blur();
     } else if (event.key === 'Escape') {
       event.preventDefault();
+      event.stopPropagation();
+      event.nativeEvent.stopImmediatePropagation();
+      cancelBlurCommit.current = true;
       setEditingCell(null);
     }
   };
+  useEffect(() => {
+    if (focusTarget === null) return;
+    const maxWindowStart = Math.max(0, sheet.cells.length - 101);
+    const nextWindowStart = focusTarget.rowIndex < rowWindowStart || focusTarget.rowIndex >= rowWindowStart + 101
+      ? Math.min(maxWindowStart, Math.max(0, focusTarget.rowIndex - 12))
+      : rowWindowStart;
+    if (nextWindowStart !== rowWindowStart) setRowWindowStart(nextWindowStart);
+    beginEditing(
+      focusTarget.rowIndex,
+      focusTarget.columnIndex,
+      sheet.cells[focusTarget.rowIndex]?.[focusTarget.columnIndex] ?? '',
+    );
+  }, [focusTarget]);
+  useEffect(() => {
+    setRowWindowStart((current) => Math.min(current, Math.max(0, sheet.cells.length - 101)));
+  }, [sheet.cells.length]);
+  useEffect(() => {
+    if (editingCell === null) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      const editor = sheetScrollRef.current?.querySelector<HTMLInputElement>(
+        `[data-sheet-editor="${editingCell.rowIndex}:${editingCell.columnIndex}"]`,
+      );
+      editor?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      editor?.focus({ preventScroll: true });
+      editor?.select();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [editingCell?.columnIndex, editingCell?.rowIndex, rowWindowStart]);
   return (
     <div className="upload-sheet dispatch-upload-sheet">
-      <div className="sheet-scroll">
+      <div className="sheet-scroll" ref={sheetScrollRef}>
         <table className="page-table" aria-label={`${sheet.name} 시트 미리보기`} style={{ minWidth: '100%', width: `${tableWidth}px` }}>
           <colgroup><col style={{ width: '36px' }} />{columnWidths.map((width, column) => <col key={column} style={{ width: `${width}px` }} />)}</colgroup>
           <thead><tr><th className="sheet-row" aria-label="행 번호" />{columns.map((column) => <th key={column} scope="col">{spreadsheetColumnName(column)}</th>)}</tr></thead>
           <tbody>
-            {visibleRows.map((row, rowIndex) => (
+            {visibleRows.map((row, visibleRowIndex) => {
+              const rowIndex = rowWindowStart + visibleRowIndex;
+              return (
               <tr key={rowIndex}>
                 <th className="sheet-row" scope="row">{rowIndex + 1}</th>
                 {columns.map((columnIndex) => {
@@ -509,13 +692,24 @@ function DispatchSheetPreview({
                   const editing = editingCell?.rowIndex === rowIndex && editingCell.columnIndex === columnIndex;
                   const invalid = issueCells.has(`${rowIndex}:${columnIndex}`);
                   return (
-                    <td className={invalid ? 'is-error' : undefined} key={columnIndex}>
+                    <td
+                      className={invalid ? 'is-error' : undefined}
+                      data-sheet-cell={`${rowIndex}:${columnIndex}`}
+                      key={columnIndex}
+                    >
                       {editing ? (
                         <input
                           aria-label={`${rowIndex + 1}행 ${spreadsheetColumnName(columnIndex)}열 편집`}
                           autoFocus
                           className="sheet-cell-editor"
-                          onBlur={(event) => commitCell(event.currentTarget.value)}
+                          data-sheet-editor={`${rowIndex}:${columnIndex}`}
+                          onBlur={(event) => {
+                            if (cancelBlurCommit.current) {
+                              cancelBlurCommit.current = false;
+                              return;
+                            }
+                            commitCell(event.currentTarget.value);
+                          }}
                           onChange={(event) => setEditingCell((current) => current === null ? null : { ...current, value: event.target.value })}
                           onFocus={(event) => event.currentTarget.select()}
                           onKeyDown={handleEditorKeyDown}
@@ -524,7 +718,7 @@ function DispatchSheetPreview({
                       ) : (
                         <div
                           className="sheet-cell"
-                          onDoubleClick={() => setEditingCell({ columnIndex, rowIndex, value })}
+                          onDoubleClick={() => beginEditing(rowIndex, columnIndex, value)}
                           title={value || undefined}
                         >
                           {value || '\u00a0'}
@@ -534,10 +728,14 @@ function DispatchSheetPreview({
                   );
                 })}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
+      {activity !== 'idle'
+        ? <DispatchUploadActivity activity={activity} floating />
+        : null}
     </div>
   );
 }
@@ -555,13 +753,66 @@ function spreadsheetColumnName(index: number): string {
   return name;
 }
 
+function mergeResolvedPreviewRows(
+  rows: DispatchImportRow[],
+  previewRows: DispatchImportPreview['rows'],
+): DispatchImportRow[] {
+  const previewByRowNumber = new Map(previewRows.map((row) => [row.rowNumber, row]));
+  return rows.map((row) => {
+    const preview = previewByRowNumber.get(row.rowNumber);
+    if (preview === undefined) return row;
+    const normalized = preview.normalized;
+    const addressResolutionStatus = preview.addressResolutionStatus ?? normalized?.addressResolutionStatus;
+    const postalCode = preview.postalCode ?? normalized?.postalCode;
+    return {
+      ...row,
+      ...(addressResolutionStatus === undefined ? {} : { addressResolutionStatus }),
+      ...(preview.detailAddress === undefined ? {} : { detailAddress: preview.detailAddress }),
+      ...(preview.jibunAddress === undefined ? {} : { jibunAddress: preview.jibunAddress }),
+      latitude: preview.latitude,
+      longitude: preview.longitude,
+      ...(postalCode === undefined ? {} : { postalCode }),
+      rawAddress: preview.rawAddress ?? row.rawAddress ?? row.address,
+    };
+  });
+}
+
+function preserveResolvedRows(
+  currentRows: DispatchImportRow[],
+  nextRows: DispatchImportRow[],
+): DispatchImportRow[] {
+  const currentByRowNumber = new Map(currentRows.map((row) => [row.rowNumber, row]));
+  return nextRows.map((row) => {
+    const current = currentByRowNumber.get(row.rowNumber);
+    if (current === undefined || current.address !== row.address) return row;
+    return {
+      ...row,
+      addressResolutionStatus: current.addressResolutionStatus,
+      detailAddress: current.detailAddress,
+      jibunAddress: current.jibunAddress,
+      latitude: current.latitude,
+      longitude: current.longitude,
+      postalCode: current.postalCode,
+      rawAddress: current.rawAddress,
+    };
+  });
+}
+
+function waitForPreviewPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
 function MockDispatchBoard({
   departureDraft,
   departureError,
   departureLocation,
   onDepartureChange,
   onDepartureSave,
+  onSearchChange,
   onServiceDateChange,
+  search,
   serviceDate,
 }: {
   departureDraft: string;
@@ -569,16 +820,20 @@ function MockDispatchBoard({
   departureLocation: DepartureLocation | null;
   onDepartureChange: (value: string) => void;
   onDepartureSave: () => void;
+  onSearchChange: (value: DispatchSearch) => void;
   onServiceDateChange: (value: string) => void;
+  search: DispatchSearch;
   serviceDate: string;
 }): ReactElement {
   return (
     <DispatchWorkspace
       departureControl={<RemoteDepartureTime busy={false} draft={departureDraft} error="" invalid={departureError} onChange={onDepartureChange} onSave={onDepartureSave} status="ready" />}
       departureLocation={departureLocation}
+      onSearchChange={onSearchChange}
       onServiceDateChange={onServiceDateChange}
       references={null}
       rows={[]}
+      search={search}
       serviceDate={serviceDate}
       summary={{ assigned: 0, etaAttention: 0, total: 0, unassigned: 0 }}
     />
@@ -594,6 +849,7 @@ function RemoteDispatchBoard({
   onDepartureChange,
   onDepartureSave,
   onRetry,
+  onSearchChange,
   onServiceDateChange,
   operationsBusy,
   operationsError,
@@ -601,6 +857,7 @@ function RemoteDispatchBoard({
   status,
   view,
   references,
+  search,
   serviceDate,
 }: {
   departureDraft: string;
@@ -611,6 +868,7 @@ function RemoteDispatchBoard({
   onDepartureChange: (value: string) => void;
   onDepartureSave: () => void;
   onRetry: () => void;
+  onSearchChange: (value: DispatchSearch) => void;
   onServiceDateChange: (value: string) => void;
   operationsBusy: boolean;
   operationsError: string;
@@ -618,6 +876,7 @@ function RemoteDispatchBoard({
   status: 'error' | 'loading' | 'ready';
   view: DispatchListView | null;
   references: ManagementData | null;
+  search: DispatchSearch;
   serviceDate: string;
 }): ReactElement {
   const departureControl = (
@@ -637,9 +896,11 @@ function RemoteDispatchBoard({
         departureControl={departureControl}
         departureLocation={departureLocation}
         loading
+        onSearchChange={onSearchChange}
         onServiceDateChange={onServiceDateChange}
         references={references}
         rows={[]}
+        search={search}
         serviceDate={serviceDate}
         summary={{ assigned: 0, etaAttention: 0, total: 0, unassigned: 0 }}
       />
@@ -652,9 +913,11 @@ function RemoteDispatchBoard({
         departureLocation={departureLocation}
         error={error || '잠시 후 다시 시도하세요.'}
         onRetry={onRetry}
+        onSearchChange={onSearchChange}
         onServiceDateChange={onServiceDateChange}
         references={references}
         rows={[]}
+        search={search}
         serviceDate={serviceDate}
         summary={{ assigned: 0, etaAttention: 0, total: 0, unassigned: 0 }}
       />
@@ -665,9 +928,11 @@ function RemoteDispatchBoard({
       departureControl={departureControl}
       departureLocation={departureLocation}
       onAssignmentChanged={onAssignmentChanged}
+      onSearchChange={onSearchChange}
       onServiceDateChange={onServiceDateChange}
       references={references}
       rows={view.rows}
+      search={search}
       serviceDate={serviceDate}
       summary={view.summary}
     />
@@ -675,6 +940,7 @@ function RemoteDispatchBoard({
 }
 
 type DispatchFilter = 'ALL' | 'ASSIGNED' | 'UNASSIGNED';
+type DispatchWorkspaceView = 'LIST' | 'MAP';
 
 function DispatchWorkspace({
   departureControl,
@@ -683,9 +949,11 @@ function DispatchWorkspace({
   loading = false,
   onAssignmentChanged,
   onRetry,
+  onSearchChange,
   onServiceDateChange,
   references,
   rows,
+  search,
   serviceDate,
   summary,
 }: {
@@ -695,13 +963,17 @@ function DispatchWorkspace({
   loading?: boolean;
   onAssignmentChanged?: () => void;
   onRetry?: () => void;
+  onSearchChange: (value: DispatchSearch) => void;
   onServiceDateChange: (value: string) => void;
   references: ManagementData | null;
   rows: DispatchListItem[];
+  search: DispatchSearch;
   serviceDate: string;
   summary: DispatchListView['summary'];
 }): ReactElement {
   const [filter, setFilter] = useState<DispatchFilter>('ALL');
+  const [workspaceView, setWorkspaceView] = useState<DispatchWorkspaceView>('MAP');
+  const [searchDraft, setSearchDraft] = useState<DispatchSearch>(search);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const [selectionCoordinates, setSelectionCoordinates] = useState<Array<[number, number]>>([]);
@@ -709,6 +981,7 @@ function DispatchWorkspace({
   const [mutationBusy, setMutationBusy] = useState(false);
   const [mutationError, setMutationError] = useState('');
   const readOnly = serviceDate < todayInKorea();
+  const hasSearch = search.destinationName !== '' || search.orderNumber !== '';
   const visibleRows = useMemo(
     () => filter === 'ALL' ? rows : rows.filter((row) => row.assignmentStatus === filter),
     [filter, rows],
@@ -721,15 +994,13 @@ function DispatchWorkspace({
   );
   const points = useMemo(() => visibleRows.flatMap((row) => {
     if (row.latitude === null || row.longitude === null) return [];
-    const originalIndex = rows.findIndex((candidate) => candidate.sellerOrderId === row.sellerOrderId);
     return [{
       id: row.sellerOrderId,
-      label: String(originalIndex + 1),
       latitude: row.latitude,
       longitude: row.longitude,
       tone: row.assignmentStatus === 'ASSIGNED' ? 'assigned' as const : 'unassigned' as const,
     }];
-  }), [rows, visibleRows]);
+  }), [visibleRows]);
   const missingCoordinateCount = visibleRows.length - points.length;
   const drivers = references?.drivers ?? [];
   const vehicles = references?.vehicles ?? [];
@@ -743,10 +1014,14 @@ function DispatchWorkspace({
   const assignedSelectionCount = selectedOrders.filter((row) => row.assignmentStatus === 'ASSIGNED').length;
   const assignmentCandidates = selectedOrders.filter((row) => row.driverId !== selectedDriver?.id);
   const selectedDestinationSummary = selectedOrders.length === 0
-    ? '지도에서 배송지를 선택하세요.'
+    ? '지도 또는 목록에서 배송지를 선택하세요.'
     : selectedOrders.length === 1
       ? dispatchDestinationName(selectedOrders[0], references)
       : `${dispatchDestinationName(selectedOrders[0], references)} 외 ${selectedOrders.length - 1}곳`;
+
+  useEffect(() => {
+    setSearchDraft(search);
+  }, [search.destinationName, search.orderNumber]);
 
   useEffect(() => {
     setSelectedOrderIds((current) => {
@@ -797,19 +1072,55 @@ function DispatchWorkspace({
     setSelectionMode(false);
   }
 
-  function applyAreaSelection(): void {
-    if (selectionCoordinates.length < 3) {
+  function changeWorkspaceView(nextView: DispatchWorkspaceView): void {
+    if (nextView === workspaceView) return;
+    if (selectionMode) {
+      setSelectionCoordinates([]);
+      setSelectionMode(false);
+    }
+    setWorkspaceView(nextView);
+  }
+
+  function applySearch(): void {
+    const next = {
+      destinationName: searchDraft.destinationName.trim().replace(/\s+/gu, ' '),
+      orderNumber: searchDraft.orderNumber.trim().replace(/\s+/gu, ' '),
+    };
+    if (next.destinationName === search.destinationName && next.orderNumber === search.orderNumber) return;
+    onSearchChange(next);
+  }
+
+  function clearSearch(): void {
+    const empty = { destinationName: '', orderNumber: '' };
+    setSearchDraft(empty);
+    if (hasSearch) onSearchChange(empty);
+  }
+
+  const completeAreaSelection = useCallback((coordinates: Array<[number, number]>) => {
+    if (coordinates.length < 3) {
       setMutationError('지도에서 세 점 이상을 선택하세요.');
       return;
     }
     const matchedIds = visibleRows.flatMap((row) => {
       if (row.latitude === null || row.longitude === null) return [];
-      return pointInPolygon([row.longitude, row.latitude], selectionCoordinates) ? [row.sellerOrderId] : [];
+      return pointInPolygon([row.longitude, row.latitude], coordinates) ? [row.sellerOrderId] : [];
     });
     setSelectedOrderIds(matchedIds);
     setSelectionMode(false);
+    setSelectionCoordinates(coordinates);
     setMutationError(matchedIds.length === 0 ? '선택 영역 안에 배송지가 없습니다.' : '');
-  }
+  }, [visibleRows]);
+
+  const changeAreaSelection = useCallback((coordinates: Array<[number, number]>) => {
+    setSelectionCoordinates(coordinates);
+    if (selectionMode || coordinates.length < 3) return;
+    const matchedIds = visibleRows.flatMap((row) => {
+      if (row.latitude === null || row.longitude === null) return [];
+      return pointInPolygon([row.longitude, row.latitude], coordinates) ? [row.sellerOrderId] : [];
+    });
+    setSelectedOrderIds(matchedIds);
+    setMutationError(matchedIds.length === 0 ? '선택 영역 안에 배송지가 없습니다.' : '');
+  }, [selectionMode, visibleRows]);
 
   async function assignSelected(): Promise<void> {
     if (assignmentCandidates.length === 0 || selectedDriver === null || selectedVehicle === null || readOnly) return;
@@ -869,47 +1180,182 @@ function DispatchWorkspace({
         {departureControl}
       </div>
       <div className="dispatch-map-workspace">
-        <section className="dispatch-workspace-panel dispatch-map-panel" aria-label="지도">
+        <section className="dispatch-workspace-panel dispatch-map-panel" aria-label={workspaceView === 'MAP' ? '지도' : '목록'}>
           <div className="dispatch-map-header">
-            <AdminSectionHeader title="배차 지도" side={<span className="section-meta">좌표 {points.length}곳{missingCoordinateCount > 0 ? ` · 미확인 ${missingCoordinateCount}건` : ''}</span>} />
+            <AdminSectionHeader
+              title={workspaceView === 'MAP' ? '배차 지도' : '배차 목록'}
+              side={workspaceView === 'MAP'
+                ? <span className="section-meta">좌표 {points.length}곳{missingCoordinateCount > 0 ? ` · 미확인 ${missingCoordinateCount}건` : ''}</span>
+                : <span className="section-meta">{visibleRows.length}건</span>}
+            />
             <div className="dispatch-map-tools">
+              <div className="dispatch-view-switch" aria-label="배차 보기">
+                {([['MAP', '지도'], ['LIST', '목록']] as const).map(([value, label]) => (
+                  <button
+                    aria-pressed={workspaceView === value}
+                    className={workspaceView === value ? 'active' : ''}
+                    key={value}
+                    type="button"
+                    onClick={() => changeWorkspaceView(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="dispatch-filter" aria-label="배정 상태 필터">
                 {([['ALL', '전체'], ['UNASSIGNED', '미배정'], ['ASSIGNED', '배정']] as const).map(([value, label]) => (
                   <button className={filter === value ? 'active' : ''} key={value} type="button" onClick={() => setFilter(value)}>{label}</button>
                 ))}
               </div>
-              {!selectionMode ? (
-                <button className="btn dispatch-area-start" type="button" disabled={readOnly || points.length === 0} onClick={startAreaSelection}>영역 선택</button>
-              ) : (
-                <div className="dispatch-area-controls" aria-label="영역 선택 도구">
-                  <span>{selectionCoordinates.length}점</span>
-                  <button type="button" disabled={selectionCoordinates.length === 0} onClick={() => setSelectionCoordinates((current) => current.slice(0, -1))}>한 점 취소</button>
-                  <button type="button" onClick={cancelAreaSelection}>취소</button>
-                  <button className="primary" type="button" disabled={selectionCoordinates.length < 3} onClick={applyAreaSelection}>선택 적용</button>
-                </div>
-              )}
             </div>
           </div>
-          <div className="dispatch-map-surface">
-            <Suspense fallback={<div className="dispatch-map-loading" role="status">지도 준비 중</div>}>
-              <DispatchMapCanvas
-                ariaLabel="배차 배송지 지도"
-                departureLocation={departureLocation}
-                fitPoints
-                onMapPointAdd={addSelectionPoint}
-                onPointSelect={selectPoint}
-                points={points}
-                selectionCoordinates={selectionCoordinates}
-                selectionMode={selectionMode}
-                selectedPointIds={selectedOrderIds}
-                variant="embedded"
+          <form
+            className="dispatch-search-form"
+            aria-label="배차 검색"
+            onSubmit={(event) => {
+              event.preventDefault();
+              applySearch();
+            }}
+          >
+            <label>
+              <span>오더번호</span>
+              <input
+                aria-label="오더번호 검색"
+                maxLength={120}
+                placeholder="예: 123456"
+                type="search"
+                value={searchDraft.orderNumber}
+                onChange={(event) => setSearchDraft((current) => ({ ...current, orderNumber: event.target.value }))}
               />
-            </Suspense>
-            {selectionMode ? <div className="dispatch-map-guide" role="status">지도에 영역의 꼭짓점을 차례로 찍으세요.</div> : null}
-            {!loading && !error && points.length === 0 ? <div className="dispatch-map-message empty" role="status"><strong>표시할 배송지가 없습니다.</strong><span>주문을 업로드하거나 주소 좌표를 확인하세요.</span></div> : null}
-            {loading ? <div className="dispatch-map-message" role="status"><strong>배송지를 불러오는 중</strong></div> : null}
-            {error ? <div className="dispatch-map-message error" role="alert"><strong>배차 정보를 불러오지 못했습니다.</strong><span>{error}</span>{onRetry ? <button className="btn" type="button" onClick={onRetry}>다시 시도</button> : null}</div> : null}
-          </div>
+            </label>
+            <label>
+              <span>배송처</span>
+              <input
+                aria-label="배송처 검색"
+                maxLength={120}
+                placeholder="예: 강남세브란스"
+                type="search"
+                value={searchDraft.destinationName}
+                onChange={(event) => setSearchDraft((current) => ({ ...current, destinationName: event.target.value }))}
+              />
+            </label>
+            <div className="dispatch-search-actions">
+              <button className="btn primary" type="submit">검색</button>
+              <button
+                className="btn"
+                disabled={!hasSearch && searchDraft.destinationName === '' && searchDraft.orderNumber === ''}
+                type="button"
+                onClick={clearSearch}
+              >
+                초기화
+              </button>
+            </div>
+          </form>
+          {workspaceView === 'MAP' ? (
+            <div className="dispatch-map-surface">
+              <div className="dispatch-map-selection-tools">
+                {!selectionMode ? (
+                  <button className="btn dispatch-area-start" type="button" disabled={readOnly || points.length === 0} onClick={startAreaSelection}>영역 선택</button>
+                ) : (
+                  <div className="dispatch-area-controls" aria-label="영역 선택 도구">
+                    <span>선택 중 {selectionCoordinates.length}점</span>
+                    <button type="button" disabled={selectionCoordinates.length === 0} onClick={() => setSelectionCoordinates((current) => current.slice(0, -1))}>한 점 취소</button>
+                    <button type="button" onClick={cancelAreaSelection}>취소</button>
+                  </div>
+                )}
+              </div>
+              <Suspense fallback={<div className="dispatch-map-loading" role="status">지도 준비 중</div>}>
+                <DispatchMapCanvas
+                  ariaLabel="배차 배송지 지도"
+                  departureLocation={departureLocation}
+                  onMapPointAdd={addSelectionPoint}
+                  onPointSelect={selectPoint}
+                  onSelectionChange={changeAreaSelection}
+                  onSelectionComplete={completeAreaSelection}
+                  points={points}
+                  selectionCoordinates={selectionCoordinates}
+                  selectionMode={selectionMode}
+                  selectedPointIds={selectedOrderIds}
+                  showEveryPoint
+                  variant="embedded"
+                />
+              </Suspense>
+              {selectionMode ? <div className="dispatch-map-guide" role="status">세 점 이상 지정한 뒤 꼭짓점을 클릭해 닫으세요. 꼭짓점은 드래그해 옮길 수 있습니다.</div> : null}
+              {!loading && !error && points.length === 0 ? <div className="dispatch-map-message empty" role="status"><strong>표시할 배송지가 없습니다.</strong><span>주문을 업로드하거나 주소 좌표를 확인하세요.</span></div> : null}
+              {loading ? <div className="dispatch-map-message" role="status"><strong>배송지를 불러오는 중</strong></div> : null}
+              {error ? <div className="dispatch-map-message error" role="alert"><strong>배차 정보를 불러오지 못했습니다.</strong><span>{error}</span>{onRetry ? <button className="btn" type="button" onClick={onRetry}>다시 시도</button> : null}</div> : null}
+            </div>
+          ) : (
+            <div className="dispatch-order-table-wrap overlay-scroll">
+              <table className="dispatch-order-table">
+                <colgroup>
+                  <col className="select-column" />
+                  <col className="order-column" />
+                  <col className="destination-column" />
+                  <col className="address-column" />
+                  <col className="customer-column" />
+                  <col className="driver-column" />
+                  <col className="vehicle-column" />
+                  <col className="status-column" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th aria-label="선택" scope="col" />
+                    <th scope="col">주문</th>
+                    <th scope="col">배송처</th>
+                    <th scope="col">주소</th>
+                    <th scope="col">고객사</th>
+                    <th scope="col">배송원</th>
+                    <th scope="col">차량</th>
+                    <th scope="col">상태</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => {
+                    const destinationName = dispatchDestinationName(row, references);
+                    const driverName = row.driverId === null ? '-' : referenceName(drivers, row.driverId);
+                    const vehiclePlate = row.vehicleId === null ? '-' : vehicles.find((vehicle) => vehicle.id === row.vehicleId)?.plate ?? '정보 확인';
+                    return (
+                      <tr
+                        aria-selected={selectedIdSet.has(row.sellerOrderId)}
+                        className={selectedIdSet.has(row.sellerOrderId) ? 'selected' : ''}
+                        key={row.sellerOrderId}
+                        onClick={() => selectPoint(row.sellerOrderId)}
+                      >
+                        <td onClick={(event) => event.stopPropagation()}>
+                          <input
+                            aria-label={`${destinationName} 선택`}
+                            checked={selectedIdSet.has(row.sellerOrderId)}
+                            type="checkbox"
+                            onChange={() => selectPoint(row.sellerOrderId)}
+                          />
+                        </td>
+                        <td title={row.sellerOrderKey}><strong>{row.sellerOrderKey}</strong></td>
+                        <td title={destinationName}>{destinationName}</td>
+                        <td title={row.destinationAddress ?? ''}>{row.destinationAddress || '주소 확인 필요'}</td>
+                        <td title={dispatchCustomerName(row, references)}>{dispatchCustomerName(row, references)}</td>
+                        <td title={driverName}>{driverName}</td>
+                        <td title={vehiclePlate}>{vehiclePlate}</td>
+                        <td>{row.assignmentStatus === 'ASSIGNED' ? '배정' : '미배정'}</td>
+                      </tr>
+                    );
+                  })}
+                  {!loading && !error && visibleRows.length === 0 ? (
+                    <tr className="dispatch-order-empty-row">
+                      <td colSpan={8}>
+                        <div className="dispatch-order-empty" role="status">
+                          <strong>배차 없음</strong>
+                          <span>{rows.length === 0 ? hasSearch ? '검색 조건에 맞는 주문이 없습니다.' : '등록된 주문이 없습니다.' : '선택한 상태의 주문이 없습니다.'}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+              {loading ? <div className="dispatch-list-message" role="status">배송지를 불러오는 중</div> : null}
+              {error ? <div className="dispatch-list-message error" role="alert"><strong>배차 정보를 불러오지 못했습니다.</strong><span>{error}</span>{onRetry ? <button className="btn" type="button" onClick={onRetry}>다시 시도</button> : null}</div> : null}
+            </div>
+          )}
         </section>
 
         <section className="dispatch-workspace-panel dispatch-drivers-panel" aria-label="배송원">
@@ -951,7 +1397,7 @@ function DispatchWorkspace({
               <strong>{selectedOrders.length}곳</strong>
               <small>{selectedDestinationSummary}</small>
             </div>
-            {selectedOrders.length > 0 ? <button className="dispatch-selection-clear" type="button" onClick={clearSelection}>선택 지우기</button> : null}
+            {selectedOrders.length > 0 || selectionCoordinates.length > 0 ? <button className="dispatch-selection-clear" type="button" onClick={clearSelection}>선택 지우기</button> : null}
             {selectedDriver !== null && selectedVehicle === null ? <p role="alert">선택한 배송원에 배정된 차량이 없습니다.</p> : null}
             {mutationError ? <p role="alert">{mutationError}</p> : null}
             <div>
@@ -1044,14 +1490,13 @@ function uploadIssueMessage(issue: DispatchImportIssue): string {
   return issue.message;
 }
 
-function uploadIssues(preview: DispatchImportPreview | null, sheet: DispatchFileParseResult['sheet'] | null): Array<{
-  columnIndex: number | null;
-  issue: DispatchImportIssue;
-  rowNumber: number;
-}> {
+function uploadIssues(
+  preview: DispatchImportPreview | null,
+  sheet: DispatchFileParseResult['sheet'] | null,
+): UploadIssueEntry[] {
   if (preview === null) return [];
   const entries = preview.rows.flatMap((row) => row.issues.map((issue) => ({
-    columnIndex: uploadIssueColumn(sheet, issue.field),
+    columnIndex: uploadIssueColumn(sheet, issue),
     issue,
     rowNumber: row.rowNumber,
   })));
@@ -1063,9 +1508,18 @@ function uploadIssues(preview: DispatchImportPreview | null, sheet: DispatchFile
 
 function uploadIssueColumn(
   sheet: DispatchFileParseResult['sheet'] | null,
-  field: DispatchImportIssue['field'],
+  issue: DispatchImportIssue,
 ): number | null {
-  if (sheet === null || field === 'row') return null;
+  const field = issue.field === 'row' && isAddressIssue(issue.code) ? 'address' : issue.field;
+  if (field === 'row') return null;
+  return uploadFieldColumn(sheet, field);
+}
+
+function uploadFieldColumn(
+  sheet: DispatchFileParseResult['sheet'] | null,
+  field: keyof DispatchImportRow,
+): number | null {
+  if (sheet === null) return null;
   const headers: Partial<Record<keyof DispatchImportRow, string[]>> = {
     address: ['주소'],
     addressResolutionStatus: ['주소'],
@@ -1091,6 +1545,27 @@ function uploadIssueColumn(
   return columnIndex < 0 ? null : columnIndex;
 }
 
+function uploadAddressSuggestions(
+  preview: DispatchImportPreview | null,
+  entry: UploadIssueEntry,
+): DispatchAddressSuggestion[] {
+  if (preview === null || entry.issue.code !== 'ADDRESS_NOT_FOUND') return [];
+  return preview.rows.find((row) => row.rowNumber === entry.rowNumber)?.addressSuggestions ?? [];
+}
+
+function formatAddressSuggestion(suggestion: DispatchAddressSuggestion): string {
+  const detailAddress = suggestion.detailAddress?.trim();
+  return detailAddress ? `${suggestion.address}, ${detailAddress}` : suggestion.address;
+}
+
+function isAddressIssue(code: string): boolean {
+  return code === 'ADDRESS_AMBIGUOUS'
+    || code === 'ADDRESS_NOT_FOUND'
+    || code === 'ADDRESS_ONLY'
+    || code === 'ADDRESS_SERVICE_UNAVAILABLE'
+    || code === 'LOCATION_NOT_RESOLVED';
+}
+
 function uploadResourceCandidates(
   preview: DispatchImportPreview | null,
   issueCodes: string[],
@@ -1105,6 +1580,10 @@ function uploadResourceCandidates(
 
 function dispatchDestinationName(row: DispatchListItem, references: ManagementData | null): string {
   return row.destinationDisplayName || referenceName(references?.destinations, row.destinationId);
+}
+
+function dispatchCustomerName(row: DispatchListItem, references: ManagementData | null): string {
+  return references?.customers.find((customer) => customer.id === row.customerId)?.name ?? row.customerId;
 }
 
 function referenceName(items: Array<{ id: string; name: string }> | undefined, id: string | null): string {

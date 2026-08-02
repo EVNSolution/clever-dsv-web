@@ -9,20 +9,27 @@ import {
   createDepartureMarkerElement,
 } from './DepartureMarker';
 import type { DepartureLocation } from './DepartureMarker';
+import { updateDestinationMarkers } from './map/DestinationMarkers';
+import { updateOperationalRoutes } from './map/OperationalRoutes';
+import { updateVehicleMarkers } from './map/VehicleMarkers';
 
 type MapCanvasProps = {
   ariaLabel: string;
   departureLocation?: DepartureLocation | null;
-  fitPoints?: boolean;
   onMapPointAdd?: (coordinate: MapCanvasCoordinate) => void;
   onReady?: () => void;
   onPointSelect?: (pointId: string) => void;
+  onSelectionChange?: (coordinates: MapCanvasCoordinate[]) => void;
+  onSelectionComplete?: (coordinates: MapCanvasCoordinate[]) => void;
   points?: MapCanvasPoint[];
   selectionCoordinates?: MapCanvasCoordinate[];
   selectionMode?: boolean;
   selectedPointId?: string;
   selectedPointIds?: string[];
+  routes?: MapCanvasRoute[];
+  showEveryPoint?: boolean;
   variant?: 'embedded' | 'fullscreen';
+  vehicles?: MapCanvasVehiclePoint[];
 };
 
 export type { DepartureLocation } from './DepartureMarker';
@@ -30,11 +37,27 @@ export type { DepartureLocation } from './DepartureMarker';
 export type MapCanvasCoordinate = [longitude: number, latitude: number];
 
 export type MapCanvasPoint = {
+  color?: string;
+  id: string;
+  label?: string;
+  latitude: number;
+  longitude: number;
+  sortOrder?: number;
+  tone?: 'assigned' | 'unassigned';
+};
+
+export type MapCanvasRoute = {
+  color: string;
+  coordinates: MapCanvasCoordinate[];
+  id: string;
+  selected?: boolean;
+};
+
+export type MapCanvasVehiclePoint = {
   id: string;
   label: string;
   latitude: number;
   longitude: number;
-  tone?: 'assigned' | 'unassigned';
 };
 
 type MapLoadState =
@@ -48,28 +71,39 @@ const initialMapLoadTimeoutMs = 15_000;
 export function MapCanvas({
   ariaLabel,
   departureLocation = null,
-  fitPoints = false,
   onMapPointAdd,
   onReady,
   onPointSelect,
+  onSelectionChange,
+  onSelectionComplete,
   points = [],
   selectionCoordinates = [],
   selectionMode = false,
   selectedPointId,
   selectedPointIds = [],
+  routes = [],
+  showEveryPoint = false,
   variant = 'fullscreen',
+  vehicles = [],
 }: MapCanvasProps): ReactElement {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<maplibregl.Map | null>(null);
   const departureMarkerRef = useRef<maplibregl.Marker | null>(null);
-  const pointMarkersRef = useRef<maplibregl.Marker[]>([]);
   const onReadyRef = useRef(onReady);
   const onMapPointAddRef = useRef(onMapPointAdd);
+  const onPointSelectRef = useRef(onPointSelect);
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  const onSelectionCompleteRef = useRef(onSelectionComplete);
+  const selectionCoordinatesRef = useRef(selectionCoordinates);
   const readyNotifiedRef = useRef(false);
   const [loadState, setLoadState] = useState<MapLoadState>({ status: 'preview' });
   const [loadAttempt, setLoadAttempt] = useState(0);
   onReadyRef.current = onReady;
   onMapPointAddRef.current = onMapPointAdd;
+  onPointSelectRef.current = onPointSelect;
+  onSelectionChangeRef.current = onSelectionChange;
+  onSelectionCompleteRef.current = onSelectionComplete;
+  selectionCoordinatesRef.current = selectionCoordinates;
 
   useEffect(() => {
     if (!mapRef.current) return undefined;
@@ -145,8 +179,6 @@ export function MapCanvas({
       if (initialLoadTimeout !== undefined) window.clearTimeout(initialLoadTimeout);
       departureMarkerRef.current?.remove();
       departureMarkerRef.current = null;
-      pointMarkersRef.current.forEach((marker) => marker.remove());
-      pointMarkersRef.current = [];
       mapInstanceRef.current = null;
       delete (window as typeof window & { dsvMap?: maplibregl.Map }).dsvMap;
       map?.remove();
@@ -185,52 +217,24 @@ export function MapCanvas({
   }, [departureLocation, loadState.status]);
 
   useEffect(() => {
-    pointMarkersRef.current.forEach((marker) => marker.remove());
-    pointMarkersRef.current = [];
     const map = mapInstanceRef.current;
     if (!map || (loadState.status !== 'revealing' && loadState.status !== 'ready')) return;
     const selectedIds = new Set(selectedPointIds);
     if (selectedPointId !== undefined) selectedIds.add(selectedPointId);
-    pointMarkersRef.current = points.map((point) => {
-      const element = document.createElement('button');
-      element.type = 'button';
-      element.className = `dispatch-map-marker ${point.tone ?? 'unassigned'}${selectedIds.has(point.id) ? ' selected' : ''}`;
-      element.textContent = point.label;
-      element.setAttribute('aria-label', `${point.label} 배송지`);
-      element.addEventListener('click', (event) => {
-        event.stopPropagation();
-        onPointSelect?.(point.id);
-      });
-      return new maplibregl.Marker({ anchor: 'center', element })
-        .setLngLat([point.longitude, point.latitude])
-        .addTo(map);
-    });
-    const fitCoordinates: MapCanvasCoordinate[] = points.map((point) => [
-      point.longitude,
-      point.latitude,
-    ]);
-    if (departureLocation) {
-      fitCoordinates.push([
-        departureLocation.longitude,
-        departureLocation.latitude,
-      ]);
-    }
-    if (fitPoints && fitCoordinates.length > 0) {
-      if (fitCoordinates.length === 1) {
-        map.jumpTo({ center: fitCoordinates[0], zoom: 11 });
-      } else {
-        const bounds = fitCoordinates.reduce(
-          (current, coordinate) => current.extend(coordinate),
-          new maplibregl.LngLatBounds(),
-        );
-        map.fitBounds(bounds, { duration: 0, maxZoom: 13, padding: 54 });
-      }
-    }
-    return () => {
-      pointMarkersRef.current.forEach((marker) => marker.remove());
-      pointMarkersRef.current = [];
-    };
-  }, [departureLocation, fitPoints, loadState.status, onPointSelect, points, selectedPointId, selectedPointIds]);
+    updateDestinationMarkers(map, points, selectedIds, showEveryPoint, (pointId) => onPointSelectRef.current?.(pointId));
+  }, [loadState.status, points, selectedPointId, selectedPointIds, showEveryPoint]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || (loadState.status !== 'revealing' && loadState.status !== 'ready')) return;
+    updateOperationalRoutes(map, routes);
+  }, [loadState.status, routes]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || (loadState.status !== 'revealing' && loadState.status !== 'ready')) return;
+    void updateVehicleMarkers(map, vehicles).catch(() => undefined);
+  }, [loadState.status, vehicles]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -275,9 +279,9 @@ export function MapCanvas({
       filter: ['==', '$type', 'Point'],
       paint: {
         'circle-color': '#ffffff',
-        'circle-radius': 4,
+        'circle-radius': 6,
         'circle-stroke-color': '#0066cc',
-        'circle-stroke-width': 2,
+        'circle-stroke-width': 2.5,
       },
     });
   }, [loadState.status, selectionCoordinates]);
@@ -288,15 +292,121 @@ export function MapCanvas({
     const canvas = map.getCanvas();
     canvas.style.cursor = selectionMode ? 'crosshair' : '';
     if (!selectionMode) return;
-    const handleClick = (event: maplibregl.MapMouseEvent) => {
-      onMapPointAddRef.current?.([event.lngLat.lng, event.lngLat.lat]);
+    const vertexLayerId = 'dispatch-selection-vertices';
+    const appendSelectionPoint = (coordinate: MapCanvasCoordinate) => {
+      if (onSelectionChangeRef.current === undefined) {
+        onMapPointAddRef.current?.(coordinate);
+        return;
+      }
+      const nextCoordinates = [...selectionCoordinatesRef.current, coordinate];
+      selectionCoordinatesRef.current = nextCoordinates;
+      onSelectionChangeRef.current(nextCoordinates);
     };
+    const handleClick = (event: maplibregl.MapMouseEvent) => {
+      if (
+        map.getLayer(vertexLayerId)
+        && map.queryRenderedFeatures(event.point, { layers: [vertexLayerId] }).length > 0
+      ) return;
+      if (event.originalEvent.detail > 1) return;
+      appendSelectionPoint([event.lngLat.lng, event.lngLat.lat]);
+    };
+    const handleDoubleClick = (event: maplibregl.MapMouseEvent) => {
+      event.preventDefault();
+      const coordinate: MapCanvasCoordinate = [event.lngLat.lng, event.lngLat.lat];
+      const lastCoordinate = selectionCoordinatesRef.current.at(-1);
+      const completedCoordinates = lastCoordinate !== undefined && coordinatesAreClose(lastCoordinate, coordinate)
+        ? [...selectionCoordinatesRef.current]
+        : [...selectionCoordinatesRef.current, coordinate];
+      if (completedCoordinates.length < 3) return;
+      selectionCoordinatesRef.current = completedCoordinates;
+      onSelectionChangeRef.current?.(completedCoordinates);
+      onSelectionCompleteRef.current?.(completedCoordinates);
+    };
+    const wasDoubleClickZoomEnabled = map.doubleClickZoom.isEnabled();
+    map.doubleClickZoom.disable();
     map.on('click', handleClick);
+    map.on('dblclick', handleDoubleClick);
     return () => {
       canvas.style.cursor = '';
+      if (wasDoubleClickZoomEnabled) map.doubleClickZoom.enable();
       map.off('click', handleClick);
+      map.off('dblclick', handleDoubleClick);
     };
   }, [loadState.status, selectionMode]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || selectionCoordinatesRef.current.length === 0 || loadState.status !== 'ready') return;
+    const vertexLayerId = 'dispatch-selection-vertices';
+    if (!map.getLayer(vertexLayerId)) return;
+    let draggedVertexIndex: number | null = null;
+    let dragPanWasEnabled = false;
+    let ignoreVertexClickUntil = 0;
+
+    const startDrag = (event: maplibregl.MapLayerMouseEvent | maplibregl.MapLayerTouchEvent) => {
+      const vertexIndex = Number(event.features?.[0]?.properties?.vertexIndex);
+      if (!Number.isInteger(vertexIndex)) return;
+      draggedVertexIndex = vertexIndex;
+      dragPanWasEnabled = map.dragPan.isEnabled();
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = 'grabbing';
+      event.preventDefault();
+    };
+    const moveDrag = (event: maplibregl.MapMouseEvent | maplibregl.MapTouchEvent) => {
+      if (draggedVertexIndex === null) return;
+      ignoreVertexClickUntil = window.performance.now() + 200;
+      const nextCoordinates = selectionCoordinatesRef.current.map((coordinate, index) => (
+        index === draggedVertexIndex
+          ? [event.lngLat.lng, event.lngLat.lat] as MapCanvasCoordinate
+          : coordinate
+      ));
+      selectionCoordinatesRef.current = nextCoordinates;
+      onSelectionChangeRef.current?.(nextCoordinates);
+    };
+    const finishDrag = () => {
+      if (draggedVertexIndex === null) return;
+      draggedVertexIndex = null;
+      if (dragPanWasEnabled) map.dragPan.enable();
+      map.getCanvas().style.cursor = selectionMode ? 'crosshair' : 'grab';
+    };
+    const finishSelection = (event: maplibregl.MapLayerMouseEvent) => {
+      if (!selectionMode) return;
+      event.preventDefault();
+      if (window.performance.now() < ignoreVertexClickUntil) return;
+      if (selectionCoordinatesRef.current.length >= 3) {
+        onSelectionCompleteRef.current?.([...selectionCoordinatesRef.current]);
+      }
+    };
+    const showGrabCursor = () => {
+      if (draggedVertexIndex === null) map.getCanvas().style.cursor = 'grab';
+    };
+    const restoreSelectionCursor = () => {
+      if (draggedVertexIndex === null) map.getCanvas().style.cursor = selectionMode ? 'crosshair' : '';
+    };
+
+    map.on('mousedown', vertexLayerId, startDrag);
+    map.on('touchstart', vertexLayerId, startDrag);
+    map.on('mousemove', moveDrag);
+    map.on('touchmove', moveDrag);
+    map.on('mouseup', finishDrag);
+    map.on('touchend', finishDrag);
+    map.on('click', vertexLayerId, finishSelection);
+    map.on('mouseenter', vertexLayerId, showGrabCursor);
+    map.on('mouseleave', vertexLayerId, restoreSelectionCursor);
+    return () => {
+      if (dragPanWasEnabled) map.dragPan.enable();
+      map.getCanvas().style.cursor = '';
+      map.off('mousedown', vertexLayerId, startDrag);
+      map.off('touchstart', vertexLayerId, startDrag);
+      map.off('mousemove', moveDrag);
+      map.off('touchmove', moveDrag);
+      map.off('mouseup', finishDrag);
+      map.off('touchend', finishDrag);
+      map.off('click', vertexLayerId, finishSelection);
+      map.off('mouseenter', vertexLayerId, showGrabCursor);
+      map.off('mouseleave', vertexLayerId, restoreSelectionCursor);
+    };
+  }, [loadState.status, selectionCoordinates.length, selectionMode]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -357,9 +467,9 @@ export function MapCanvas({
 }
 
 function selectionFeatures(coordinates: MapCanvasCoordinate[]): Feature[] {
-  const vertices: Feature[] = coordinates.map((coordinate) => ({
+  const vertices: Feature[] = coordinates.map((coordinate, vertexIndex) => ({
     type: 'Feature',
-    properties: {},
+    properties: { vertexIndex },
     geometry: { type: 'Point', coordinates: coordinate },
   }));
   if (coordinates.length < 2) return vertices;
@@ -375,4 +485,8 @@ function selectionFeatures(coordinates: MapCanvasCoordinate[]): Feature[] {
     geometry: { type: 'Polygon', coordinates: [[...coordinates, coordinates[0]]] },
   };
   return [polygon, ...vertices];
+}
+
+function coordinatesAreClose(left: MapCanvasCoordinate, right: MapCanvasCoordinate): boolean {
+  return Math.abs(left[0] - right[0]) < 0.000001 && Math.abs(left[1] - right[1]) < 0.000001;
 }

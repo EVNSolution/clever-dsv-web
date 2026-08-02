@@ -1,17 +1,36 @@
 import { requestV1ReadJson } from '../api/client';
 
 export type DeliveryEventSummary = {
+  driverDisplayName?: string;
+  eventId: string;
+  latitude?: number;
+  longitude?: number;
   type: string;
   occurredAt: string;
 };
 
+export type DeliveryProof = {
+  contentType: string;
+  driverDisplayName?: string;
+  kind: string;
+  originalFilename?: string;
+  proofId: string;
+  sizeBytes: number;
+  source: string;
+  status: 'AVAILABLE' | 'EXPIRED';
+  uploadedAt: string;
+};
+
 export type DeliverySummary = {
+  sellerOrderId: string;
   sellerOrderKey: string;
+  destinationAddress?: string;
   destinationDisplayName: string;
   deliveryStatus: string;
   etaStatus: string;
   estimatedArrivalAt?: string;
   proofStatus: string;
+  proofs: DeliveryProof[];
   eventSummary: DeliveryEventSummary[];
 };
 
@@ -37,25 +56,72 @@ export async function loadRemoteRecords(signal?: AbortSignal): Promise<RemoteRec
 }
 
 export function deliverySummaryFrom(value: unknown): DeliverySummary {
-  if (!hasOnlyKeys(value, ['sellerOrderKey', 'destinationDisplayName', 'deliveryStatus', 'etaStatus', 'estimatedArrivalAt', 'proofStatus', 'eventSummary'])) {
+  if (!hasOnlyKeys(value, [
+    'sellerOrderId',
+    'sellerOrderKey',
+    'destinationAddress',
+    'destinationDisplayName',
+    'deliveryStatus',
+    'etaStatus',
+    'estimatedArrivalAt',
+    'proofStatus',
+    'proofs',
+    'eventSummary',
+  ])) {
     throw new Error('배송 요약 응답 형식이 올바르지 않습니다.');
   }
   return {
+    sellerOrderId: requiredString(value, 'sellerOrderId'),
     sellerOrderKey: requiredString(value, 'sellerOrderKey'),
+    destinationAddress: optionalString(value, 'destinationAddress'),
     destinationDisplayName: requiredString(value, 'destinationDisplayName'),
     deliveryStatus: requiredString(value, 'deliveryStatus'),
     etaStatus: requiredString(value, 'etaStatus'),
     estimatedArrivalAt: optionalString(value, 'estimatedArrivalAt'),
     proofStatus: requiredString(value, 'proofStatus'),
+    proofs: requiredArray(value, 'proofs').map(proofFrom),
     eventSummary: requiredArray(value, 'eventSummary').map(eventSummaryFrom),
   };
 }
 
 function eventSummaryFrom(value: unknown): DeliveryEventSummary {
-  if (!hasOnlyKeys(value, ['type', 'occurredAt'])) throw new Error('배송 이벤트 요약 응답 형식이 올바르지 않습니다.');
+  if (!hasOnlyKeys(value, ['driverDisplayName', 'eventId', 'latitude', 'longitude', 'type', 'occurredAt'])) {
+    throw new Error('배송 이벤트 요약 응답 형식이 올바르지 않습니다.');
+  }
   return {
+    driverDisplayName: optionalString(value, 'driverDisplayName'),
+    eventId: requiredString(value, 'eventId'),
+    latitude: optionalNumber(value, 'latitude'),
+    longitude: optionalNumber(value, 'longitude'),
     type: requiredString(value, 'type'),
     occurredAt: requiredString(value, 'occurredAt'),
+  };
+}
+
+function proofFrom(value: unknown): DeliveryProof {
+  if (!hasOnlyKeys(value, [
+    'contentType',
+    'driverDisplayName',
+    'kind',
+    'originalFilename',
+    'proofId',
+    'sizeBytes',
+    'source',
+    'status',
+    'uploadedAt',
+  ])) throw new Error('배송 증빙 응답 형식이 올바르지 않습니다.');
+  const status = requiredString(value, 'status');
+  if (status !== 'AVAILABLE' && status !== 'EXPIRED') throw new Error('배송 증빙 상태가 올바르지 않습니다.');
+  return {
+    contentType: requiredString(value, 'contentType'),
+    driverDisplayName: optionalString(value, 'driverDisplayName'),
+    kind: requiredString(value, 'kind'),
+    originalFilename: optionalString(value, 'originalFilename'),
+    proofId: requiredString(value, 'proofId'),
+    sizeBytes: requiredNumber(value, 'sizeBytes'),
+    source: requiredString(value, 'source'),
+    status,
+    uploadedAt: requiredString(value, 'uploadedAt'),
   };
 }
 
@@ -91,6 +157,19 @@ function optionalBoolean(source: Record<string, unknown>, key: string): boolean 
   const value = source[key];
   if (value === undefined) return undefined;
   if (typeof value !== 'boolean') throw new Error(`${key} 필드 형식이 올바르지 않습니다.`);
+  return value;
+}
+
+function requiredNumber(source: Record<string, unknown>, key: string): number {
+  const value = source[key];
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${key} 필드 형식이 올바르지 않습니다.`);
+  return value;
+}
+
+function optionalNumber(source: Record<string, unknown>, key: string): number | undefined {
+  const value = source[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${key} 필드 형식이 올바르지 않습니다.`);
   return value;
 }
 

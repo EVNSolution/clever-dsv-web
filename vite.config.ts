@@ -8,7 +8,23 @@ export default defineConfig(({ mode }) => {
     ? { '/api/dsv': { changeOrigin: true, target: env.VITE_DSV_API_PROXY_TARGET } }
     : undefined;
   return {
-    build: { manifest: true },
+    build: {
+      manifest: true,
+      rollupOptions: {
+        output: {
+          assetFileNames: 'assets/[name]-[hash][extname]',
+          chunkFileNames: 'assets/[name]-[hash].js',
+          entryFileNames: 'assets/[name]-[hash].js',
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('/maplibre-gl/')) return 'maplibre';
+            if (id.includes('/xlsx/')) return 'xlsx';
+            if (id.includes('/react/') || id.includes('/react-dom/')) return 'react';
+            return undefined;
+          },
+        },
+      },
+    },
     plugins: [react()],
     preview: { proxy },
     server: { proxy },

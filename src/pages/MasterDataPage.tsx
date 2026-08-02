@@ -1,6 +1,6 @@
 import type { FormEvent, ReactElement } from 'react';
 import { useEffect, useState } from 'react';
-import { customerDeliveryPath } from '../app-routes';
+import { adminCustomerDeliveryPath } from '../app-routes';
 import { apiConfig } from '../api/config';
 import {
   AdminSectionHeader,
@@ -9,6 +9,7 @@ import {
   ManagementEmptyState,
   ManagementFormActions,
   ManagementListActions,
+  ManagementSelectionClear,
 } from '../components/AdminUi';
 import type { ManagementData } from '../demo/management';
 import { addressSimilarity, loadManagementData, managementId } from '../demo/management';
@@ -83,7 +84,7 @@ export function MasterDataPage(): ReactElement {
   if (!shouldShowRemoteState) {
     switch (scope) {
       case 'resources':
-        content = <ResourcesPage data={data} />;
+        content = <ResourcesPage data={data} onChange={updateData} />;
         break;
       case 'network':
         content = <NetworkMaster data={data} onChange={updateData} />;
@@ -108,11 +109,15 @@ export function MasterDataPage(): ReactElement {
 
 function NetworkMaster({ data, onChange }: { data: ManagementData; onChange: (data: ManagementData) => Promise<void> }): ReactElement {
   const isRemote = apiConfig.mode === 'remote';
-  const [selectedCustomerId, setSelectedCustomerId] = useState(data.customers[0]?.id ?? '');
-  const customer = data.customers.find((item) => item.id === selectedCustomerId) ?? data.customers[0];
-  const destinations = isRemote ? data.destinations : data.destinations.filter((item) => item.customerId === customer?.id);
-  const [selectedDestinationId, setSelectedDestinationId] = useState(destinations[0]?.id ?? '');
-  const selected = destinations.find((item) => item.id === selectedDestinationId) ?? destinations[0];
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const customer = data.customers.find((item) => item.id === selectedCustomerId);
+  const destinations = isRemote
+    ? data.destinations
+    : customer
+      ? data.destinations.filter((item) => item.customerId === customer.id)
+      : [];
+  const [selectedDestinationId, setSelectedDestinationId] = useState('');
+  const selected = destinations.find((item) => item.id === selectedDestinationId);
   const [editor, setEditor] = useState<NetworkEditor>(null);
   const [addressDraft, setAddressDraft] = useState('');
   const customerOrders = !isRemote && customer ? getCustomerOrders(customer.id) : [];
@@ -123,8 +128,13 @@ function NetworkMaster({ data, onChange }: { data: ManagementData; onChange: (da
     .sort((left, right) => right.score - left.score) : [];
 
   const selectCustomer = (customerId: string) => {
-    setSelectedCustomerId(customerId);
-    setSelectedDestinationId(isRemote ? (data.destinations[0]?.id ?? '') : (data.destinations.find((item) => item.customerId === customerId)?.id ?? ''));
+    const nextId = selectedCustomerId === customerId ? '' : customerId;
+    setSelectedCustomerId(nextId);
+    setSelectedDestinationId('');
+    setEditor(null);
+  };
+  const selectDestination = (destinationId: string) => {
+    setSelectedDestinationId((current) => current === destinationId ? '' : destinationId);
     setEditor(null);
   };
   const openDestinationEditor = (id?: string) => {
@@ -137,30 +147,27 @@ function NetworkMaster({ data, onChange }: { data: ManagementData; onChange: (da
     const removedDestinationIds = new Set(data.destinations.filter((item) => item.customerId === customer.id).map((item) => item.id));
     const remainingDestinations = data.destinations.filter((item) => item.customerId !== customer.id).map((item) => item.sameAsId && removedDestinationIds.has(item.sameAsId) ? { ...item, sameAsId: undefined } : item);
     void onChange({ ...data, customers, destinations: remainingDestinations }).catch(() => undefined);
-    setSelectedCustomerId(customers[0]?.id ?? ''); setSelectedDestinationId(''); setEditor(null);
+    setSelectedCustomerId(''); setSelectedDestinationId(''); setEditor(null);
   };
   const removeDestination = () => {
     if (!selected || !window.confirm(`${selected.name} 배송지를 영구 삭제합니다.`)) return;
-    const next = destinations.filter((item) => item.id !== selected.id);
     void onChange({ ...data, destinations: data.destinations.filter((item) => item.id !== selected.id).map((item) => item.sameAsId === selected.id ? { ...item, sameAsId: undefined } : item) }).catch(() => undefined);
-    setSelectedDestinationId(next[0]?.id ?? ''); setEditor(null);
+    setSelectedDestinationId(''); setEditor(null);
   };
 
   return (
-    <div className="page-grid master-network-grid">
-      <div className="management-entity-column">
+    <div className="management-network-shell">
+      <div className={`resource-workspace ${customer ? 'has-selection' : 'is-idle'}`} aria-label="고객사 관리">
         <section className="page-panel management-list-panel" aria-label="고객사 목록">
           <AdminSectionHeader
-            title="고객사"
-            side={isRemote
-              ? <span className="section-meta">원격 읽기 전용</span>
-              : <ManagementListActions name="고객사" canDelete={!!customer} onCreate={() => setEditor({ kind: 'customer' })} onDelete={removeCustomer} />}
+            title="고객사 리스트"
+            side={<span className="management-heading-side"><span className="section-meta">{data.customers.length}곳</span><ManagementListActions name="고객사" canDelete={!!customer} disabled={isRemote} onCreate={() => setEditor({ kind: 'customer' })} onDelete={removeCustomer} /></span>}
           />
           <AdminTableFrame>
             <table className="page-table master-customer-table"><thead><tr><th>고객사</th><th>고객 코드</th><th>Order</th><th>배송조회</th></tr></thead><tbody>
               {data.customers.map((item) => {
                 const orders = isRemote ? [] : getCustomerOrders(item.id);
-                return <tr className={item.id === customer?.id ? 'active' : ''} key={item.id} tabIndex={0} onClick={() => selectCustomer(item.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectCustomer(item.id); }}><td><strong>{item.name}</strong></td><td>{item.billingCode || unavailable(isRemote)}</td><td>{orders.length}건</td><td>{orders.length ? <a className="master-customer-link" href={`${customerDeliveryPath}?customer=${encodeURIComponent(item.id)}`} aria-label={`${item.name} 배송조회`} onClick={(event) => event.stopPropagation()}>배송조회</a> : '-'}</td></tr>;
+                return <tr className={item.id === customer?.id ? 'active' : ''} key={item.id} tabIndex={0} onClick={() => selectCustomer(item.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectCustomer(item.id); }}><td><strong>{item.name}</strong></td><td>{item.billingCode || unavailable(isRemote)}</td><td>{orders.length}건</td><td>{orders.length ? <a className="master-customer-link" href={`${adminCustomerDeliveryPath}?customer=${encodeURIComponent(item.id)}`} aria-label={`${item.name} 배송조회`} onClick={(event) => event.stopPropagation()}>배송조회</a> : '-'}</td></tr>;
               })}
             </tbody></table>
             {!data.customers.length ? <EmptyState label="고객사를 등록하세요." /> : null}
@@ -173,23 +180,21 @@ function NetworkMaster({ data, onChange }: { data: ManagementData; onChange: (da
           }} /> : <>
             <AdminSectionHeader
               title="고객사 상세"
-              side={customer ? <span className="management-heading-side"><span className="section-meta">{customerOrders.length}건 Order</span>{!isRemote ? <ManagementDetailAction name="고객사" onEdit={() => setEditor({ kind: 'customer', id: customer.id })} /> : null}</span> : undefined}
+              side={customer ? <span className="management-heading-side"><span className="section-meta">{customerOrders.length}건 Order</span><ManagementDetailAction name="고객사" disabled={isRemote} onEdit={() => setEditor({ kind: 'customer', id: customer.id })} /><ManagementSelectionClear onClick={() => selectCustomer(customer.id)} /></span> : undefined}
             />
-            {customer ? <div className="master-detail-grid"><dl><dt>고객사</dt><dd>{customer.name}</dd><dt>고객 코드</dt><dd>{customer.billingCode || unavailable(isRemote)}</dd></dl><div><strong>배송지</strong><p>{destinations.length}곳 등록</p></div></div> : <EmptyState label="고객사를 등록하세요." />}
+            {customer ? <div className="master-detail-grid"><dl><dt>고객사</dt><dd>{customer.name}</dd><dt>고객 코드</dt><dd>{customer.billingCode || unavailable(isRemote)}</dd></dl><div><strong>배송지</strong><p>{destinations.length}곳 등록</p></div></div> : <EmptyState label="고객사를 선택하면 상세 정보를 확인할 수 있습니다." />}
           </>}
         </section>
       </div>
-      <div className="management-entity-column">
+      <div className={`resource-workspace ${selected ? 'has-selection' : 'is-idle'}`} aria-label="배송지 관리">
         <section className="page-panel management-list-panel master-destination-panel" aria-label="배송지 목록">
           <AdminSectionHeader
-            title="배송지"
-            side={isRemote
-              ? <span className="section-meta">고객사 연결 미제공</span>
-              : <ManagementListActions name="배송지" canDelete={!!selected} onCreate={() => openDestinationEditor()} onDelete={removeDestination} />}
+            title="배송지 리스트"
+            side={<span className="management-heading-side"><span className="section-meta">{destinations.length}곳</span><ManagementListActions name="배송지" canDelete={!!selected} disabled={isRemote || !customer} onCreate={() => openDestinationEditor()} onDelete={removeDestination} /></span>}
           />
           <AdminTableFrame>
             <table className="page-table master-destination-table"><thead><tr><th>배송지</th><th>주소</th><th>동일 주소</th></tr></thead><tbody>
-              {destinations.map((item) => <tr className={item.id === selected?.id ? 'active' : ''} key={item.id} tabIndex={0} onClick={() => { setSelectedDestinationId(item.id); setEditor(null); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedDestinationId(item.id); }}><td>{item.name}</td><td>{item.address || unavailable(isRemote)}</td><td>{item.sameAsId ? '연결' : '-'}</td></tr>)}
+              {destinations.map((item) => <tr className={item.id === selected?.id ? 'active' : ''} key={item.id} tabIndex={0} onClick={() => selectDestination(item.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectDestination(item.id); } }}><td>{item.name}</td><td>{item.address || unavailable(isRemote)}</td><td>{item.sameAsId ? '연결' : '-'}</td></tr>)}
             </tbody></table>
             {customer && !destinations.length ? <EmptyState label="배송지를 등록하세요." /> : null}
           </AdminTableFrame>
@@ -199,8 +204,8 @@ function NetworkMaster({ data, onChange }: { data: ManagementData; onChange: (da
             const allDestinations = editor.id ? data.destinations.map((item) => item.id === editor.id ? saved : item) : [...data.destinations, saved];
             await onChange({ ...data, destinations: allDestinations }); setSelectedDestinationId(saved.id); setEditor(null);
           }} /> : <>
-            <AdminSectionHeader title="배송지 상세" side={selected && !isRemote ? <ManagementDetailAction name="배송지" onEdit={() => openDestinationEditor(selected.id)} /> : undefined} />
-            {selected ? <div className="master-detail-grid"><dl><dt>배송지</dt><dd>{selected.name}</dd><dt>주소</dt><dd>{selected.address || unavailable(isRemote)}</dd></dl><div><strong>동일 배송지 연결</strong><p>{isRemote ? '미제공' : selected.sameAsId ? data.destinations.find((item) => item.id === selected.sameAsId)?.name ?? '연결된 배송지' : '연결 없음'}</p></div></div> : <EmptyState label={customer ? '배송지를 등록하세요.' : '고객사를 먼저 등록하세요.'} />}
+            <AdminSectionHeader title="배송지 상세" side={selected ? <span className="management-heading-side"><ManagementDetailAction name="배송지" disabled={isRemote} onEdit={() => openDestinationEditor(selected.id)} /><ManagementSelectionClear onClick={() => selectDestination(selected.id)} /></span> : undefined} />
+            {selected ? <div className="master-detail-grid"><dl><dt>배송지</dt><dd>{selected.name}</dd><dt>주소</dt><dd>{selected.address || unavailable(isRemote)}</dd></dl><div><strong>동일 배송지 연결</strong><p>{isRemote ? '미제공' : selected.sameAsId ? data.destinations.find((item) => item.id === selected.sameAsId)?.name ?? '연결된 배송지' : '연결 없음'}</p></div></div> : <EmptyState label={customer || isRemote ? '배송지를 선택하면 상세 정보를 확인할 수 있습니다.' : '고객사를 먼저 선택하세요.'} />}
           </>}
         </section>
       </div>

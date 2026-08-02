@@ -16,9 +16,10 @@ async function save(form) {
 }
 
 async function remove(page, name, row) {
-  await row.click();
+  const deleteButton = page.getByRole('button', { name: `${name} 삭제`, exact: true });
+  if (!(await deleteButton.isEnabled())) await row.click();
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: `${name} 삭제`, exact: true }).click();
+  await deleteButton.click();
 }
 
 test('customer with zero orders persists', async ({ page }) => {
@@ -88,7 +89,6 @@ test('destination suggests similar addresses and allows manual same-place linkin
   await save(form);
   let row = page.locator('.master-destination-table tr', { hasText: name });
   await expect(row).toContainText('연결');
-  await row.click();
   await page.getByRole('button', { name: '배송지 수정', exact: true }).click();
   form = page.getByLabel('배송지 편집');
   await form.getByLabel('배송지명').fill(`${name} 수정`);
@@ -106,14 +106,17 @@ test('customer and destination follow the condition CRUD placement contract', as
   await form.getByLabel('고객 코드').fill(`STRUCT-${stamp()}`);
   await save(form);
 
-  const columns = page.locator('.master-network-grid > .management-entity-column');
-  await expect(columns).toHaveCount(2);
-  const customerList = columns.nth(0).locator('.management-list-panel');
-  const customerDetail = columns.nth(0).locator('.management-detail-panel');
+  const workspaces = page.locator('.management-network-shell > .resource-workspace');
+  await expect(workspaces).toHaveCount(2);
+  const customerList = workspaces.nth(0).locator('.management-list-panel');
+  const customerDetail = workspaces.nth(0).locator('.management-detail-panel');
   await expect(customerList.getByRole('button', { name: '고객사 등록', exact: true })).toBeVisible();
   await expect(customerList.getByRole('button', { name: '고객사 삭제', exact: true })).toBeVisible();
   await expect(customerList.getByRole('button', { name: '고객사 수정', exact: true })).toHaveCount(0);
   await expect(customerDetail.getByRole('button', { name: '고객사 수정', exact: true })).toBeVisible();
+  const customerClear = customerDetail.getByRole('button', { name: '선택 취소', exact: true });
+  await expect(customerClear.locator('svg')).toBeVisible();
+  await expect(customerClear).toHaveText('');
 
   await customerList.getByRole('button', { name: '고객사 등록', exact: true }).click();
   form = page.getByLabel('고객사 편집');
@@ -121,8 +124,8 @@ test('customer and destination follow the condition CRUD placement contract', as
   await expect(form.getByRole('button', { name: '저장', exact: true })).toBeVisible();
   await form.getByRole('button', { name: '취소', exact: true }).click();
 
-  const destinationList = columns.nth(1).locator('.management-list-panel');
-  const destinationDetail = columns.nth(1).locator('.management-detail-panel');
+  const destinationList = workspaces.nth(1).locator('.management-list-panel');
+  const destinationDetail = workspaces.nth(1).locator('.management-detail-panel');
   await destinationList.getByRole('button', { name: '배송지 등록', exact: true }).click();
   form = page.getByLabel('배송지 편집');
   await form.getByLabel('배송지명').fill(`구조 배송지 ${stamp()}`);
@@ -132,6 +135,7 @@ test('customer and destination follow the condition CRUD placement contract', as
   await expect(destinationList.getByRole('button', { name: '배송지 삭제', exact: true })).toBeVisible();
   await expect(destinationList.getByRole('button', { name: '배송지 수정', exact: true })).toHaveCount(0);
   await expect(destinationDetail.getByRole('button', { name: '배송지 수정', exact: true })).toBeVisible();
+  await expect(destinationDetail.getByRole('button', { name: '선택 취소', exact: true }).locator('svg')).toBeVisible();
 
   const gaps = await page.locator('.management-list-panel').evaluateAll((panels) => panels.map((panel) => {
     const heading = panel.querySelector('.admin-section-header')?.getBoundingClientRect();
@@ -139,6 +143,55 @@ test('customer and destination follow the condition CRUD placement contract', as
     return heading && table ? Math.round(table.top - heading.bottom) : null;
   }));
   expect(gaps).toEqual([8, 8]);
+});
+
+test('resources keep create and delete on lists and edit on details', async ({ page }) => {
+  await openScope(page, '운송자원');
+
+  const driverWorkspace = page.getByLabel('배송원 관리');
+  const driverList = driverWorkspace.getByLabel('배송원 리스트');
+  const driverDetail = driverWorkspace.getByLabel('배송원 상세');
+  await expect(driverList.getByRole('button', { name: '배송원 등록', exact: true })).toBeVisible();
+  await expect(driverList.getByRole('button', { name: '배송원 삭제', exact: true })).toBeDisabled();
+  await expect(driverList.getByRole('button', { name: '배송원 수정', exact: true })).toHaveCount(0);
+  await driverList.getByRole('button', { name: '배송원 등록', exact: true }).click();
+  const driverName = `배송원 ${stamp()}`;
+  let form = page.getByLabel('배송원 편집');
+  await form.getByLabel('이름').fill(driverName);
+  await form.getByLabel('연락처').fill('010-1234-5678');
+  await save(form);
+  await expect(driverDetail.getByRole('button', { name: '배송원 수정', exact: true })).toBeVisible();
+  await expect(driverList.getByRole('button', { name: '배송원 삭제', exact: true })).toBeEnabled();
+  const driverClear = driverDetail.getByRole('button', { name: '선택 취소', exact: true });
+  await expect(driverClear.locator('svg')).toBeVisible();
+  await expect(driverClear).toHaveText('');
+
+  const vehicleWorkspace = page.getByLabel('차량 관리');
+  const vehicleList = vehicleWorkspace.getByLabel('차량 리스트');
+  const vehicleDetail = vehicleWorkspace.getByLabel('차량 상세');
+  await expect(vehicleList.getByRole('button', { name: '차량 등록', exact: true })).toBeVisible();
+  await expect(vehicleList.getByRole('button', { name: '차량 삭제', exact: true })).toBeDisabled();
+  await expect(vehicleList.getByRole('button', { name: '차량 수정', exact: true })).toHaveCount(0);
+  await vehicleList.getByRole('button', { name: '차량 등록', exact: true }).click();
+  form = page.getByLabel('차량 편집');
+  await form.getByLabel('차량 번호').fill('서울80바1234');
+  await form.getByLabel('차종').fill('냉장탑차');
+  await save(form);
+  await expect(vehicleDetail.getByRole('button', { name: '차량 수정', exact: true })).toBeVisible();
+  await expect(vehicleList.getByRole('button', { name: '차량 삭제', exact: true })).toBeEnabled();
+  await expect(vehicleDetail).toContainText('기본 배송원');
+  await vehicleDetail.getByLabel('배정할 배송원').selectOption({ index: 1 });
+  await vehicleDetail.getByRole('button', { name: '배정', exact: true }).click();
+  await expect(vehicleDetail).toContainText(driverName);
+  const assignedDriverSelect = vehicleDetail.getByLabel('배정할 배송원');
+  await expect(assignedDriverSelect).toBeDisabled();
+  await expect(assignedDriverSelect.locator('option:checked')).toHaveText(driverName);
+  await expect(vehicleDetail.getByRole('button', { name: '배정', exact: true })).toBeDisabled();
+  await expect(vehicleDetail.getByRole('button', { name: '해제', exact: true })).toBeEnabled();
+  await expect(driverList.locator('tbody tr').first()).toContainText('서울80바1234');
+  await vehicleDetail.getByRole('button', { name: '해제', exact: true }).click();
+  await expect(vehicleDetail.getByRole('button', { name: '해제', exact: true })).toBeDisabled();
+  await expect(driverList.locator('tbody tr').first()).toContainText('-');
 });
 
 test('condition keeps create and delete on the list and edit on the detail', async ({ page }) => {

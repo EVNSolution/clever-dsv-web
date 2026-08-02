@@ -1,8 +1,8 @@
 import type { ReactElement } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { apiConfig } from '../api/config';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
-import { DepartureLocationMap } from '../components/DepartureLocationMap';
+import { MapPreview } from '../components/MapPreview';
 import {
   defaultAdminSettings,
   geocodeDepartureAddress,
@@ -12,6 +12,8 @@ import {
   saveRemoteOperationalSettings,
 } from '../services/settings';
 import type { AdminSettings, OperationalSettings } from '../services/settings';
+
+const DepartureLocationMap = lazy(() => import('../components/DepartureLocationMap').then((module) => ({ default: module.DepartureLocationMap })));
 
 type LoadState = 'error' | 'loading' | 'ready';
 type SaveState = 'error' | 'idle' | 'saving' | 'saved';
@@ -205,16 +207,18 @@ export function SettingsPage({ description, title }: { description: string; titl
                 </p>
               ) : null}
             </div>
-            <DepartureLocationMap
-              address={settings.departureAddress}
-              latitude={settings.departureLatitude}
-              longitude={settings.departureLongitude}
-              onChange={(latitude, longitude) => {
-                updateLocation({ departureLatitude: latitude, departureLongitude: longitude });
-                setGeocodeState('resolved');
-                setGeocodeMessage('지도에서 출발 좌표를 지정했습니다.');
-              }}
-            />
+            <Suspense fallback={<DepartureLocationMapFallback />}>
+              <DepartureLocationMap
+                address={settings.departureAddress}
+                latitude={settings.departureLatitude}
+                longitude={settings.departureLongitude}
+                onChange={(latitude, longitude) => {
+                  updateLocation({ departureLatitude: latitude, departureLongitude: longitude });
+                  setGeocodeState('resolved');
+                  setGeocodeMessage('지도에서 출발 좌표를 지정했습니다.');
+                }}
+              />
+            </Suspense>
           </div>
         </section>
         <section className="page-panel">
@@ -243,6 +247,14 @@ export function SettingsPage({ description, title }: { description: string; titl
         </section>
       </div> : null}
     </>
+  );
+}
+
+function DepartureLocationMapFallback(): ReactElement {
+  return (
+    <div className="settings-location-map-shell" aria-label="출발 위치 지도" aria-busy="true">
+      <MapPreview loading />
+    </div>
   );
 }
 

@@ -25,12 +25,16 @@ test('master data keeps both resource workspaces visible while operational data 
   await expect(page.getByText('등록된 차량이 없습니다.')).toBeVisible();
   await expect(page.locator('.management-subnav')).toHaveCount(0);
   await page.getByRole('button', { name: '고객사', exact: true }).click();
-  await expect(page.getByText('고객사를 등록하세요.').first()).toBeVisible();
-  const [customerBox, destinationBox] = await Promise.all([
-    page.locator('.master-network-grid > .management-entity-column').nth(0).boundingBox(),
-    page.locator('.master-network-grid > .management-entity-column').nth(1).boundingBox(),
-  ]);
-  expect(Math.abs(customerBox.width - destinationBox.width)).toBeLessThanOrEqual(1);
+  await expect(page.getByText('고객사를 선택하면 상세 정보를 확인할 수 있습니다.')).toBeVisible();
+  const networkWorkspaces = page.locator('.management-network-shell > .resource-workspace');
+  await expect(networkWorkspaces).toHaveCount(2);
+  for (const workspace of await networkWorkspaces.all()) {
+    const [listBox, detailBox] = await Promise.all([
+      workspace.locator('.management-list-panel').boundingBox(),
+      workspace.locator('.management-detail-panel').boundingBox(),
+    ]);
+    expect(Math.abs(listBox.width - detailBox.width)).toBeLessThanOrEqual(1);
+  }
   await expect(page.locator('.master-customer-table tbody tr')).toHaveCount(0);
   await expect(page.locator('.master-destination-table tbody tr')).toHaveCount(0);
   await page.getByRole('button', { name: '운송조건' }).click();
@@ -55,6 +59,23 @@ test('resource workspaces prioritize the list at intermediate width without page
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1024);
 });
+
+test('dispatch switches between map and table views without replacing the driver workspace', async ({ page }) => {
+  await page.goto('/dispatch');
+  await expect(page.getByRole('region', { name: '지도' })).toBeVisible();
+  await expect(page.getByRole('region', { name: '배송원' })).toBeVisible();
+
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await expect(page.getByRole('region', { name: '목록' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: '주문' })).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: '배송처' })).toBeVisible();
+  await expect(page.getByText('배차 없음', { exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: '배송원' })).toBeVisible();
+
+  await page.getByRole('button', { name: '지도', exact: true }).click();
+  await expect(page.getByRole('region', { name: '지도' })).toBeVisible();
+});
+
 test('operational mock fixtures stay absent until fixed dispatch data is rebuilt', async ({ page }) => {
   await page.goto('/control');
   await expect(page.getByText('예정 차량이 없습니다.')).toBeVisible();

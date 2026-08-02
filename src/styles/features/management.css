@@ -8,8 +8,10 @@
 .master-scope-nav button[aria-pressed="true"] { border-bottom-color:var(--color-black); background:transparent; color:var(--color-ink); }
 .master-data-shell > .courier-grid,
 .master-data-shell > .page-grid { min-height:0; flex:1 1 auto; }
-.master-data-shell > .management-resource-shell { min-height:0; flex:1 1 auto; }
-.management-resource-shell {
+.master-data-shell > .management-resource-shell,
+.master-data-shell > .management-network-shell { min-height:0; flex:1 1 auto; }
+.management-resource-shell,
+.management-network-shell {
   display:grid; grid-template-rows:repeat(2, minmax(0, 1fr)); gap:12px;
 }
 .resource-workspace {
@@ -18,11 +20,6 @@
   transition:grid-template-columns .24s ease;
 }
 .resource-workspace > .page-panel { min-width:0; min-height:0; }
-.master-network-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); grid-template-rows:minmax(0, 1fr); }
-.management-entity-column {
-  min-width:0; min-height:0; display:grid;
-  grid-template-rows:minmax(220px, 1fr) minmax(170px, .65fr); gap:16px;
-}
 .management-list-panel,
 .management-detail-panel { min-height:0; }
 .master-data-page .management-list-panel,
@@ -50,6 +47,8 @@
 .management-form-actions button { min-height:28px; border:1px solid var(--color-control-border); border-radius:8px; padding:0 9px; background:var(--color-white); color:var(--color-ink); font:800 11px/1 var(--font-sans); cursor:pointer; }
 .management-actions button.danger { border-color:rgba(217,45,32,.28); color:var(--color-risk); }
 .management-actions button:disabled { opacity:.35; cursor:default; }
+.management-actions .management-selection-clear { width:28px; padding:0; }
+.management-selection-clear svg { width:14px; height:14px; stroke-width:2.25; }
 .management-editor { min-height:0; display:flex; flex-direction:column; gap:14px; }
 .management-form-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; padding:4px 10px; }
 .management-form-grid label { display:grid; gap:6px; color:var(--color-muted); font-size:11px; font-weight:800; }
@@ -65,10 +64,12 @@
 .management-detail dd { margin:0; color:var(--color-ink); font-size:13px; font-weight:800; }
 .resource-workspace .management-detail dd { min-width:0; overflow-wrap:anywhere; }
 .vehicle-assignment-card { min-height:0; margin-top:12px; }
-.vehicle-assignment-controls { display:flex; align-items:end; gap:8px; padding:0 10px 10px; }
+.vehicle-assignment-controls { --assignment-control-height:34px; display:flex; align-items:flex-end; gap:8px; padding:0 10px 10px; }
 .vehicle-assignment-controls label { min-width:0; flex:1 1 auto; display:grid; gap:6px; color:var(--color-muted); font-size:11px; font-weight:800; }
-.vehicle-assignment-controls select { width:100%; min-height:34px; border:1px solid var(--color-control-border); border-radius:9px; padding:0 10px; background:var(--color-white); color:var(--color-ink); font:700 13px/1 var(--font-sans); }
-.vehicle-assignment-controls .management-actions { flex:0 0 auto; }
+.vehicle-assignment-controls select { width:100%; height:var(--assignment-control-height); box-sizing:border-box; border:1px solid var(--color-control-border); border-radius:8px; padding:0 10px; background:var(--color-white); color:var(--color-ink); font:700 13px/1 var(--font-sans); }
+.vehicle-assignment-controls select:disabled { border-color:var(--color-border); background:var(--color-row-hover); color:var(--color-ink); opacity:1; cursor:default; }
+.vehicle-assignment-controls .management-actions { flex:0 0 auto; align-self:flex-end; }
+.vehicle-assignment-controls .management-actions button { height:var(--assignment-control-height); min-height:var(--assignment-control-height); box-sizing:border-box; }
 .vehicle-assignment-card .courier-history-table th:last-child,
 .vehicle-assignment-card .courier-history-table td:last-child { width:64px; text-align:right; }
 .address-similarity { margin:0 10px; padding:10px 12px; display:flex; align-items:center; gap:10px; border:1px solid #e1b86a; border-radius:10px; background:var(--color-white)af0; color:#6d4b0d; font-size:11px; }

@@ -1,7 +1,4 @@
 @media (max-width: 900px) {
-  .master-network-grid { grid-template-columns:1fr; }
-  .master-network-grid { grid-template-rows:auto; }
-  .management-entity-column { grid-template-rows:auto; }
   .master-detail-grid { grid-template-columns:1fr; }
   .management-form-grid { grid-template-columns:1fr; }
   .management-form-grid label.wide { grid-column:auto; }
@@ -33,7 +30,7 @@
   .page-content.master-data-page .courier-grid { grid-template-columns:minmax(280px, .9fr) minmax(420px, 1.1fr); }
 }
 @media (max-width: 920px) {
-  #destinationList { max-height: 260px; }
+  #manufacturerList { max-height: 260px; }
   .page-content.master-data-page .management-resource-shell {
     grid-template-rows:repeat(2, minmax(320px, auto));
   }
