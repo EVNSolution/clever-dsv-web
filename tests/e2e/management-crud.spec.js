@@ -347,10 +347,10 @@ test('dispatch keeps an XLSX sheet visible when required columns are missing', a
   await expect(review.getByRole('button', { name: '업로드 확정', exact: true })).toBeDisabled();
 });
 
-test('dispatch requires driver without requiring a vehicle column', async ({ page }) => {
+test('dispatch accepts an upload without driver and vehicle columns as unassigned', async ({ page }) => {
   const csv = [
-    'driver,배송처,condition,shippedbox,주소,customer,SellerOrderKey',
-    ',백제약품동부,COLD,4,경기 광주시 초월읍 경충대로 1284번길 51,sanofi,2018330248',
+    '배송처,condition,shippedbox,주소,customer,SellerOrderKey,latitude,longitude',
+    '백제약품동부,COLD,4,경기 광주시 초월읍 경충대로 1284번길 51,sanofi,2018330248,37.412,127.301',
   ].join('\n');
 
   await page.goto('/dispatch');
@@ -358,16 +358,34 @@ test('dispatch requires driver without requiring a vehicle column', async ({ pag
   await page.getByLabel('배차 파일').setInputFiles({
     buffer: Buffer.from(csv),
     mimeType: 'text/csv',
-    name: 'driver-required.csv',
+    name: 'unassigned-orders.csv',
   });
 
   const review = page.locator('.dispatch-upload-review');
   await expect(page.getByRole('table', { name: 'CSV 시트 미리보기' })).toContainText('2018330248');
   const issues = page.locator('details.dispatch-upload-issues');
-  await expect(issues).not.toHaveAttribute('open', '');
-  await expect(issues).toContainText('필수 값이 없습니다: driver');
-  await expect(issues).not.toContainText('vehicle');
-  await expect(review.getByRole('button', { name: '업로드 확정', exact: true })).toBeDisabled();
+  await expect(issues).toHaveCount(0);
+  await expect(review.getByRole('button', { name: '업로드 확정', exact: true })).toBeEnabled();
+});
+
+test('dispatch counts issue rows instead of individual issues', async ({ page }) => {
+  const csv = [
+    '배송처,condition,shippedbox,주소,customer,SellerOrderKey,latitude,longitude',
+    ',COLD,0,,CUSTOMER-ERROR,,37.5,127.0',
+  ].join('\n');
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '주문 업로드', exact: true }).click();
+  await page.getByLabel('배차 파일').setInputFiles({
+    buffer: Buffer.from(csv),
+    mimeType: 'text/csv',
+    name: 'multiple-errors-one-row.csv',
+  });
+
+  const issues = page.locator('details.dispatch-upload-issues');
+  await expect(issues).toBeVisible();
+  await expect(issues.locator('summary b')).toHaveText('1행');
+  await expect(issues.locator('.dispatch-upload-issue-row')).toHaveCount(4);
 });
 
 test('dispatch accepts a CSV file dropped from the user computer', async ({ page }) => {

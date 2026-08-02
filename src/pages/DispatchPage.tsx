@@ -467,7 +467,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
                     <span className="dispatch-upload-toggle-close">접기</span>
                     <ChevronDown aria-hidden="true" />
                   </span>
-                  <b>{uploadIssueEntries.length}건</b>
+                  <b>{uploadIssueRows.length}행</b>
                 </summary>
                 <div className="dispatch-upload-issue-list">
                   {uploadIssueEntries.map((entry) => {
@@ -1482,7 +1482,6 @@ function errorMessage(error: unknown): string {
 }
 
 function uploadIssueMessage(issue: DispatchImportIssue): string {
-  if (issue.code === 'REQUIRED' && issue.field === 'driverName') return '필수 값이 없습니다: driver';
   if (issue.code === 'DRIVER_MISSING' || issue.code === 'DRIVER_NOT_FOUND') return '등록된 배송원을 찾을 수 없습니다.';
   if (issue.code === 'VEHICLE_MISSING' || issue.code === 'VEHICLE_NOT_FOUND') return '등록된 차량 번호를 찾을 수 없습니다.';
   if (issue.code === 'CUSTOMER_MISSING') return '고객사를 찾을 수 없습니다.';
