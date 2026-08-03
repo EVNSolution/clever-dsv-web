@@ -122,7 +122,9 @@ function NetworkMaster({ data, onChange }: { data: ManagementData; onChange: (da
   const selected = destinations.find((item) => item.id === selectedDestinationId);
   const [editor, setEditor] = useState<NetworkEditor>(null);
   const [addressDraft, setAddressDraft] = useState('');
-  const customerOrders = !isRemote && customer ? getCustomerOrders(customer.id) : [];
+  const customerOrderCount = customer
+    ? isRemote ? customer.orderCount ?? 0 : getCustomerOrders(customer.id).length
+    : 0;
   const similarDestinations = !isRemote && addressDraft ? data.destinations
     .filter((item) => item.id !== editor?.id)
     .map((item) => ({ item, score: addressSimilarity(addressDraft, item.address) }))
@@ -168,8 +170,8 @@ function NetworkMaster({ data, onChange }: { data: ManagementData; onChange: (da
           <AdminTableFrame>
             <table className="page-table master-customer-table"><thead><tr><th>고객사</th><th>고객 코드</th><th>Order</th><th>배송조회</th></tr></thead><tbody>
               {data.customers.map((item) => {
-                const orders = isRemote ? [] : getCustomerOrders(item.id);
-                return <tr className={item.id === customer?.id ? 'active' : ''} key={item.id} tabIndex={0} onClick={() => selectCustomer(item.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectCustomer(item.id); }}><td><strong>{item.name}</strong></td><td>{item.billingCode || unavailable(isRemote)}</td><td>{orders.length}건</td><td>{orders.length ? <a className="master-customer-link" href={`${adminCustomerDeliveryPath}?customer=${encodeURIComponent(item.id)}`} aria-label={`${item.name} 배송조회`} onClick={(event) => event.stopPropagation()}>배송조회</a> : '-'}</td></tr>;
+                const orderCount = isRemote ? item.orderCount ?? 0 : getCustomerOrders(item.id).length;
+                return <tr className={item.id === customer?.id ? 'active' : ''} key={item.id} tabIndex={0} onClick={() => selectCustomer(item.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectCustomer(item.id); }}><td><strong>{item.name}</strong></td><td>{item.billingCode || unavailable(isRemote)}</td><td>{orderCount}건</td><td>{orderCount ? <a className="master-customer-link" href={`${adminCustomerDeliveryPath}?customer=${encodeURIComponent(item.id)}`} aria-label={`${item.name} 배송조회`} onClick={(event) => event.stopPropagation()}>배송조회</a> : '-'}</td></tr>;
               })}
             </tbody></table>
             {!data.customers.length ? <EmptyState label="고객사를 등록하세요." /> : null}
@@ -182,7 +184,7 @@ function NetworkMaster({ data, onChange }: { data: ManagementData; onChange: (da
           }} /> : <>
             <AdminSectionHeader
               title="고객사 상세"
-              side={customer ? <span className="management-heading-side"><span className="section-meta">{customerOrders.length}건 Order</span><ManagementDetailAction name="고객사" disabled={isRemote} onEdit={() => setEditor({ kind: 'customer', id: customer.id })} /><ManagementSelectionClear onClick={() => selectCustomer(customer.id)} /></span> : undefined}
+              side={customer ? <span className="management-heading-side"><span className="section-meta">{customerOrderCount}건 Order</span><ManagementDetailAction name="고객사" disabled={isRemote} onEdit={() => setEditor({ kind: 'customer', id: customer.id })} /><ManagementSelectionClear onClick={() => selectCustomer(customer.id)} /></span> : undefined}
             />
             {customer ? <><div className="master-detail-grid"><dl><dt>고객사</dt><dd>{customer.name}</dd><dt>고객 코드</dt><dd>{customer.billingCode || unavailable(isRemote)}</dd></dl><div><strong>배송지</strong><p>{destinations.length}곳 등록</p></div></div><CustomerInvitationEmailPanel customerName={customer.name} /></> : <EmptyState label="고객사를 선택하면 상세 정보를 확인할 수 있습니다." />}
           </>}

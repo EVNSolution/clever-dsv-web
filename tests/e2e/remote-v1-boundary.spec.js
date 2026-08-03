@@ -332,7 +332,7 @@ test('accepts a valid admin session only through the strict v1 session envelope'
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({
-      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Manufacturer', status: 'ACTIVE' }],
+      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Manufacturer', orderCount: 3, status: 'ACTIVE' }],
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/dispatches': v1Envelope({ items: [], page: { hasMore: false } }),
@@ -404,7 +404,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({
-      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Manufacturer', status: 'ACTIVE' }],
+      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Manufacturer', orderCount: 3, status: 'ACTIVE' }],
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/dispatches': v1Envelope({

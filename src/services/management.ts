@@ -48,6 +48,7 @@ type V1CustomerListItem = {
   customerId: string;
   displayName: string;
   externalCustomerCode?: string;
+  orderCount: number;
   status?: string;
 };
 
@@ -237,6 +238,7 @@ function customerViewModel(customer: V1CustomerListItem): ManagementData['custom
     billingCode: customer.externalCustomerCode ?? '',
     id: customer.customerId,
     name: customer.displayName,
+    orderCount: customer.orderCount,
   };
 }
 
@@ -321,10 +323,13 @@ function isV1VehicleDriverAssignment(value: unknown): value is V1VehicleDriverAs
 }
 
 function isV1CustomerListItem(value: unknown): value is V1CustomerListItem {
-  return hasOnlyKeys(value, ['customerId', 'displayName', 'externalCustomerCode', 'status'])
+  return hasOnlyKeys(value, ['customerId', 'displayName', 'externalCustomerCode', 'orderCount', 'status'])
     && isNonEmptyString(value.customerId)
     && isNonEmptyString(value.displayName)
     && isOptionalString(value.externalCustomerCode)
+    && typeof value.orderCount === 'number'
+    && Number.isInteger(value.orderCount)
+    && value.orderCount >= 0
     && isOptionalString(value.status);
 }
 

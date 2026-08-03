@@ -167,7 +167,7 @@ function managementListFixtures(overrides = {}) {
       page: { hasMore: false },
     }, 'g006-vehicles'),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({
-      items: [{ customerId: 'customer-g006', displayName: 'Canonical Customer G006', externalCustomerCode: 'CUSTOMER-G006', status: 'ACTIVE' }],
+      items: [{ customerId: 'customer-g006', displayName: 'Canonical Customer G006', externalCustomerCode: 'CUSTOMER-G006', orderCount: 4, status: 'ACTIVE' }],
       page: { hasMore: false },
     }, 'g006-customers'),
     'GET /api/dsv/v1/destinations?limit=100': v1Envelope({
@@ -226,7 +226,7 @@ function dispatchFixtures(fixtures = {}) {
       page: { hasMore: false },
     }, 'g006-dispatch-vehicles'),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({
-      items: [{ customerId: 'customer-g006', displayName: 'Canonical Manufacturer G006', status: 'ACTIVE' }],
+      items: [{ customerId: 'customer-g006', displayName: 'Canonical Manufacturer G006', orderCount: 4, status: 'ACTIVE' }],
       page: { hasMore: false },
     }, 'g006-dispatch-customers'),
     'GET /api/dsv/v1/destinations?limit=100': v1Envelope({
@@ -909,8 +909,12 @@ test('management renders customer, destination, and condition reference lists', 
   await expect(page.getByText('Canonical Destination G006', { exact: true }).first()).toBeVisible();
   const customerWorkspace = page.getByLabel('고객사 관리');
   await expect(customerWorkspace.getByLabel('고객사 목록').getByRole('button', { name: '고객사 등록', exact: true })).toBeDisabled();
-  await customerWorkspace.getByRole('row').filter({ hasText: 'Canonical Customer G006' }).click();
+  const customerRow = customerWorkspace.getByRole('row').filter({ hasText: 'Canonical Customer G006' });
+  await expect(customerRow).toContainText('4건');
+  await expect(customerRow.getByRole('link', { name: 'Canonical Customer G006 배송조회' })).toBeVisible();
+  await customerRow.click();
   await expect(customerWorkspace).toHaveClass(/has-selection/u);
+  await expect(customerWorkspace.getByLabel('고객사 상세')).toContainText('4건 Order');
   await expect(customerWorkspace.getByLabel('고객사 상세').getByRole('button', { name: '고객사 수정', exact: true })).toBeDisabled();
   await customerWorkspace.getByRole('button', { name: '선택 취소', exact: true }).click();
   await expect(customerWorkspace).toHaveClass(/is-idle/u);
@@ -986,7 +990,7 @@ test('management exposes a v1 list failure without falling back to local data', 
 test('management rejects unknown v1 list page keys without rendering canonical data', async ({ page }) => {
   const api = await installApiFixtures(page, adminFixtures(managementListFixtures({
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({
-      items: [{ customerId: 'customer-g006', displayName: 'Canonical Customer G006' }],
+      items: [{ customerId: 'customer-g006', displayName: 'Canonical Customer G006', orderCount: 4 }],
       page: { hasMore: false },
       total: 1,
     }, 'g006-customers-extra-key'),

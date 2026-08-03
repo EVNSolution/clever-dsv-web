@@ -27,6 +27,7 @@ export type ManagementCustomer = {
   id: string;
   name: string;
   billingCode: string;
+  orderCount?: number;
 };
 
 export type ManagementDestination = {
