@@ -76,6 +76,7 @@ const v1ReadAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'GET', pattern: /^destinations$/u },
   { method: 'GET', pattern: /^conditions$/u },
   { method: 'GET', pattern: /^customer\/deliveries$/u },
+  { method: 'GET', pattern: /^customers\/deliveries$/u },
 ];
 
 const assignmentCommandAllowlist: Array<{ method: string; pattern: RegExp }> = [

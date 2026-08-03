@@ -329,7 +329,7 @@
   position:sticky; top:0; z-index:2; height:34px; padding:0 10px; border-bottom:1px solid var(--color-control-border);
   background:var(--color-white); color:var(--color-text-subtle); text-align:left; font-size:10px; font-weight:750;
 }
-.dispatch-order-table th:first-child { padding:0; }
+.dispatch-order-table th:first-child { padding:0; text-align:center; vertical-align:middle; }
 .dispatch-order-table td {
   height:46px; padding:6px 10px; border-bottom:1px solid var(--color-row-divider);
   overflow:hidden; vertical-align:middle; white-space:nowrap; text-overflow:ellipsis;

@@ -40,20 +40,19 @@
 .control-vehicle-row.selected { background:color-mix(in srgb, var(--control-route-color) 10%, white); }
 .control-vehicle-row > i { width:8px; height:24px; border-radius:999px; background:var(--control-route-color); }
 .control-vehicle-row:focus-visible { outline:2px solid var(--control-route-color); outline-offset:-2px; }
-.control-vehicle-row span, .manufacturer-order-row span { min-width:0; }
-.control-vehicle-row strong, .manufacturer-order-row b { display:block; overflow:hidden; color:var(--color-ink); font-size:13px; font-weight:850; letter-spacing:-.025em; white-space:nowrap; text-overflow:ellipsis; }
-.control-vehicle-row small, .manufacturer-order-row small { display:block; margin-top:2px; overflow:hidden; color:var(--color-muted); font-size:11px; font-weight:650; white-space:nowrap; text-overflow:ellipsis; }
-.control-vehicle-row em, .manufacturer-order-row em { color:var(--color-muted); font-size:11px; font-style:normal; font-weight:800; white-space:nowrap; }
+.control-vehicle-row span { min-width:0; }
+.control-vehicle-row strong { display:block; overflow:hidden; color:var(--color-ink); font-size:13px; font-weight:850; letter-spacing:-.025em; white-space:nowrap; text-overflow:ellipsis; }
+.control-vehicle-row small { display:block; margin-top:2px; overflow:hidden; color:var(--color-muted); font-size:11px; font-weight:650; white-space:nowrap; text-overflow:ellipsis; }
+.control-vehicle-row em { color:var(--color-muted); font-size:11px; font-style:normal; font-weight:800; white-space:nowrap; }
 .manufacturer-order-list { display:grid; align-content:start; gap:10px; }
 .manufacturer-order-group { overflow:hidden; border:1px solid var(--color-border); border-radius:14px; background:var(--color-white); }
-.manufacturer-order-head { min-height:38px; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 10px; border-bottom:1px solid var(--color-border); background:#f7f7f9; }
+.manufacturer-order-head { min-height:44px; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 12px; background:#f7f7f9; }
 .manufacturer-order-head a { min-width:0; overflow:hidden; color:var(--color-ink); font-size:13px; font-weight:900; letter-spacing:-.025em; text-decoration:none; text-overflow:ellipsis; white-space:nowrap; }
 .manufacturer-order-head a:hover { text-decoration:underline; text-underline-offset:3px; }
 .manufacturer-order-head a:focus-visible { border-radius:4px; outline:2px solid var(--color-primary); outline-offset:2px; }
-.manufacturer-order-head span { color:var(--color-muted); font-size:11px; font-weight:800; white-space:nowrap; }
-.manufacturer-order-row { min-height:44px; display:grid; grid-template-columns:24px minmax(0, 1fr) auto; gap:8px; align-items:center; padding:7px 10px; border-bottom:1px solid var(--color-border); }
+.manufacturer-order-meta { display:inline-flex; align-items:center; gap:10px; color:var(--color-muted); font-size:11px; font-weight:800; white-space:nowrap; }
+.manufacturer-order-meta time { min-width:36px; color:var(--color-ink); font-variant-numeric:tabular-nums; text-align:right; }
 .control-order-sequence { width:24px; height:24px; display:grid; place-items:center; border-radius:50%; background:#0066cc; color:#fff; font-size:11px; font-style:normal; font-weight:850; line-height:1; }
-.manufacturer-order-row:last-child { border-bottom:0; }
 .control-destination-list { display:grid; align-content:start; }
 .control-destination-columns {
   position:sticky; top:0; z-index:1; display:grid; grid-template-columns:minmax(0, 1fr) 62px 62px;

@@ -463,6 +463,8 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
   await expect(customerInquiryLink).toBeVisible();
   await expect(customerInquiryLink).toHaveAttribute('href', `/customer/delivery-inquiry/admin?customer=customer-g006-control&serviceDate=${controlSummary.serviceDate}`);
   await expect(page.getByLabel('제조사별 주문 리스트')).not.toContainText('destination-g006-control');
+  await expect(page.getByLabel('제조사별 주문 리스트')).not.toContainText('SELLER-G006-CONTROL');
+  await expect(page.locator('.manufacturer-order-head time')).toHaveText(/^\d{2}:\d{2}$/u);
   await expect.poll(() => page.evaluate(() => {
     const destinationSource = window.dsvMap?.getSource('operational-destinations');
     const routeSource = window.dsvMap?.getSource('operational-routes');
@@ -701,6 +703,46 @@ test('requests customer deliveries only after a valid customer v1 session', asyn
   expect(api.unexpected).toEqual([]);
 });
 
+test('loads the administrator customer map through the customer-scoped contract', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(fullAdminSession),
+    'GET /api/dsv/v1/customers/deliveries': ({ url }) => {
+      expect(url.searchParams.get('customerId')).toBe('customer-g006-map');
+      expect(url.searchParams.get('serviceDate')).toBe('2026-08-03');
+      return v1Envelope({
+        items: [
+          {
+            sellerOrderId: 'order-g006-map',
+            sellerOrderKey: 'SELLER-G006-MAP',
+            destinationDisplayName: 'G006 Customer Destination',
+            destinationAddress: '서울특별시 중구 세종대로 110',
+            deliveryStatus: 'IN_TRANSIT',
+            etaStatus: 'READY',
+            estimatedArrivalAt: '2026-08-03T03:30:00.000Z',
+            proofStatus: 'NONE',
+            eventSummary: [],
+            latitude: 37.5663,
+            longitude: 126.9779,
+            vehicleDisplayName: '서울86바3800',
+            vehicleId: 'vehicle-g006-map',
+            vehicleLatitude: 37.564,
+            vehicleLongitude: 126.982,
+          },
+        ],
+        page: { hasMore: false },
+      });
+    },
+  });
+
+  await page.goto('/customer/delivery-inquiry/admin?customer=customer-g006-map&serviceDate=2026-08-03');
+
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customers/deliveries');
+  await expect(page.getByRole('article', { name: '제조사 배송지 지도' })).toBeVisible();
+  await expect(page.getByText('G006 Customer Destination', { exact: false }).first()).toBeVisible();
+  await expect(page.getByText('서울86바3800', { exact: true }).first()).toBeVisible();
+  expect(api.unexpected).toEqual([]);
+});
+
 test('blocks remote customer inquiry when query params are present without a session', async ({ page }) => {
   await seedCanonicalSentinels(page);
   const api = await installApiFixtures(page, {
@@ -887,6 +929,7 @@ test('pins the exact normalized G005 v1 read allowlist', () => {
     'GET destinations',
     'GET conditions',
     'GET customer/deliveries',
+    'GET customers/deliveries',
   ]);
 
   const readClient = clientSource.match(/export async function requestV1ReadJson[\s\S]*?\n\}/u)?.[0] ?? '';

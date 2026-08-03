@@ -296,17 +296,11 @@ function ControlPanels({
                   >
                     {group.name}
                   </a>
-                  <span>{group.orders.length}건</span>
+                  <span className="manufacturer-order-meta">
+                    <span>{group.orders.length}건</span>
+                    <time>{manufacturerFirstEta(group.orders, estimatedArrivalByOrderId)}</time>
+                  </span>
                 </div>
-                {group.orders.map((order) => (
-                  <div className="manufacturer-order-row" key={order.sellerOrderId}>
-                    <i className="control-order-sequence" aria-label={`배송 순서 ${order.routeStopSequence ?? '미정'}`}>
-                      {order.routeStopSequence ?? '-'}
-                    </i>
-                    <span><b>{order.sellerOrderKey}</b></span>
-                    <em>{formatControlEta(controlEta(order, estimatedArrivalByOrderId))}</em>
-                  </div>
-                ))}
               </section>
             ))}
             {!loading && !error && !manufacturerOrders.length ? <div className="panel-state">등록된 제조사 주문이 없습니다.</div> : null}
@@ -334,9 +328,25 @@ function scheduledControlVehicles(orders: DispatchListItem[], management?: Manag
   return management.vehicles.filter((vehicle) => scheduledVehicleIds.has(vehicle.id));
 }
 
-function formatControlEta(value: string | null): string {
-  if (!value) return '예정 확인';
-  return formatControlTime(value);
+function manufacturerFirstEta(orders: DispatchListItem[], configuredEtas: ReadonlyMap<string, string>): string {
+  const first = [...orders].sort((left, right) => {
+    const leftEta = controlEtaTimestamp(left, configuredEtas);
+    const rightEta = controlEtaTimestamp(right, configuredEtas);
+    if (leftEta !== rightEta) return leftEta - rightEta;
+    const leftSequence = left.routeStopSequence ?? Number.MAX_SAFE_INTEGER;
+    const rightSequence = right.routeStopSequence ?? Number.MAX_SAFE_INTEGER;
+    if (leftSequence !== rightSequence) return leftSequence - rightSequence;
+    return left.sellerOrderKey.localeCompare(right.sellerOrderKey, 'ko');
+  })[0];
+  if (!first) return '-';
+  return formatControlTime(controlEta(first, configuredEtas));
+}
+
+function controlEtaTimestamp(order: DispatchListItem, configuredEtas: ReadonlyMap<string, string>): number {
+  const eta = controlEta(order, configuredEtas);
+  if (!eta) return Number.MAX_SAFE_INTEGER;
+  const timestamp = new Date(eta).getTime();
+  return Number.isNaN(timestamp) ? Number.MAX_SAFE_INTEGER : timestamp;
 }
 
 function controlEta(order: DispatchListItem, configuredEtas: ReadonlyMap<string, string>): string | null {
