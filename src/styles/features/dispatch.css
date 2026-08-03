@@ -392,7 +392,7 @@
   cursor:pointer; font:750 10px/1 var(--font-sans); text-decoration:underline; text-underline-offset:3px;
 }
 .dispatch-assignment-action > p { margin:0; color:var(--color-risk); font-size:10px; font-weight:750; }
-.dispatch-assignment-action > div:last-child { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.dispatch-assignment-action > div:last-child { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:6px; }
 .dispatch-assignment-action .btn { min-height:34px; padding:0 10px; font-size:11px; }
 
 .work-two-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; align-items:stretch; height:min(720px, calc(100dvh - 264px)); min-height:500px; }

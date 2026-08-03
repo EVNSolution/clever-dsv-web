@@ -81,6 +81,7 @@ const v1ReadAllowlist: Array<{ method: string; pattern: RegExp }> = [
 const assignmentCommandAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'POST', pattern: /^seller-order-assignments\/reassign$/u },
   { method: 'POST', pattern: /^seller-order-assignments\/unassign$/u },
+  { method: 'POST', pattern: /^seller-order-deletions$/u },
   { method: 'POST', pattern: /^seller-orders\/[^/]+\/assignment\/unassign$/u },
   { method: 'POST', pattern: /^seller-orders\/[^/]+\/assignment\/reassign$/u },
 ];

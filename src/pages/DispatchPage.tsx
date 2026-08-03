@@ -3,7 +3,13 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { ArrowUpRight, ChevronDown, LoaderCircle } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
-import { loadDispatchList, reassignDispatchOrders, unassignDispatchOrders } from '../services/dispatch';
+import {
+  deleteDispatchOrders,
+  loadDispatchList,
+  MAX_DISPATCH_DELETE_COUNT,
+  reassignDispatchOrders,
+  unassignDispatchOrders,
+} from '../services/dispatch';
 import type { DispatchListItem, DispatchListView, DispatchSearch } from '../services/dispatch';
 import {
   commitDispatchImport,
@@ -1179,6 +1185,26 @@ function DispatchWorkspace({
     }
   }
 
+  async function deleteSelected(): Promise<void> {
+    if (selectedOrders.length === 0 || readOnly) return;
+    if (selectedOrders.length > MAX_DISPATCH_DELETE_COUNT) {
+      setMutationError(`배송 삭제는 한 번에 최대 ${MAX_DISPATCH_DELETE_COUNT}건까지 가능합니다.`);
+      return;
+    }
+    if (!window.confirm(`선택한 배송 ${selectedOrders.length}건을 영구 삭제합니다. 삭제 후에는 되돌릴 수 없습니다.`)) return;
+    setMutationBusy(true);
+    setMutationError('');
+    try {
+      await deleteDispatchOrders(selectedOrders, '관리자 배송 삭제');
+      clearSelection();
+      onAssignmentChanged?.();
+    } catch (caught) {
+      setMutationError(errorMessage(caught));
+    } finally {
+      setMutationBusy(false);
+    }
+  }
+
   return (
     <section className="dispatch-assignment" aria-label="배차 작업">
       <div className="dispatch-assignment-toolbar">
@@ -1421,6 +1447,7 @@ function DispatchWorkspace({
             {mutationError ? <p role="alert">{mutationError}</p> : null}
             <div>
               <button className="btn" type="button" disabled={mutationBusy || readOnly || assignedSelectionCount === 0} onClick={() => void unassignSelected()}>배정 해제</button>
+              <button className="btn danger" type="button" disabled={mutationBusy || readOnly || selectedOrders.length === 0} onClick={() => void deleteSelected()}>배송 삭제</button>
               <button className="btn primary" type="button" disabled={mutationBusy || readOnly || assignmentCandidates.length === 0 || selectedDriver === null || selectedVehicle === null} onClick={() => void assignSelected()}>
                 {mutationBusy ? '처리 중' : assignedSelectionCount > 0 ? '선택 이관' : '선택 배정'}
               </button>

@@ -480,6 +480,118 @@ test('dispatch unassigns 53 selected orders with one atomic batch request', asyn
   expectOnlyFixtureCalls(api);
 });
 
+test('dispatch permanently deletes selected orders with one confirmed batch request', async ({ page }) => {
+  let dispatchReads = 0;
+  let deletionCalls = 0;
+  let deletionPayload;
+  const selectedRows = [
+    {
+      assignmentStatus: 'ASSIGNED',
+      customerId: 'customer-g006',
+      destinationAddress: 'Seoul Canonical Address Deleted 1',
+      destinationDisplayName: 'Canonical Destination Deleted 1',
+      destinationId: 'destination-g006-delete-1',
+      driverId: 'driver-g006',
+      etaStatus: 'PENDING',
+      latitude: 37.5,
+      longitude: 127,
+      routePlanId: 'route-plan-g006-delete',
+      routeVersionId: 'route-version-g006-delete-1',
+      sellerOrderId: 'seller-order-g006-delete-1',
+      sellerOrderKey: 'SELLER-G006-DELETE-1',
+      vehicleId: 'vehicle-g006',
+    },
+    {
+      assignmentStatus: 'UNASSIGNED',
+      customerId: 'customer-g006',
+      destinationAddress: 'Seoul Canonical Address Deleted 2',
+      destinationDisplayName: 'Canonical Destination Deleted 2',
+      destinationId: 'destination-g006-delete-2',
+      etaStatus: 'NOT_REQUIRED',
+      latitude: 37.501,
+      longitude: 127.001,
+      sellerOrderId: 'seller-order-g006-delete-2',
+      sellerOrderKey: 'SELLER-G006-DELETE-2',
+    },
+  ];
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': () => {
+      dispatchReads += 1;
+      return v1Envelope({
+        items: dispatchReads === 1 ? selectedRows : [],
+        page: { hasMore: false },
+      }, `g006-dispatch-delete-${dispatchReads}`);
+    },
+    'POST /api/dsv/v1/seller-order-deletions': async ({ request }) => {
+      deletionCalls += 1;
+      deletionPayload = await request.postDataJSON();
+      return legacyEnvelope({
+        commandId: deletionPayload.commandId,
+        deletedSellerOrderIds: deletionPayload.items.map((item) => item.sellerOrderId),
+        receiptId: 'delete-receipt-g006',
+      });
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await page.getByRole('checkbox', { name: '전체 선택' }).check();
+  page.once('dialog', (dialog) => {
+    expect(dialog.message()).toContain('2건');
+    expect(dialog.message()).toContain('영구 삭제');
+    void dialog.accept();
+  });
+  await page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배송 삭제' }).click();
+
+  await expect.poll(() => dispatchReads).toBe(2);
+  expect(deletionCalls).toBe(1);
+  expect(deletionPayload).toMatchObject({
+    items: [
+      { expectedVersion: 'route-version-g006-delete-1', sellerOrderId: 'seller-order-g006-delete-1' },
+      { expectedVersion: 'UNASSIGNED', sellerOrderId: 'seller-order-g006-delete-2' },
+    ],
+    reason: '관리자 배송 삭제',
+  });
+  expect(deletionPayload.commandId).toEqual(expect.any(String));
+  await expect(page.getByRole('region', { name: '배송원' })).toContainText('0곳');
+  expectOnlyFixtureCalls(api);
+});
+
+test('dispatch blocks permanent deletion above the 100 order API limit', async ({ page }) => {
+  let deletionCalls = 0;
+  const rows = Array.from({ length: 101 }, (_, index) => ({
+    assignmentStatus: 'UNASSIGNED',
+    customerId: 'customer-g006',
+    destinationAddress: `Seoul Canonical Address Delete Limit ${index + 1}`,
+    destinationDisplayName: `Canonical Destination Delete Limit ${index + 1}`,
+    destinationId: `destination-g006-delete-limit-${index + 1}`,
+    etaStatus: 'NOT_REQUIRED',
+    latitude: 37.5 + index / 10000,
+    longitude: 127 + index / 10000,
+    sellerOrderId: `seller-order-g006-delete-limit-${index + 1}`,
+    sellerOrderKey: `SELLER-G006-DELETE-LIMIT-${index + 1}`,
+  }));
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': v1Envelope({
+      items: rows,
+      page: { hasMore: false },
+    }, 'g006-dispatch-delete-limit'),
+    'POST /api/dsv/v1/seller-order-deletions': () => {
+      deletionCalls += 1;
+      return legacyEnvelope({ commandId: 'unexpected', deletedSellerOrderIds: [], receiptId: 'unexpected' });
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await page.getByRole('checkbox', { name: '전체 선택' }).check();
+  await page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배송 삭제' }).click();
+
+  await expect(page.getByRole('alert')).toContainText('배송 삭제는 한 번에 최대 100건까지 가능합니다.');
+  expect(deletionCalls).toBe(0);
+  expectOnlyFixtureCalls(api);
+});
+
 test('dispatch selects multiple destinations with a map polygon', async ({ page }) => {
   const assignmentPayloads = [];
   const assignmentFixture = async ({ request }) => {
@@ -621,6 +733,7 @@ test('dispatch keeps past service dates read-only in the same workspace', async 
 
   await expect(page.getByText('지난 배차는 조회만 가능합니다.')).toBeVisible();
   await expect(page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배정 해제' })).toBeDisabled();
+  await expect(page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배송 삭제' })).toBeDisabled();
   await expect.poll(() => api.calls.some((call) => call.key.includes('serviceDate=2020-01-01'))).toBe(true);
   expectOnlyFixtureCalls(api);
 });
