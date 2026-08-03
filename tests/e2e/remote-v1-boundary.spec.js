@@ -317,9 +317,14 @@ test('accepts a valid admin session only through the strict v1 session envelope'
       items: [{
         displayName: 'Canonical Refrigerated Truck',
         driverAssignments: [],
+        note: '관제 차량 메모',
         status: 'ACTIVE',
+        type: '냉장탑차',
         vehicleId: 'vehicle-g006-control',
+        vehicleLatitude: 37.5665,
+        vehicleLongitude: 126.978,
         vehiclePlate: '99테 6006',
+        vehicleType: '냉장탑차',
       }],
       page: { hasMore: false },
     }),
@@ -338,8 +343,9 @@ test('accepts a valid admin session only through the strict v1 session envelope'
   await expect(page.getByLabel('지원되는 관제 요약')).toContainText(controlSummary.serviceDate);
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
   await expect(page.getByRole('img', { name: /출발 위치: 경기도 군포시 번영로 82/ })).toBeVisible();
-  await expect(page.getByLabel('예정 차량 리스트')).not.toContainText('99테 6006');
-  await expect(page.getByLabel('예정 차량 리스트')).toContainText('예정 차량이 없습니다.');
+  const vehicleList = page.getByRole('region', { name: '차량 리스트', exact: true });
+  await expect(vehicleList).not.toContainText('99테 6006');
+  await expect(vehicleList).toContainText('차량이 없습니다.');
   await expect(page.getByLabel('제조사별 주문 리스트')).toBeVisible();
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session')).toBe(true);
   expect(api.unexpected).toEqual([]);
@@ -449,7 +455,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
 
   await page.goto('/control');
 
-  const scheduledFleet = page.getByLabel('예정 차량 리스트');
+  const scheduledFleet = page.getByRole('region', { name: '차량 리스트', exact: true });
   await expect(scheduledFleet).toContainText('99테 6006');
   await expect(scheduledFleet).toContainText('77테 4004');
   await expect(scheduledFleet).not.toContainText('88테 5005');

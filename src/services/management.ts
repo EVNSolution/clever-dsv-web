@@ -5,26 +5,36 @@ import { loadManagementData, saveManagementData } from '../demo/management';
 
 type V1ListPage<TItem> = {
   items: TItem[];
-  page?: {
+  page: {
     hasMore?: boolean;
     nextCursor?: string;
   };
 };
 
 type V1DriverListItem = {
+  age?: number;
+  career?: string;
   displayName: string;
   driverId: string;
+  gender?: string;
   phone?: string;
+  score?: string;
   status?: string;
+  traits?: string[];
+  zone?: string;
 };
 
 type V1VehicleListItem = {
   displayName: string;
-  driverAssignments?: V1VehicleDriverAssignment[];
+  driverAssignments: V1VehicleDriverAssignment[];
+  note?: string;
   status?: string;
   telematicsCapabilities?: string[];
   telematicsSerialNumber?: string;
+  type?: string;
   vehicleId: string;
+  vehicleLatitude?: number;
+  vehicleLongitude?: number;
   vehiclePlate?: string;
   vehicleType?: string;
 };
@@ -189,26 +199,26 @@ async function readV1List<TItem>(endpoint: string, isItem: (value: unknown) => v
 
 function driverViewModel(driver: V1DriverListItem): ManagementDriver {
   return {
-    age: 0,
-    career: '미제공',
-    gender: '미제공',
+    age: driver.age ?? 0,
+    career: driver.career ?? '미제공',
+    gender: driver.gender ?? '미제공',
     id: driver.driverId,
     name: driver.displayName,
     phone: driver.phone,
-    score: '미제공',
-    traits: driver.phone ? [`연락처 ${driver.phone}`] : [],
-    zone: '미제공',
+    score: driver.score ?? '미제공',
+    traits: driver.traits ?? [],
+    zone: driver.zone ?? '미제공',
   };
 }
 
 function vehicleViewModel(vehicle: V1VehicleListItem): ManagementVehicle {
   return {
     id: vehicle.vehicleId,
-    note: '',
+    note: vehicle.note ?? '',
     plate: vehicle.vehiclePlate ?? '',
     telematicsCapabilities: vehicle.telematicsCapabilities,
     telematicsSerialNumber: vehicle.telematicsSerialNumber,
-    type: vehicle.vehicleType === 'OTHER' ? '' : (vehicle.vehicleType ?? vehicle.displayName),
+    type: vehicle.type ?? (vehicle.vehicleType === 'OTHER' ? '' : (vehicle.vehicleType ?? vehicle.displayName)),
   };
 }
 
@@ -254,40 +264,54 @@ function conditionViewModel(condition: V1ConditionListItem): ManagementCondition
 function isV1ListPage<TItem>(value: unknown, isItem: (item: unknown) => item is TItem): value is V1ListPage<TItem> {
   if (!hasOnlyKeys(value, ['items', 'page']) || !Array.isArray(value.items)) return false;
   if (!value.items.every(isItem)) return false;
-  if (value.page === undefined) return true;
   return hasOnlyKeys(value.page, ['hasMore', 'nextCursor'])
     && (value.page.hasMore === undefined || typeof value.page.hasMore === 'boolean')
     && (value.page.nextCursor === undefined || typeof value.page.nextCursor === 'string');
 }
 
 function isV1DriverListItem(value: unknown): value is V1DriverListItem {
-  return hasOnlyKeys(value, ['displayName', 'driverId', 'phone', 'status'])
+  return hasOnlyKeys(value, ['age', 'career', 'displayName', 'driverId', 'gender', 'phone', 'score', 'status', 'traits', 'zone'])
     && isNonEmptyString(value.driverId)
     && isNonEmptyString(value.displayName)
+    && (value.age === undefined || (typeof value.age === 'number' && Number.isInteger(value.age) && value.age >= 18 && value.age <= 100))
+    && isOptionalString(value.career)
+    && isOptionalString(value.gender)
     && isOptionalString(value.phone)
-    && isOptionalString(value.status);
+    && isOptionalString(value.score)
+    && isOptionalString(value.status)
+    && isOptionalStringArray(value.traits)
+    && isOptionalString(value.zone);
 }
 
 function isV1VehicleListItem(value: unknown): value is V1VehicleListItem {
   return hasOnlyKeys(value, [
     'displayName',
     'driverAssignments',
+    'note',
     'status',
     'telematicsCapabilities',
     'telematicsSerialNumber',
+    'type',
     'vehicleId',
+    'vehicleLatitude',
+    'vehicleLongitude',
     'vehiclePlate',
     'vehicleType',
   ])
     && isNonEmptyString(value.vehicleId)
     && isNonEmptyString(value.displayName)
-    && (value.driverAssignments === undefined
-      || (Array.isArray(value.driverAssignments) && value.driverAssignments.length <= 1 && value.driverAssignments.every(isV1VehicleDriverAssignment)))
+    && Array.isArray(value.driverAssignments)
+    && value.driverAssignments.length <= 1
+    && value.driverAssignments.every(isV1VehicleDriverAssignment)
+    && isOptionalString(value.note)
     && isOptionalString(value.status)
     && isOptionalStringArray(value.telematicsCapabilities)
     && isOptionalString(value.telematicsSerialNumber)
+    && isOptionalFiniteNumber(value.vehicleLatitude)
+    && isOptionalFiniteNumber(value.vehicleLongitude)
     && isOptionalString(value.vehiclePlate)
-    && isOptionalString(value.vehicleType);
+    && isOptionalString(value.vehicleType)
+    && isOptionalString(value.type);
 }
 
 function isV1VehicleDriverAssignment(value: unknown): value is V1VehicleDriverAssignment {
@@ -338,6 +362,10 @@ function isOptionalString(value: unknown): value is string | undefined {
 
 function isOptionalStringArray(value: unknown): value is string[] | undefined {
   return value === undefined || (Array.isArray(value) && value.every((item) => typeof item === 'string'));
+}
+
+function isOptionalFiniteNumber(value: unknown): value is number | undefined {
+  return value === undefined || (typeof value === 'number' && Number.isFinite(value));
 }
 
 function driverPayload(driver: ManagementDriver): Omit<ManagementDriver, 'id'> {

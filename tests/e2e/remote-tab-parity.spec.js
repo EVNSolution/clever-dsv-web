@@ -131,17 +131,32 @@ function expectOnlyFixtureCalls(api) {
 function managementListFixtures(overrides = {}) {
   return {
     'GET /api/dsv/v1/drivers?limit=100': v1Envelope({
-      items: [{ displayName: 'Canonical Driver G006', driverId: 'driver-g006', phone: '010-6006-6006', status: 'ACTIVE' }],
+      items: [{
+        age: 42,
+        career: '6년',
+        displayName: 'Canonical Driver G006',
+        driverId: 'driver-g006',
+        gender: '남성',
+        phone: '010-6006-6006',
+        score: 'A',
+        status: 'ACTIVE',
+        traits: ['냉장 운송'],
+        zone: '서울',
+      }],
       page: { hasMore: false },
     }, 'g006-drivers'),
     'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
       items: [{
         displayName: 'Canonical Vehicle G006',
         driverAssignments: [{ assignmentId: 'assignment-g006', driverId: 'driver-g006' }],
+        note: '운영 차량 메모',
         status: 'ACTIVE',
         telematicsCapabilities: ['LOCATION', 'TEMPERATURE', 'TACHOMETER'],
         telematicsSerialNumber: '012-6006-6006',
+        type: '냉장탑차',
         vehicleId: 'vehicle-g006',
+        vehicleLatitude: 37.5665,
+        vehicleLongitude: 126.978,
         vehiclePlate: '60가 6006',
         vehicleType: '냉장탑차',
       }],
@@ -177,15 +192,30 @@ function dispatchFixtures(fixtures = {}) {
   return {
     'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings({ loadingStartTime: '07:15', plannedDepartureTime: '08:45' })),
     'GET /api/dsv/v1/drivers?limit=100': v1Envelope({
-      items: [{ displayName: 'Canonical Driver G006', driverId: 'driver-g006', phone: '010-6006-6006', status: 'ACTIVE' }],
+      items: [{
+        age: 42,
+        career: '6년',
+        displayName: 'Canonical Driver G006',
+        driverId: 'driver-g006',
+        gender: '남성',
+        phone: '010-6006-6006',
+        score: 'A',
+        status: 'ACTIVE',
+        traits: ['냉장 운송'],
+        zone: '서울',
+      }],
       page: { hasMore: false },
     }, 'g006-dispatch-drivers'),
     'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
       items: [{
         displayName: 'Canonical Vehicle G006',
         driverAssignments: [{ assignmentId: 'assignment-g006', driverId: 'driver-g006' }],
+        note: '배차 참조 차량',
         status: 'ACTIVE',
+        type: '냉장탑차',
         vehicleId: 'vehicle-g006',
+        vehicleLatitude: 37.5665,
+        vehicleLongitude: 126.978,
         vehiclePlate: '60가 6006',
         vehicleType: '냉장탑차',
       }],
@@ -237,9 +267,9 @@ test('dispatch renders the canonical v1 seller orders on the map without a dupli
   await page.goto('/dispatch');
 
   await expect(page.getByRole('region', { name: '지도' })).toBeVisible();
-  await expect(page.getByRole('region', { name: '배송원' })).toBeVisible();
+  await expect(page.getByRole('region', { name: '배송원' })).toContainText('Canonical Driver G006');
+  await expect(page.getByRole('region', { name: '배송원' })).toContainText('1건');
   await expect(page.getByRole('region', { name: '주문' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '1 배송지' })).toBeVisible();
   await expect(page.getByRole('img', { name: /출발 위치: 경기도 군포시 번영로 82/ })).toBeVisible();
   await expect(page.getByLabel('운영 시간 편집')).toBeVisible();
   await expect(page.getByLabel('출발 시간')).toHaveValue('08:45');
