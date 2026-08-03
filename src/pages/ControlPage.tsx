@@ -289,15 +289,21 @@ function ControlPanels({
           <div className="manufacturer-order-list stops overlay-scroll" id="manufacturerList">
             {manufacturerOrders.map((group) => (
               <section className="manufacturer-order-group" key={group.id}>
-                <a href={manufacturerInquiryHref(group.id, summary?.serviceDate)}>
-                  <strong>{group.name}</strong><span>{group.orders.length}건 배송조회</span>
-                </a>
+                <div className="manufacturer-order-head">
+                  <a
+                    aria-label={`${group.name} 고객사 배송조회`}
+                    href={manufacturerInquiryHref(group.id, summary?.serviceDate)}
+                  >
+                    {group.name}
+                  </a>
+                  <span>{group.orders.length}건</span>
+                </div>
                 {group.orders.map((order) => (
                   <div className="manufacturer-order-row" key={order.sellerOrderId}>
                     <i className="control-order-sequence" aria-label={`배송 순서 ${order.routeStopSequence ?? '미정'}`}>
                       {order.routeStopSequence ?? '-'}
                     </i>
-                    <span><b>{order.sellerOrderKey}</b><small>{order.destinationId}</small></span>
+                    <span><b>{order.sellerOrderKey}</b></span>
                     <em>{formatControlEta(controlEta(order, estimatedArrivalByOrderId))}</em>
                   </div>
                 ))}
@@ -315,7 +321,7 @@ function groupOrdersByManufacturer(orders: DispatchListItem[], management?: Mana
   const names = new Map(management?.customers.map((customer) => [customer.id, customer.name]) ?? []);
   const groups = new Map<string, DispatchListItem[]>();
   for (const order of orders) groups.set(order.customerId, [...(groups.get(order.customerId) ?? []), order]);
-  return [...groups].map(([id, groupedOrders]) => ({ id, name: names.get(id) ?? id, orders: groupedOrders }));
+  return [...groups].map(([id, groupedOrders]) => ({ id, name: names.get(id) ?? '고객사 미등록', orders: groupedOrders }));
 }
 
 function scheduledControlVehicles(orders: DispatchListItem[], management?: ManagementData): ManagementData['vehicles'] {

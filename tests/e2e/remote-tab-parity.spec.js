@@ -277,6 +277,50 @@ test('dispatch renders the canonical v1 seller orders on the map without a dupli
   expectOnlyFixtureCalls(api);
 });
 
+test('dispatch list selects and clears every visible order from the header checkbox', async ({ page }) => {
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': v1Envelope({
+      items: [
+        {
+          assignmentStatus: 'UNASSIGNED',
+          customerId: 'customer-g006',
+          destinationDisplayName: 'Canonical Destination One',
+          destinationId: 'destination-g006-one',
+          etaStatus: 'NOT_REQUIRED',
+          latitude: 37.5,
+          longitude: 127,
+          sellerOrderId: 'seller-order-g006-one',
+          sellerOrderKey: 'SELLER-G006-ONE',
+        },
+        {
+          assignmentStatus: 'UNASSIGNED',
+          customerId: 'customer-g006',
+          destinationDisplayName: 'Canonical Destination Two',
+          destinationId: 'destination-g006-two',
+          etaStatus: 'NOT_REQUIRED',
+          latitude: 37.51,
+          longitude: 127.01,
+          sellerOrderId: 'seller-order-g006-two',
+          sellerOrderKey: 'SELLER-G006-TWO',
+        },
+      ],
+      page: { hasMore: false },
+    }, 'g006-dispatch-select-all'),
+  })));
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  const selectAll = page.getByRole('checkbox', { name: '전체 선택' });
+  await selectAll.check();
+  await expect(page.getByRole('region', { name: '배송원' })).toContainText('2곳');
+  await expect(page.locator('.dispatch-order-table tbody tr[aria-selected="true"]')).toHaveCount(2);
+
+  await selectAll.uncheck();
+  await expect(page.getByRole('region', { name: '배송원' })).toContainText('0곳');
+  await expect(page.locator('.dispatch-order-table tbody tr[aria-selected="true"]')).toHaveCount(0);
+  expectOnlyFixtureCalls(api);
+});
+
 test('dispatch assigns an unassigned order to the selected driver and vehicle', async ({ page }) => {
   let dispatchReads = 0;
   let assignmentPayload;
@@ -357,6 +401,82 @@ test('dispatch assigns an unassigned order to the selected driver and vehicle', 
     targetVehicleId: 'vehicle-g006',
   });
   expect(assignmentPayload.items[0].commandId).toEqual(expect.any(String));
+  expectOnlyFixtureCalls(api);
+});
+
+test('dispatch unassigns 53 selected orders with one atomic batch request', async ({ page }) => {
+  let dispatchReads = 0;
+  let unassignmentCalls = 0;
+  let unassignmentPayload;
+  const assignedRows = Array.from({ length: 53 }, (_, index) => ({
+    assignmentStatus: 'ASSIGNED',
+    customerId: 'customer-g006',
+    destinationAddress: `Seoul Canonical Address ${index + 1}`,
+    destinationDisplayName: `Canonical Destination ${index + 1}`,
+    destinationId: `destination-g006-${index + 1}`,
+    driverId: 'driver-g006',
+    etaStatus: 'PENDING',
+    latitude: 37.5 + index * 0.0001,
+    longitude: 127 + index * 0.0001,
+    routePlanId: 'route-plan-g006-batch-unassign',
+    routeVersionId: 'route-version-g006-batch-unassign',
+    sellerOrderId: `seller-order-g006-${index + 1}`,
+    sellerOrderKey: `SELLER-G006-${index + 1}`,
+    vehicleId: 'vehicle-g006',
+  }));
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': () => {
+      dispatchReads += 1;
+      return v1Envelope({
+        items: dispatchReads === 1
+          ? assignedRows
+          : assignedRows.map((row) => ({
+              ...row,
+              assignmentStatus: 'UNASSIGNED',
+              driverId: undefined,
+              etaStatus: 'NOT_REQUIRED',
+              routePlanId: undefined,
+              routeVersionId: undefined,
+              vehicleId: undefined,
+            })),
+        page: { hasMore: false },
+      }, `g006-dispatch-batch-unassign-${dispatchReads}`);
+    },
+    'POST /api/dsv/v1/seller-order-assignments/unassign': async ({ request }) => {
+      unassignmentCalls += 1;
+      unassignmentPayload = await request.postDataJSON();
+      return legacyEnvelope({
+        assignmentResults: unassignmentPayload.items.map((item) => ({
+          assignmentStatus: 'UNASSIGNED',
+          auditEventId: `audit-${item.sellerOrderId}`,
+          commandId: item.commandId,
+          etaStatus: 'NOT_REQUIRED',
+          newRouteVersionId: 'route-version-g006-unassigned',
+          previousRouteVersionId: 'route-version-g006-batch-unassign',
+          receiptId: `receipt-${item.sellerOrderId}`,
+          routePlanId: 'route-plan-g006-unassigned',
+          sellerOrderId: item.sellerOrderId,
+        })),
+        routePlanId: 'route-plan-g006-unassigned',
+      });
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await page.getByRole('checkbox', { name: '전체 선택' }).check();
+  await page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배정 해제' }).click();
+
+  await expect.poll(() => dispatchReads).toBe(2);
+  expect(unassignmentCalls).toBe(1);
+  expect(unassignmentPayload).toMatchObject({
+    items: assignedRows.map((row) => ({
+      expectedVersion: row.routeVersionId,
+      sellerOrderId: row.sellerOrderId,
+    })),
+    reason: '관리자 배정 해제',
+  });
+  expect(unassignmentPayload.items.every((item) => typeof item.commandId === 'string')).toBe(true);
   expectOnlyFixtureCalls(api);
 });
 

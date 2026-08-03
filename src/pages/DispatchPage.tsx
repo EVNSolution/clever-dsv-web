@@ -3,7 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { ArrowUpRight, ChevronDown, LoaderCircle } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
-import { loadDispatchList, reassignDispatchOrders, unassignDispatchOrder } from '../services/dispatch';
+import { loadDispatchList, reassignDispatchOrders, unassignDispatchOrders } from '../services/dispatch';
 import type { DispatchListItem, DispatchListView, DispatchSearch } from '../services/dispatch';
 import {
   commitDispatchImport,
@@ -987,6 +987,7 @@ function DispatchWorkspace({
   const [selectionMode, setSelectionMode] = useState(false);
   const [mutationBusy, setMutationBusy] = useState(false);
   const [mutationError, setMutationError] = useState('');
+  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const readOnly = serviceDate < todayInKorea();
   const hasSearch = search.destinationName !== '' || search.orderNumber !== '';
   const visibleRows = useMemo(
@@ -999,6 +1000,8 @@ function DispatchWorkspace({
     () => rows.filter((row) => selectedIdSet.has(row.sellerOrderId)),
     [rows, selectedIdSet],
   );
+  const allVisibleSelected = visibleRows.length > 0 && visibleRows.every((row) => selectedIdSet.has(row.sellerOrderId));
+  const someVisibleSelected = !allVisibleSelected && visibleRows.some((row) => selectedIdSet.has(row.sellerOrderId));
   const points = useMemo(() => visibleRows.flatMap((row) => {
     if (row.latitude === null || row.longitude === null) return [];
     return [{
@@ -1036,6 +1039,10 @@ function DispatchWorkspace({
       return next.length === current.length ? current : next;
     });
   }, [visibleIds]);
+
+  useEffect(() => {
+    if (selectAllCheckboxRef.current !== null) selectAllCheckboxRef.current.indeterminate = someVisibleSelected;
+  }, [someVisibleSelected]);
 
   useEffect(() => {
     if (!drivers.length) {
@@ -1077,6 +1084,13 @@ function DispatchWorkspace({
     setSelectedOrderIds([]);
     setSelectionCoordinates([]);
     setSelectionMode(false);
+  }
+
+  function toggleAllVisibleRows(): void {
+    setMutationError('');
+    setSelectionCoordinates([]);
+    setSelectionMode(false);
+    setSelectedOrderIds(allVisibleSelected ? [] : visibleRows.map((row) => row.sellerOrderId));
   }
 
   function changeWorkspaceView(nextView: DispatchWorkspaceView): void {
@@ -1154,18 +1168,13 @@ function DispatchWorkspace({
     if (assignedOrders.length === 0 || readOnly) return;
     setMutationBusy(true);
     setMutationError('');
-    let completed = 0;
     try {
-      for (const order of assignedOrders) {
-        await unassignDispatchOrder(order);
-        completed += 1;
-      }
+      await unassignDispatchOrders(assignedOrders);
       clearSelection();
+      onAssignmentChanged?.();
     } catch (caught) {
-      const prefix = completed > 0 ? `${completed}건 반영 후 중단되었습니다. ` : '';
-      setMutationError(`${prefix}${errorMessage(caught)}`);
+      setMutationError(errorMessage(caught));
     } finally {
-      if (completed > 0) onAssignmentChanged?.();
       setMutationBusy(false);
     }
   }
@@ -1300,7 +1309,17 @@ function DispatchWorkspace({
                 </colgroup>
                 <thead>
                   <tr>
-                    <th aria-label="선택" scope="col" />
+                    <th scope="col">
+                      <input
+                        ref={selectAllCheckboxRef}
+                        aria-label="전체 선택"
+                        checked={allVisibleSelected}
+                        disabled={visibleRows.length === 0}
+                        title="현재 목록 전체 선택"
+                        type="checkbox"
+                        onChange={toggleAllVisibleRows}
+                      />
+                    </th>
                     <th scope="col">주문</th>
                     <th scope="col">배송처</th>
                     <th scope="col">주소</th>

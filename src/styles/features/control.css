@@ -46,10 +46,11 @@
 .control-vehicle-row em, .manufacturer-order-row em { color:var(--color-muted); font-size:11px; font-style:normal; font-weight:800; white-space:nowrap; }
 .manufacturer-order-list { display:grid; align-content:start; gap:10px; }
 .manufacturer-order-group { overflow:hidden; border:1px solid var(--color-border); border-radius:14px; background:var(--color-white); }
-.manufacturer-order-group > a:first-child { min-height:38px; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 10px; background:#f7f7f9; border-bottom:1px solid var(--color-border); color:var(--color-ink); text-decoration:none; }
-.manufacturer-order-group > a:first-child:hover { background:#efeff2; }
-.manufacturer-order-group > a:first-child strong { font-size:13px; font-weight:900; letter-spacing:-.025em; }
-.manufacturer-order-group > a:first-child span { color:var(--color-muted); font-size:11px; font-weight:800; }
+.manufacturer-order-head { min-height:38px; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 10px; border-bottom:1px solid var(--color-border); background:#f7f7f9; }
+.manufacturer-order-head a { min-width:0; overflow:hidden; color:var(--color-ink); font-size:13px; font-weight:900; letter-spacing:-.025em; text-decoration:none; text-overflow:ellipsis; white-space:nowrap; }
+.manufacturer-order-head a:hover { text-decoration:underline; text-underline-offset:3px; }
+.manufacturer-order-head a:focus-visible { border-radius:4px; outline:2px solid var(--color-primary); outline-offset:2px; }
+.manufacturer-order-head span { color:var(--color-muted); font-size:11px; font-weight:800; white-space:nowrap; }
 .manufacturer-order-row { min-height:44px; display:grid; grid-template-columns:24px minmax(0, 1fr) auto; gap:8px; align-items:center; padding:7px 10px; border-bottom:1px solid var(--color-border); }
 .control-order-sequence { width:24px; height:24px; display:grid; place-items:center; border-radius:50%; background:#0066cc; color:#fff; font-size:11px; font-style:normal; font-weight:850; line-height:1; }
 .manufacturer-order-row:last-child { border-bottom:0; }

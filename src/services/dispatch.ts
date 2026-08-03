@@ -168,6 +168,21 @@ export async function unassignDispatchOrder(order: DispatchListItem): Promise<Di
   return assignmentResult(data);
 }
 
+export async function unassignDispatchOrders(orders: DispatchListItem[]): Promise<DispatchBatchAssignmentResult> {
+  const data = await requestV1AssignmentCommandJson<unknown>('seller-order-assignments/unassign', {
+    json: {
+      items: orders.map((order) => ({
+        commandId: crypto.randomUUID(),
+        expectedVersion: order.routeVersionId ?? 'UNASSIGNED',
+        sellerOrderId: order.sellerOrderId,
+      })),
+      reason: '관리자 배정 해제',
+    },
+    method: 'POST',
+  });
+  return batchAssignmentResult(data);
+}
+
 function dispatchResponse(data: unknown): { items: unknown[]; page?: DispatchListPage } {
   if (!hasOnlyKeys(data, ['items', 'page']) || !Array.isArray(data.items)) throw new Error('배차 목록 응답 형식이 올바르지 않습니다.');
   return {

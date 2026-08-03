@@ -459,6 +459,10 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
   await expect(scheduledFleet).toContainText('99테 6006');
   await expect(scheduledFleet).toContainText('77테 4004');
   await expect(scheduledFleet).not.toContainText('88테 5005');
+  const customerInquiryLink = page.getByRole('link', { name: 'Canonical Manufacturer 고객사 배송조회' });
+  await expect(customerInquiryLink).toBeVisible();
+  await expect(customerInquiryLink).toHaveAttribute('href', `/customer/delivery-inquiry/admin?customer=customer-g006-control&serviceDate=${controlSummary.serviceDate}`);
+  await expect(page.getByLabel('제조사별 주문 리스트')).not.toContainText('destination-g006-control');
   await expect.poll(() => page.evaluate(() => {
     const destinationSource = window.dsvMap?.getSource('operational-destinations');
     const routeSource = window.dsvMap?.getSource('operational-routes');
@@ -894,6 +898,7 @@ test('keeps the v1 assignment-command legacy envelope exception bounded to the e
   const clientSource = readFileSync(new URL('../../src/api/client.ts', import.meta.url), 'utf8');
   expect(extractAllowlist(clientSource, 'assignmentCommandAllowlist')).toEqual([
     'POST seller-order-assignments/reassign',
+    'POST seller-order-assignments/unassign',
     'POST seller-orders/[^/]+/assignment/unassign',
     'POST seller-orders/[^/]+/assignment/reassign',
   ]);
