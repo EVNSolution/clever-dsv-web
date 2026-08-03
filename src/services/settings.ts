@@ -7,6 +7,9 @@ export type AdminSettings = {
   departureLatitude: number | null;
   departureLongitude: number | null;
   loadingStartTime: string;
+  manualEmailBody: string;
+  manualEmailSenderEmail: string;
+  manualEmailSubject: string;
   plannedDepartureTime: string;
   temperatureLimit: number;
   etaDelayMinutes: number;
@@ -24,6 +27,9 @@ export const defaultAdminSettings: AdminSettings = {
   departureLatitude: 37.330948,
   departureLongitude: 126.9372235,
   loadingStartTime: '07:30',
+  manualEmailBody: '안녕하세요.\n\nCLEVER DSV 고객사 배송조회 페이지와 임시 계정 정보를 안내드립니다.\n\n배송조회 페이지:\n임시 아이디:\n임시 비밀번호:\n\n최초 로그인 후 아이디와 비밀번호를 변경해 주세요.',
+  manualEmailSenderEmail: '',
+  manualEmailSubject: '[CLEVER DSV] 고객사 배송조회 계정 안내',
   plannedDepartureTime: '08:30',
   temperatureLimit: 8,
   etaDelayMinutes: 10,
@@ -103,6 +109,9 @@ function operationalSettingsFrom(value: unknown): OperationalSettings {
     throw new Error('원격 설정 응답 형식이 올바르지 않습니다.');
   }
   const loadingStartTime = Reflect.get(value, 'loadingStartTime');
+  const manualEmailSenderEmail = Reflect.get(value, 'manualEmailSenderEmail');
+  const manualEmailSubject = Reflect.get(value, 'manualEmailSubject');
+  const manualEmailBody = Reflect.get(value, 'manualEmailBody');
   const departureAddress = Reflect.get(value, 'departureAddress');
   const departureLatitude = Reflect.get(value, 'departureLatitude');
   const departureLongitude = Reflect.get(value, 'departureLongitude');
@@ -116,6 +125,9 @@ function operationalSettingsFrom(value: unknown): OperationalSettings {
   const recordMissingProof = Reflect.get(value, 'recordMissingProof');
   if (
     !validTime(loadingStartTime) ||
+    !validOptionalEmail(manualEmailSenderEmail) ||
+    !validText(manualEmailSubject, 200) ||
+    !validText(manualEmailBody, 10000) ||
     !validRemoteLocation(departureAddress, departureLatitude, departureLongitude) ||
     !validTime(plannedDepartureTime) ||
     !validNumber(temperatureLimit, -50, 50) ||
@@ -133,6 +145,9 @@ function operationalSettingsFrom(value: unknown): OperationalSettings {
     departureLatitude,
     departureLongitude,
     loadingStartTime,
+    manualEmailSenderEmail: manualEmailSenderEmail ?? '',
+    manualEmailSubject,
+    manualEmailBody,
     plannedDepartureTime,
     temperatureLimit,
     etaDelayMinutes,
@@ -154,6 +169,9 @@ function operationalSettingsPatchFrom(
     'departureLatitude',
     'departureLongitude',
     'loadingStartTime',
+    'manualEmailSenderEmail',
+    'manualEmailSubject',
+    'manualEmailBody',
     'plannedDepartureTime',
     'temperatureLimit',
     'etaDelayMinutes',
@@ -169,6 +187,9 @@ function operationalSettingsPatchFrom(
   if (
     !validPartialLocation(settings) ||
     (settings.loadingStartTime !== undefined && !validTime(settings.loadingStartTime)) ||
+    (settings.manualEmailSenderEmail !== undefined && !validEmailInput(settings.manualEmailSenderEmail)) ||
+    (settings.manualEmailSubject !== undefined && !validText(settings.manualEmailSubject, 200)) ||
+    (settings.manualEmailBody !== undefined && !validText(settings.manualEmailBody, 10000)) ||
     (settings.plannedDepartureTime !== undefined && !validTime(settings.plannedDepartureTime)) ||
     (settings.temperatureLimit !== undefined && !validNumber(settings.temperatureLimit, -50, 50)) ||
     (settings.etaDelayMinutes !== undefined && !validInteger(settings.etaDelayMinutes, 1, 240)) ||
@@ -180,7 +201,25 @@ function operationalSettingsPatchFrom(
   ) {
     throw new Error('저장할 설정 값의 형식이 올바르지 않습니다.');
   }
-  return settings;
+  return {
+    ...settings,
+    ...(settings.manualEmailSenderEmail === undefined
+      ? {}
+      : { manualEmailSenderEmail: settings.manualEmailSenderEmail.trim() || null }),
+  } as Partial<OperationalSettings>;
+}
+
+function validOptionalEmail(value: unknown): value is string | null {
+  return value === null || (typeof value === 'string' && validEmailInput(value));
+}
+
+function validEmailInput(value: string): boolean {
+  const normalized = value.trim();
+  return normalized === '' || (normalized.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(normalized));
+}
+
+function validText(value: unknown, maxLength: number): value is string {
+  return typeof value === 'string' && value.trim() !== '' && value.length <= maxLength;
 }
 
 function validRemoteLocation(address: unknown, latitude: unknown, longitude: unknown): boolean {

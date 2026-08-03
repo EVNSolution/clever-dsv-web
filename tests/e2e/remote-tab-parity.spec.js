@@ -60,6 +60,9 @@ function operationSettings(overrides = {}) {
     forwardDelayAlerts: true,
     gpsSilenceSeconds: 30,
     loadingStartTime: '07:30',
+    manualEmailBody: '안녕하세요.\n\nCLEVER DSV 고객사 배송조회 페이지와 임시 계정 정보를 안내드립니다.\n\n배송조회 페이지:\n임시 아이디:\n임시 비밀번호:\n\n최초 로그인 후 아이디와 비밀번호를 변경해 주세요.',
+    manualEmailSenderEmail: null,
+    manualEmailSubject: '[CLEVER DSV] 고객사 배송조회 계정 안내',
     plannedDepartureTime: '08:30',
     recordMissingProof: true,
     showTemperatureAlerts: true,
@@ -78,6 +81,7 @@ function adminFixtures(fixtures) {
 async function installApiFixtures(page, fixtures) {
   const resolvedFixtures = {
     'GET /api/dsv/v1/map/profile': v1Envelope(mapProviderProfile, 'g006-map-profile'),
+    'GET /api/dsv/manual-email': legacyEnvelope({ apiConfigured: false, configured: false, defaultRecipients: [], defaultSubject: operationSettings().manualEmailSubject, defaultTextContent: operationSettings().manualEmailBody, senderEmail: null, senderName: 'CLEVER DSV' }),
     'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings()),
     ...fixtures,
   };
@@ -917,6 +921,53 @@ test('management renders customer, destination, and condition reference lists', 
   expectOnlyFixtureCalls(api);
 });
 
+test('customer detail previews and explicitly sends the saved customer guide email', async ({ page }) => {
+  let sentBody;
+  const api = await installApiFixtures(page, adminFixtures({
+    ...managementListFixtures(),
+    'GET /api/dsv/manual-email': legacyEnvelope({
+      apiConfigured: true,
+      configured: true,
+      defaultRecipients: [],
+      defaultSubject: operationSettings().manualEmailSubject,
+      defaultTextContent: operationSettings().manualEmailBody,
+      senderEmail: 'noreply@example.com',
+      senderName: 'CLEVER DSV',
+    }),
+    'POST /api/dsv/manual-email': ({ request }) => {
+      sentBody = request.postDataJSON();
+      return legacyEnvelope({ recipientCount: 1, sentAt: '2026-08-03T08:00:00.000Z' });
+    },
+  }));
+
+  await page.goto('/master-data');
+  await page.getByRole('button', { name: '고객사', exact: true }).click();
+  await page.getByRole('row').filter({ hasText: 'Canonical Customer G006' }).click();
+
+  const panel = page.getByLabel('계정 안내');
+  await expect(panel.getByLabel('발신자')).toHaveValue('noreply@example.com');
+  await expect(panel.getByLabel('메일 본문 미리보기')).toContainText('고객사: Canonical Customer G006');
+  await expect(panel.getByLabel('메일 본문 미리보기')).toContainText('배송조회 페이지: http://127.0.0.1:4174/customer/delivery-inquiry');
+  await expect(panel.getByLabel('메일 본문 미리보기')).not.toContainText('customer-g006');
+
+  const sendButton = panel.getByRole('button', { name: '안내 메일 보내기', exact: true });
+  await expect(sendButton).toBeDisabled();
+  await panel.getByLabel('수신자 이메일').fill('customer@example.com');
+  await panel.getByRole('checkbox', { name: '수신자와 메일 내용을 확인했습니다.' }).check();
+  await sendButton.click();
+
+  await expect(panel.getByRole('status').filter({ hasText: '1명에게 안내 메일을 전송했습니다.' })).toBeVisible();
+  expect(sentBody).toMatchObject({
+    confirmed: true,
+    recipients: ['customer@example.com'],
+    subject: operationSettings().manualEmailSubject,
+  });
+  expect(sentBody.textContent).toContain('고객사: Canonical Customer G006');
+  expect(sentBody.textContent).toContain('배송조회 페이지: http://127.0.0.1:4174/customer/delivery-inquiry');
+  expect(sentBody.textContent).not.toContain('customer-g006');
+  expectOnlyFixtureCalls(api);
+});
+
 test('management exposes a v1 list failure without falling back to local data', async ({ page }) => {
   const api = await installApiFixtures(page, adminFixtures(managementListFixtures({
     'GET /api/dsv/v1/customers?limit=100': {
@@ -1035,6 +1086,7 @@ test('settings GET and PATCH use the exact bounded legacy path', async ({ page }
   await expect(page.getByRole('button', { name: '초기화', exact: true })).toBeVisible();
   await page.getByLabel('준비 시작 시간').fill('07:30');
   await page.getByLabel('출발 예정 시간').fill('09:00');
+  await page.getByLabel('테스트 이메일 발신자').fill('sender@example.com');
   await page.getByRole('button', { name: '저장', exact: true }).click();
 
   await expect(page.getByRole('status').filter({ hasText: '설정을 저장했습니다.' })).toBeVisible();
@@ -1043,6 +1095,7 @@ test('settings GET and PATCH use the exact bounded legacy path', async ({ page }
     departureLatitude: 37.5663,
     departureLongitude: 126.9779,
     loadingStartTime: '07:30',
+    manualEmailSenderEmail: 'sender@example.com',
     plannedDepartureTime: '09:00',
   }));
   expect(patchCsrfTokens).toEqual(['g006-stale-csrf', 'g006-current-csrf']);
@@ -1067,6 +1120,45 @@ test('settings renders the complete backend defaults', async ({ page }) => {
   await expect(page.getByRole('checkbox', { name: '관제 화면 표시' })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: '배송원에게 전달' })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: '기록 페이지에 표시' })).toBeChecked();
+  expectOnlyFixtureCalls(api);
+});
+
+test('settings sends a Brevo test email only after the explicit confirmation checkbox', async ({ page }) => {
+  let sentBody;
+  const api = await installApiFixtures(page, adminFixtures({
+    'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings({ manualEmailSenderEmail: 'noreply@example.com' })),
+    'GET /api/dsv/manual-email': legacyEnvelope({
+      apiConfigured: true,
+      configured: true,
+      defaultRecipients: ['ops@example.com'],
+      defaultSubject: operationSettings().manualEmailSubject,
+      defaultTextContent: operationSettings().manualEmailBody,
+      senderEmail: 'noreply@example.com',
+      senderName: 'CLEVER DSV',
+    }),
+    'POST /api/dsv/manual-email': ({ request }) => {
+      sentBody = request.postDataJSON();
+      return legacyEnvelope({ recipientCount: 1, sentAt: '2026-08-03T08:00:00.000Z' });
+    },
+  }));
+
+  await page.goto('/settings');
+  const sendButton = page.getByRole('button', { name: '1회 발송', exact: true });
+  await expect(page.getByLabel('테스트 이메일 수신자')).toHaveValue('ops@example.com');
+  await expect(page.getByLabel('테스트 이메일 발신자')).toHaveValue('noreply@example.com');
+  await expect(sendButton).toBeDisabled();
+  await page.getByRole('checkbox', { name: '수신자와 발송 내용을 확인했습니다.' }).check();
+  await expect(sendButton).toBeEnabled();
+  await sendButton.click();
+
+  await expect(page.getByRole('status').filter({ hasText: '1명에게 발송 요청을 완료했습니다.' })).toBeVisible();
+  expect(sentBody).toMatchObject({
+    confirmed: true,
+    recipients: ['ops@example.com'],
+    subject: operationSettings().manualEmailSubject,
+    textContent: operationSettings().manualEmailBody,
+  });
+  expect(sentBody.commandId).toMatch(/^[0-9a-f-]{36}$/u);
   expectOnlyFixtureCalls(api);
 });
 

@@ -54,3 +54,20 @@
 }
 .settings-location-map-shell .maplibregl-ctrl-bottom-right { right:10px; bottom:10px; }
 .settings-location-map-shell .maplibregl-ctrl-bottom-left { left:10px; bottom:10px; }
+.settings-email-panel { gap:14px; }
+.settings-email-description { margin:0; color:var(--color-muted); font-size:12px; font-weight:700; line-height:1.5; }
+.settings-email-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; }
+.settings-email-grid label { display:grid; gap:7px; color:var(--color-ink); font-size:13px; font-weight:900; }
+.settings-email-grid input,
+.settings-email-grid textarea {
+  width:100%; min-width:0; border:1px solid var(--color-border); border-radius:12px;
+  padding:10px 12px; background:var(--color-white); color:var(--color-ink); font:700 13px/1.5 var(--font-sans);
+}
+.settings-email-grid input { min-height:40px; }
+.settings-email-grid input[readonly] { background:var(--color-surface); color:var(--color-muted); }
+.settings-email-grid textarea { resize:vertical; }
+.settings-email-wide { grid-column:1 / -1; }
+.settings-email-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-top:14px; border-top:1px solid var(--color-border); }
+.settings-email-confirm { display:flex; align-items:center; gap:8px; color:var(--color-ink); font-size:12px; font-weight:800; }
+.settings-email-action { display:flex; align-items:center; justify-content:flex-end; gap:10px; color:var(--color-muted); font-size:12px; font-weight:750; }
+.settings-email-action .error { color:var(--color-risk); }

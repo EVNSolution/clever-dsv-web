@@ -3,6 +3,8 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { apiConfig } from '../api/config';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
 import { MapPreview } from '../components/MapPreview';
+import { loadManualEmailConfig, recipientsFromInput, sendManualEmail } from '../services/manual-email';
+import type { ManualEmailConfig } from '../services/manual-email';
 import {
   defaultAdminSettings,
   geocodeDepartureAddress,
@@ -31,6 +33,7 @@ export function SettingsPage({ description, title }: { description: string; titl
   const [saveError, setSaveError] = useState('');
   const [resetNotice, setResetNotice] = useState('');
   const [loadRequest, setLoadRequest] = useState(0);
+  const [settingsRevision, setSettingsRevision] = useState(0);
   const [geocodeState, setGeocodeState] = useState<GeocodeState>('idle');
   const [geocodeMessage, setGeocodeMessage] = useState('');
   const geocodeRequest = useRef(0);
@@ -85,6 +88,7 @@ export function SettingsPage({ description, title }: { description: string; titl
       if (!validLocation(settings)) throw new Error('출발지 주소와 지도 좌표를 모두 설정해 주세요.');
       if (isRemote) await saveRemoteOperationalSettings(remoteSettings);
       else saveAdminSettings(mockSettings);
+      setSettingsRevision((revision) => revision + 1);
       setSaveState('saved');
     } catch (error) {
       setSaveError(errorMessage(error));
@@ -245,8 +249,121 @@ export function SettingsPage({ description, title }: { description: string; titl
         <AdminSectionHeader title="알림 수신" />
         <table className="page-table"><tbody><tr><th>온도 경고</th><td><label><input type="checkbox" checked={settings.showTemperatureAlerts} onChange={(event) => isRemote ? updateRemote('showTemperatureAlerts', event.target.checked) : updateMock('showTemperatureAlerts', event.target.checked)} /> 관제 화면 표시</label></td></tr><tr><th>배송 지연</th><td><label><input type="checkbox" checked={settings.forwardDelayAlerts} onChange={(event) => isRemote ? updateRemote('forwardDelayAlerts', event.target.checked) : updateMock('forwardDelayAlerts', event.target.checked)} /> 배송원에게 전달</label></td></tr><tr><th>증빙 누락</th><td><label><input type="checkbox" checked={settings.recordMissingProof} onChange={(event) => isRemote ? updateRemote('recordMissingProof', event.target.checked) : updateMock('recordMissingProof', event.target.checked)} /> 기록 페이지에 표시</label></td></tr></tbody></table>
         </section>
+        <ManualEmailPanel
+          configRevision={settingsRevision}
+          enabled={isRemote}
+          subject={settings.manualEmailSubject}
+          textContent={settings.manualEmailBody}
+          senderEmail={settings.manualEmailSenderEmail}
+          onSubjectChange={(value) => isRemote
+            ? updateRemote('manualEmailSubject', value)
+            : updateMock('manualEmailSubject', value)}
+          onTextContentChange={(value) => isRemote
+            ? updateRemote('manualEmailBody', value)
+            : updateMock('manualEmailBody', value)}
+          onSenderEmailChange={(value) => isRemote
+            ? updateRemote('manualEmailSenderEmail', value)
+            : updateMock('manualEmailSenderEmail', value)}
+        />
       </div> : null}
     </>
+  );
+}
+
+type ManualEmailState = 'error' | 'loading' | 'ready' | 'sending' | 'sent';
+
+function ManualEmailPanel({
+  configRevision,
+  enabled,
+  onSenderEmailChange,
+  onSubjectChange,
+  onTextContentChange,
+  senderEmail,
+  subject,
+  textContent,
+}: {
+  configRevision: number;
+  enabled: boolean;
+  onSenderEmailChange(value: string): void;
+  onSubjectChange(value: string): void;
+  onTextContentChange(value: string): void;
+  senderEmail: string;
+  subject: string;
+  textContent: string;
+}): ReactElement {
+  const [config, setConfig] = useState<ManualEmailConfig | null>(null);
+  const [state, setState] = useState<ManualEmailState>('loading');
+  const [recipients, setRecipients] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setState('loading');
+    loadManualEmailConfig()
+      .then((loaded) => {
+        if (!active) return;
+        setConfig(loaded);
+        setRecipients(loaded.defaultRecipients.join(', '));
+        setState('ready');
+      })
+      .catch((error) => {
+        if (!active) return;
+        setMessage(errorMessage(error));
+        setState('error');
+      });
+    return () => { active = false; };
+  }, [configRevision]);
+
+  const send = async () => {
+    const recipientList = recipientsFromInput(recipients);
+    if (recipientList.length === 0 || subject.trim() === '' || textContent.trim() === '' || !confirmed) return;
+    setState('sending');
+    setMessage('');
+    try {
+      const result = await sendManualEmail({ recipients: recipientList, subject: subject.trim(), textContent: textContent.trim() });
+      setConfirmed(false);
+      setState('sent');
+      setMessage(`${result.recipientCount}명에게 발송 요청을 완료했습니다.`);
+    } catch (error) {
+      setState('error');
+      setMessage(errorMessage(error));
+    }
+  };
+
+  const readyToSend = enabled
+    && config?.apiConfigured === true
+    && config.senderEmail === senderEmail.trim().toLowerCase()
+    && config.defaultSubject === subject.trim()
+    && config.defaultTextContent === textContent.trim()
+    && state !== 'loading'
+    && state !== 'sending'
+    && confirmed
+    && recipientsFromInput(recipients).length > 0
+    && subject.trim() !== ''
+    && textContent.trim() !== '';
+
+  return (
+    <section className="page-panel wide settings-email-panel">
+      <AdminSectionHeader title="이메일 테스트" />
+      <p className="settings-email-description">배차와 연결되지 않은 수동 발송입니다. 버튼을 누른 경우에만 한 번 요청하며 자동 재시도하지 않습니다.</p>
+      <div className="settings-email-grid">
+        <label><span>발신자</span><input aria-label="테스트 이메일 발신자" type="email" maxLength={320} value={senderEmail} onChange={(event) => { onSenderEmailChange(event.target.value); setConfirmed(false); }} placeholder="Brevo에서 인증한 이메일" /></label>
+        <label><span>수신자</span><input aria-label="테스트 이메일 수신자" type="text" value={recipients} onChange={(event) => { setRecipients(event.target.value); setConfirmed(false); }} placeholder="쉼표로 구분" /></label>
+        <label className="settings-email-wide"><span>제목</span><input aria-label="테스트 이메일 제목" type="text" maxLength={200} value={subject} onChange={(event) => { onSubjectChange(event.target.value); setConfirmed(false); }} /></label>
+        <label className="settings-email-wide"><span>본문</span><textarea aria-label="테스트 이메일 본문" maxLength={10000} rows={8} value={textContent} onChange={(event) => { onTextContentChange(event.target.value); setConfirmed(false); }} /></label>
+      </div>
+      <div className="settings-email-footer">
+        <label className="settings-email-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /> 수신자와 발송 내용을 확인했습니다.</label>
+        <div className="settings-email-action">
+          {config?.apiConfigured === false ? <span role="status">Brevo API 설정이 필요합니다.</span> : null}
+          {config?.apiConfigured === true && config.senderEmail !== senderEmail.trim().toLowerCase() ? <span role="status">발신자 이메일을 저장해 주세요.</span> : null}
+          {config?.apiConfigured === true && (config.defaultSubject !== subject.trim() || config.defaultTextContent !== textContent.trim()) ? <span role="status">이메일 내용을 저장해 주세요.</span> : null}
+          {message ? <span className={state === 'error' ? 'error' : ''} role={state === 'error' ? 'alert' : 'status'}>{message}</span> : null}
+          <button className="btn primary" type="button" disabled={!readyToSend} onClick={() => void send()}>{state === 'sending' ? '발송 중' : '1회 발송'}</button>
+        </div>
+      </div>
+    </section>
   );
 }
 

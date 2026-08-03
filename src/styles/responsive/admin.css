@@ -1,5 +1,8 @@
 @media (max-width: 900px) {
   .master-detail-grid { grid-template-columns:1fr; }
+  .customer-email-fields { grid-template-columns:1fr; }
+  .customer-email-footer { align-items:stretch; flex-direction:column; }
+  .customer-email-footer button { width:100%; }
   .management-form-grid { grid-template-columns:1fr; }
   .management-form-grid label.wide { grid-column:auto; }
   .condition-candidate { grid-template-columns:1fr; }
