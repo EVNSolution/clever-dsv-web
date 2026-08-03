@@ -3,7 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { ArrowUpRight, ChevronDown, LoaderCircle } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
-import { loadDispatchList, reassignDispatchOrder, unassignDispatchOrder } from '../services/dispatch';
+import { loadDispatchList, reassignDispatchOrders, unassignDispatchOrder } from '../services/dispatch';
 import type { DispatchListItem, DispatchListView, DispatchSearch } from '../services/dispatch';
 import {
   commitDispatchImport,
@@ -1133,25 +1133,18 @@ function DispatchWorkspace({
     if (assignmentCandidates.length === 0 || selectedDriver === null || selectedVehicle === null || readOnly) return;
     setMutationBusy(true);
     setMutationError('');
-    let completed = 0;
-    let targetRoutePlanId = selectedDriverRoutePlanId;
     try {
-      for (const order of assignmentCandidates) {
-        const result = await reassignDispatchOrder({
-          driverId: selectedDriver.id,
-          order,
-          routePlanId: targetRoutePlanId,
-          vehicleId: selectedVehicle.id,
-        });
-        targetRoutePlanId = result.routePlanId ?? targetRoutePlanId;
-        completed += 1;
-      }
+      await reassignDispatchOrders({
+        driverId: selectedDriver.id,
+        orders: assignmentCandidates,
+        routePlanId: selectedDriverRoutePlanId,
+        vehicleId: selectedVehicle.id,
+      });
       clearSelection();
     } catch (caught) {
-      const prefix = completed > 0 ? `${completed}건 반영 후 중단되었습니다. ` : '';
-      setMutationError(`${prefix}${errorMessage(caught)}`);
+      setMutationError(errorMessage(caught));
     } finally {
-      if (completed > 0) onAssignmentChanged?.();
+      onAssignmentChanged?.();
       setMutationBusy(false);
     }
   }

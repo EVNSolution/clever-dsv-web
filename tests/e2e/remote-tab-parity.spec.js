@@ -308,20 +308,21 @@ test('dispatch assigns an unassigned order to the selected driver and vehicle', 
         page: { hasMore: false },
       }, `g006-dispatch-assignment-${dispatchReads}`);
     },
-    'POST /api/dsv/v1/seller-orders/seller-order-g006-assignment/assignment/reassign': async ({ request }) => {
+    'POST /api/dsv/v1/seller-order-assignments/reassign': async ({ request }) => {
       assignmentPayload = await request.postDataJSON();
       return legacyEnvelope({
-        assignmentResult: {
+        assignmentResults: [{
           assignmentStatus: 'ASSIGNED',
           auditEventId: 'audit-g006-assignment',
-          commandId: assignmentPayload.commandId,
+          commandId: assignmentPayload.items[0].commandId,
           etaStatus: 'PENDING',
           newRouteVersionId: 'route-version-g006-assignment',
           previousRouteVersionId: null,
           receiptId: 'receipt-g006-assignment',
           routePlanId: 'route-plan-g006-assignment',
           sellerOrderId: 'seller-order-g006-assignment',
-        },
+        }],
+        routePlanId: 'route-plan-g006-assignment',
       });
     },
   })));
@@ -350,33 +351,33 @@ test('dispatch assigns an unassigned order to the selected driver and vehicle', 
   await expect.poll(() => dispatchReads).toBe(2);
   await expect(page.locator('[aria-label="배정 진행"]')).toContainText('배정 1');
   expect(assignmentPayload).toMatchObject({
-    expectedVersion: 'UNASSIGNED',
+    items: [{ expectedVersion: 'UNASSIGNED', sellerOrderId: 'seller-order-g006-assignment' }],
     reason: '관리자 배정',
     targetDriverId: 'driver-g006',
     targetVehicleId: 'vehicle-g006',
   });
-  expect(assignmentPayload.commandId).toEqual(expect.any(String));
+  expect(assignmentPayload.items[0].commandId).toEqual(expect.any(String));
   expectOnlyFixtureCalls(api);
 });
 
 test('dispatch selects multiple destinations with a map polygon', async ({ page }) => {
   const assignmentPayloads = [];
-  const assignmentFixture = async ({ request, url }) => {
+  const assignmentFixture = async ({ request }) => {
     const payload = await request.postDataJSON();
     assignmentPayloads.push(payload);
-    const sellerOrderId = url.pathname.split('/').at(-3);
     return legacyEnvelope({
-      assignmentResult: {
-        assignmentStatus: 'ASSIGNED',
-        auditEventId: `audit-${sellerOrderId}`,
-        commandId: payload.commandId,
-        etaStatus: 'PENDING',
-        newRouteVersionId: `route-version-${sellerOrderId}`,
-        previousRouteVersionId: null,
-        receiptId: `receipt-${sellerOrderId}`,
-        routePlanId: 'route-plan-g006-polygon',
-        sellerOrderId,
-      },
+      assignmentResults: payload.items.map((item) => ({
+          assignmentStatus: 'ASSIGNED',
+          auditEventId: `audit-${item.sellerOrderId}`,
+          commandId: item.commandId,
+          etaStatus: 'PENDING',
+          newRouteVersionId: `route-version-${item.sellerOrderId}`,
+          previousRouteVersionId: null,
+          receiptId: `receipt-${item.sellerOrderId}`,
+          routePlanId: 'route-plan-g006-polygon',
+          sellerOrderId: item.sellerOrderId,
+        })),
+      routePlanId: 'route-plan-g006-polygon',
     });
   };
   const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
@@ -407,8 +408,7 @@ test('dispatch selects multiple destinations with a map polygon', async ({ page 
       ],
       page: { hasMore: false },
     }, 'g006-dispatch-polygon'),
-    'POST /api/dsv/v1/seller-orders/seller-order-g006-north/assignment/reassign': assignmentFixture,
-    'POST /api/dsv/v1/seller-orders/seller-order-g006-south/assignment/reassign': assignmentFixture,
+    'POST /api/dsv/v1/seller-order-assignments/reassign': assignmentFixture,
   })));
 
   await page.goto('/dispatch');
@@ -463,12 +463,17 @@ test('dispatch selects multiple destinations with a map polygon', async ({ page 
   await expect(driverRegion).toContainText('2곳');
 
   await driverRegion.getByRole('button', { name: '선택 배정', exact: true }).click();
-  await expect.poll(() => assignmentPayloads.length).toBe(2);
+  await expect.poll(() => assignmentPayloads.length).toBe(1);
   await expect.poll(() => page.evaluate(() => ({
     center: window.dsvMap.getCenter().toArray(),
     zoom: window.dsvMap.getZoom(),
   }))).toEqual(viewportBeforeSelection);
-  expect(assignmentPayloads[1]).toMatchObject({ targetRoutePlanId: 'route-plan-g006-polygon' });
+  expect(assignmentPayloads[0]).toMatchObject({
+    items: [
+      { sellerOrderId: 'seller-order-g006-north' },
+      { sellerOrderId: 'seller-order-g006-south' },
+    ],
+  });
   expectOnlyFixtureCalls(api);
 });
 

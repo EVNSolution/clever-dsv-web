@@ -71,6 +71,11 @@ export type DispatchAssignmentResult = {
   sellerOrderId: string;
 };
 
+export type DispatchBatchAssignmentResult = {
+  assignmentResults: DispatchAssignmentResult[];
+  routePlanId: string | null;
+};
+
 export async function loadDispatchList(
   serviceDate: string,
   search: Partial<DispatchSearch> = {},
@@ -123,6 +128,29 @@ export async function reassignDispatchOrder(input: {
     },
   );
   return assignmentResult(data);
+}
+
+export async function reassignDispatchOrders(input: {
+  driverId: string;
+  orders: DispatchListItem[];
+  routePlanId?: string;
+  vehicleId: string;
+}): Promise<DispatchBatchAssignmentResult> {
+  const data = await requestV1AssignmentCommandJson<unknown>('seller-order-assignments/reassign', {
+    json: {
+      items: input.orders.map((order) => ({
+        commandId: crypto.randomUUID(),
+        expectedVersion: order.routeVersionId ?? 'UNASSIGNED',
+        sellerOrderId: order.sellerOrderId,
+      })),
+      reason: '관리자 배정',
+      targetDriverId: input.driverId,
+      ...(input.routePlanId === undefined ? {} : { targetRoutePlanId: input.routePlanId }),
+      targetVehicleId: input.vehicleId,
+    },
+    method: 'POST',
+  });
+  return batchAssignmentResult(data);
 }
 
 export async function unassignDispatchOrder(order: DispatchListItem): Promise<DispatchAssignmentResult> {
@@ -225,7 +253,25 @@ function rawDispatch(value: unknown): RawDispatch {
 }
 
 function assignmentResult(value: unknown): DispatchAssignmentResult {
-  if (!hasOnlyKeys(value, ['assignmentResult']) || !hasOnlyKeys(value.assignmentResult, [
+  if (!hasOnlyKeys(value, ['assignmentResult'])) throw new Error('배정 명령 응답 형식이 올바르지 않습니다.');
+  return parseAssignmentResult(value.assignmentResult);
+}
+
+function batchAssignmentResult(value: unknown): DispatchBatchAssignmentResult {
+  if (!hasOnlyKeys(value, ['assignmentResults', 'routePlanId']) || !Array.isArray(value.assignmentResults)) {
+    throw new Error('일괄 배정 명령 응답 형식이 올바르지 않습니다.');
+  }
+  if (value.routePlanId !== null && typeof value.routePlanId !== 'string') {
+    throw new Error('일괄 배정 명령 결과가 올바르지 않습니다.');
+  }
+  return {
+    assignmentResults: value.assignmentResults.map(parseAssignmentResult),
+    routePlanId: value.routePlanId,
+  };
+}
+
+function parseAssignmentResult(value: unknown): DispatchAssignmentResult {
+  if (!hasOnlyKeys(value, [
     'assignmentStatus',
     'auditEventId',
     'commandId',
@@ -236,18 +282,17 @@ function assignmentResult(value: unknown): DispatchAssignmentResult {
     'routePlanId',
     'sellerOrderId',
   ])) throw new Error('배정 명령 응답 형식이 올바르지 않습니다.');
-  const result = value.assignmentResult;
-  if ((result.assignmentStatus !== 'ASSIGNED' && result.assignmentStatus !== 'UNASSIGNED')
-    || typeof result.newRouteVersionId !== 'string'
-    || typeof result.sellerOrderId !== 'string'
-    || (result.routePlanId !== null && typeof result.routePlanId !== 'string')) {
+  if ((value.assignmentStatus !== 'ASSIGNED' && value.assignmentStatus !== 'UNASSIGNED')
+    || typeof value.newRouteVersionId !== 'string'
+    || typeof value.sellerOrderId !== 'string'
+    || (value.routePlanId !== null && typeof value.routePlanId !== 'string')) {
     throw new Error('배정 명령 결과가 올바르지 않습니다.');
   }
   return {
-    assignmentStatus: result.assignmentStatus,
-    newRouteVersionId: result.newRouteVersionId,
-    routePlanId: result.routePlanId,
-    sellerOrderId: result.sellerOrderId,
+    assignmentStatus: value.assignmentStatus,
+    newRouteVersionId: value.newRouteVersionId,
+    routePlanId: value.routePlanId,
+    sellerOrderId: value.sellerOrderId,
   };
 }
 
