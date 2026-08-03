@@ -874,6 +874,7 @@ test('pins the exact normalized G005 v1 read allowlist', () => {
     'GET session',
     'GET map/profile',
     'GET control',
+    'GET control/routes',
     'GET dispatches',
     'GET records',
     'GET drivers',

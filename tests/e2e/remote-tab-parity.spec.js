@@ -340,7 +340,7 @@ test('dispatch assigns an unassigned order to the selected driver and vehicle', 
   const mapCanvas = page.locator('.maplibregl-canvas');
   const mapBox = await mapCanvas.boundingBox();
   expect(mapBox).not.toBeNull();
-  for (const [x, y] of [[0.02, 0.02], [0.98, 0.02], [0.98, 0.98], [0.02, 0.98], [0.02, 0.02]]) {
+  for (const [x, y] of [[0.02, 0.15], [0.98, 0.15], [0.98, 0.98], [0.02, 0.98], [0.02, 0.15]]) {
     await mapCanvas.click({ position: { x: mapBox.width * x, y: mapBox.height * y } });
   }
   const driverRegion = page.getByRole('region', { name: '배송원' });
@@ -421,15 +421,15 @@ test('dispatch selects multiple destinations with a map polygon', async ({ page 
   const mapCanvas = page.locator('.maplibregl-canvas');
   const box = await mapCanvas.boundingBox();
   expect(box).not.toBeNull();
-  for (const [x, y] of [[0.02, 0.02], [0.98, 0.02], [0.98, 0.98], [0.02, 0.98]]) {
+  for (const [x, y] of [[0.02, 0.15], [0.98, 0.15], [0.98, 0.98], [0.02, 0.98]]) {
     await mapCanvas.click({ position: { x: box.width * x, y: box.height * y } });
   }
-  await page.mouse.move(box.x + box.width * 0.02, box.y + box.height * 0.02);
+  await page.mouse.move(box.x + box.width * 0.02, box.y + box.height * 0.15);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.04, box.y + box.height * 0.04, { steps: 3 });
+  await page.mouse.move(box.x + box.width * 0.04, box.y + box.height * 0.17, { steps: 3 });
   await page.mouse.up();
   await page.waitForTimeout(250);
-  await mapCanvas.click({ position: { x: box.width * 0.98, y: box.height * 0.02 } });
+  await mapCanvas.click({ position: { x: box.width * 0.98, y: box.height * 0.15 } });
 
   const driverRegion = page.getByRole('region', { name: '배송원' });
   await expect(page.getByLabel('영역 선택 도구')).toHaveCount(0);
@@ -441,9 +441,9 @@ test('dispatch selects multiple destinations with a map polygon', async ({ page 
     window.dsvMap.querySourceFeatures('dispatch-selection-source')
       .find((feature) => feature.geometry.type === 'Polygon')?.geometry,
   ));
-  await page.mouse.move(box.x + box.width * 0.98, box.y + box.height * 0.02);
+  await page.mouse.move(box.x + box.width * 0.98, box.y + box.height * 0.15);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.9, box.y + box.height * 0.08, { steps: 3 });
+  await page.mouse.move(box.x + box.width * 0.9, box.y + box.height * 0.21, { steps: 3 });
   await page.mouse.up();
   await expect.poll(() => page.evaluate(() => JSON.stringify(
     window.dsvMap.querySourceFeatures('dispatch-selection-source')
@@ -452,7 +452,7 @@ test('dispatch selects multiple destinations with a map polygon', async ({ page 
 
   await page.getByRole('button', { name: '선택 지우기', exact: true }).click();
   await page.getByRole('button', { name: '영역 선택', exact: true }).click();
-  for (const [x, y] of [[0.02, 0.02], [0.98, 0.02], [0.98, 0.98]]) {
+  for (const [x, y] of [[0.02, 0.15], [0.98, 0.15], [0.98, 0.98]]) {
     await mapCanvas.click({ position: { x: box.width * x, y: box.height * y } });
   }
   await mapCanvas.dblclick({ position: { x: box.width * 0.02, y: box.height * 0.98 } });
