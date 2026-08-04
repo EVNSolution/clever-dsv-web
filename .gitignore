@@ -17,3 +17,7 @@ docs/runbooks/*.tgz
 # Local copies of third-party manuals are archived by location only.
 # They were never repository source and should not add large binaries to Git.
 docs/archive/external-manuals/
+
+# Secret-bearing vendor specifications must remain outside the repository.
+docs/private/
+docs/171. 인터페이스사양서_이브이앤솔루션_20260804.pdf
