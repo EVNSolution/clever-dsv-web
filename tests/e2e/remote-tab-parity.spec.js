@@ -13,6 +13,7 @@ const adminSession = {
     'dsv:dispatches:read',
     'dsv:records:read',
     'dsv:resources:read',
+    'dsv:resources:write',
     'dsv:customers:read',
     'dsv:destinations:read',
     'dsv:conditions:read',
@@ -933,6 +934,53 @@ test('management renders customer, destination, and condition reference lists', 
   await expect(page.getByText('냉장 운송', { exact: true }).first()).toBeVisible();
   const conditionRow = page.locator('.master-condition-grid tbody tr').filter({ hasText: '냉장 운송' });
   await expect(conditionRow.locator('td')).toHaveText(['COLD', '냉장 운송', '냉장 상태를 유지하여 운송합니다.']);
+  expectOnlyFixtureCalls(api);
+});
+
+test('management issues a driver signup invite without an existing driver', async ({ page, context }) => {
+  const signupToken = 'A'.repeat(43);
+  const signupUrl = `clever-driver://signup?token=${signupToken}`;
+  let requestBody;
+  let csrfToken;
+  const api = await installApiFixtures(page, adminFixtures({
+    ...managementListFixtures(),
+    'POST /api/dsv/drivers/signup-invite': ({ request }) => {
+      requestBody = request.postData();
+      csrfToken = request.headers()['x-csrf-token'];
+      return legacyEnvelope({
+        invite: {
+          expiresAt: '2026-08-05T02:00:00.000Z',
+          signupUrl,
+        },
+      });
+    },
+  }));
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+
+  await page.goto('/master-data');
+  const driverList = page.getByLabel('배송원 리스트');
+  await driverList.getByRole('button', { name: '초대 생성', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '배송원 초대' });
+  await expect(dialog).toContainText('배송원 정보는 미리 입력하지 않습니다.');
+  await expect(dialog.getByRole('textbox')).toHaveCount(0);
+
+  await dialog.getByRole('button', { name: '초대 링크 생성', exact: true }).click();
+
+  await expect(dialog.getByLabel('배송원 가입 링크', { exact: true })).toHaveValue(signupUrl);
+  await expect(dialog.getByLabel('배송원 가입 링크 QR 코드', { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('배송원 가입 링크 QR 코드', { exact: true }).locator('path')).toHaveAttribute('d', /M/u);
+  await expect(dialog).toContainText('1회');
+  expect(requestBody).toBeNull();
+  expect(csrfToken).toBe('g006-admin-csrf');
+
+  await dialog.getByRole('button', { name: '링크 복사', exact: true }).click();
+  await expect(dialog.getByText('링크를 복사했습니다.', { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(signupUrl);
+  const storedValues = await page.evaluate(() => JSON.stringify({
+    local: Object.values(window.localStorage),
+    session: Object.values(window.sessionStorage),
+  }));
+  expect(storedValues).not.toContain(signupToken);
   expectOnlyFixtureCalls(api);
 });
 

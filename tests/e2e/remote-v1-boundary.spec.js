@@ -1131,6 +1131,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'GET manual-email',
     'POST manual-email',
     'POST drivers',
+    'POST drivers/signup-invite',
     'PATCH drivers/[^/]+',
     'DELETE drivers/[^/]+',
     'POST vehicles',

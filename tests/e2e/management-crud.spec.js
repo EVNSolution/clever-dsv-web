@@ -151,6 +151,12 @@ test('resources keep create and delete on lists and edit on details', async ({ p
   const driverWorkspace = page.getByLabel('배송원 관리');
   const driverList = driverWorkspace.getByLabel('배송원 리스트');
   const driverDetail = driverWorkspace.getByLabel('배송원 상세');
+  await expect(driverList.getByRole('button', { name: '초대 생성', exact: true })).toBeVisible();
+  await driverList.getByRole('button', { name: '초대 생성', exact: true }).click();
+  const inviteDialog = page.getByRole('dialog', { name: '배송원 초대' });
+  await expect(inviteDialog).toContainText('배송원 정보는 미리 입력하지 않습니다.');
+  await expect(inviteDialog.getByRole('textbox')).toHaveCount(0);
+  await inviteDialog.getByRole('button', { name: '취소', exact: true }).click();
   await expect(driverList.getByRole('button', { name: '배송원 등록', exact: true })).toBeVisible();
   await expect(driverList.getByRole('button', { name: '배송원 삭제', exact: true })).toBeDisabled();
   await expect(driverList.getByRole('button', { name: '배송원 수정', exact: true })).toHaveCount(0);
