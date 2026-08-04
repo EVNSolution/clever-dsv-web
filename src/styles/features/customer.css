@@ -1,16 +1,15 @@
 /* Viewport draft: desktop >=1121px, compact 769-1120px, mobile <=768px.
    The 920px boundary only reduces content density inside the compact tier. */
-body.customer-delivery-demo .left-tabs,
-body.customer-delivery-demo .side,
-body.customer-delivery-demo #pageContent,
-body.customer-delivery-demo #notificationIsland,
-body.customer-delivery-demo #floatingDriverCard,
-body.customer-delivery-demo .top-cluster { left: 20px; top: 20px; }
-body.customer-delivery-demo .app-header { max-width: min(760px, calc(100vw - 40px)); }
-body.customer-delivery-demo .brand-home { width:auto; min-width:210px; }
-body.customer-delivery-demo,
-body.customer-delivery-demo .grid { min-width:0; overflow:hidden; }
-body.customer-delivery-demo .grid { grid-template-columns: 1fr; }
+.customer-delivery-demo,
+.customer-delivery-demo .grid { min-width:0; overflow:hidden; }
+.customer-delivery-demo .grid { grid-template-columns:1fr; }
+.customer-navigation { z-index:9; }
+.customer-navigation-brand { cursor:default; }
+.customer-navigation-name {
+  width:180px; min-width:0; min-height:38px; display:flex; align-items:center; padding:0 10px;
+  overflow:hidden; border-bottom:1px solid var(--color-border); color:var(--color-ink);
+  font-size:13px; font-weight:950; letter-spacing:-.025em; text-overflow:ellipsis; white-space:nowrap;
+}
 .customer-order-card {
   position: absolute; right: 22px; top: 22px; z-index: 7;
   width: min(470px, calc(100vw - 44px)); padding: 20px;
@@ -21,20 +20,54 @@ body.customer-delivery-demo .grid { grid-template-columns: 1fr; }
 }
 @supports not (height: 100dvh) { .customer-order-card { max-height: calc(100vh - 44px); } }
 .customer-order-card[hidden] { display: none !important; }
-.customer-destination-panel {
-  box-sizing:border-box; width:min(370px, calc(100vw - 44px)); height:calc(100dvh - 44px); max-height:none;
-  grid-template-rows:44px minmax(0, 1fr); gap:0; padding:16px; overflow:hidden;
-  border-color:var(--color-border); box-shadow:var(--shadow-floating);
+.customer-control-side {
+  position:absolute; right:22px; top:22px; bottom:22px; z-index:7;
+  width:min(370px, calc(100vw - 44px)); display:flex; flex-direction:column; gap:10px;
+  pointer-events:none;
 }
-@supports not (height: 100dvh) { .customer-destination-panel { height:calc(100vh - 44px); } }
-.customer-destination-panel-head {
-  min-width:0; display:flex; align-items:center; justify-content:space-between; gap:12px;
-  padding:0 6px 10px; border-bottom:1px solid var(--color-border);
+.customer-control-side > * { pointer-events:auto; }
+.customer-control-side .customer-panel {
+  position:relative; right:auto; top:auto; box-sizing:border-box; width:100%; min-width:0; min-height:0; max-height:none;
+  display:flex; flex-direction:column; gap:0; padding:12px; overflow:hidden;
+  border:1px solid var(--color-border); border-radius:24px; background:rgba(255,255,255,.94);
+  box-shadow:var(--shadow-floating); backdrop-filter:blur(18px);
 }
-.customer-destination-panel-head strong { color:var(--color-ink); font-size:var(--text-section-title); font-weight:1000; letter-spacing:-.04em; }
-.customer-destination-panel-head span {
+.customer-control-side .customer-panel.collapsed { flex:0 0 58px; height:58px; padding-block:7px; }
+.customer-vehicle-panel { flex:0 1 252px; max-height:252px; }
+.customer-destination-panel { flex:1 1 auto; min-height:0; }
+.customer-panel-head {
+  width:100%; min-height:44px; display:grid; grid-template-columns:minmax(0, 1fr) auto auto; align-items:center; gap:10px;
+  padding:0 6px; border:0; border-bottom:1px solid var(--color-border); background:transparent;
+  color:var(--color-ink); cursor:pointer; font:inherit; text-align:left;
+}
+.customer-panel.collapsed .customer-panel-head { border-bottom:0; }
+.customer-panel-head strong { min-width:0; font-size:var(--text-section-title); font-weight:1000; letter-spacing:-.04em; }
+.customer-panel-head span {
   min-width:34px; min-height:24px; display:inline-grid; place-items:center; padding:0 9px;
   border-radius:var(--radius-pill); background:#f6f6f8; color:var(--color-muted); font-size:11px; font-weight:900;
+}
+.customer-panel-head small { color:var(--color-muted); font-size:11px; font-weight:900; }
+.customer-panel-head:hover small { color:var(--color-ink); }
+.customer-panel-head:focus-visible { outline:2px solid var(--color-primary); outline-offset:2px; border-radius:12px; }
+.customer-vehicle-list {
+  min-height:0; display:grid; grid-auto-rows:max-content; align-content:start; overflow:auto; overscroll-behavior:contain;
+}
+.customer-vehicle-row {
+  width:100%; min-width:0; min-height:56px; display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; gap:12px;
+  padding:8px 7px; border:0; border-bottom:1px solid var(--color-border); background:transparent;
+  color:var(--color-ink); cursor:pointer; font:inherit; text-align:left;
+}
+.customer-vehicle-row:last-child { border-bottom:0; }
+.customer-vehicle-row:hover { background:#f7f7f9; }
+.customer-vehicle-row.active { background:var(--color-primary-soft); }
+.customer-vehicle-row:focus-visible { outline:2px solid var(--color-primary); outline-offset:-2px; }
+.customer-vehicle-row > span { min-width:0; display:grid; gap:3px; }
+.customer-vehicle-row strong { min-width:0; overflow:hidden; font-size:13px; font-weight:950; text-overflow:ellipsis; white-space:nowrap; }
+.customer-vehicle-row small { color:var(--color-muted); font-size:10px; font-weight:750; }
+.customer-vehicle-row b { color:var(--color-ink); font-size:11px; font-weight:950; white-space:nowrap; }
+.customer-panel-empty { min-height:78px; display:grid; place-items:center; color:var(--color-muted); font-size:12px; font-weight:850; }
+.customer-destination-panel {
+  box-sizing:border-box; gap:0; overflow:hidden;
 }
 .customer-destination-list {
   min-width:0; min-height:0; display:grid; grid-auto-rows:max-content; align-content:start;
@@ -163,13 +196,9 @@ body.customer-delivery-demo .grid { grid-template-columns: 1fr; }
 .customer-hint { margin:0; color:var(--color-muted); font-size:12px; font-weight:850; line-height:1.42; }
 
 @media (max-width:1120px) {
-  .customer-destination-panel {
-    width:auto; height:min(720px, calc(100dvh - 28px)); max-height:none; margin:14px 12px 20px;
-  }
+  .customer-control-side { right:14px; top:14px; bottom:14px; width:min(350px, calc(100vw - 112px)); }
 }
 
 @media (max-width:768px) {
-  .customer-destination-panel {
-    position:absolute; right:12px; top:auto; bottom:12px; width:calc(100vw - 24px); height:min(58dvh, 620px); margin:0;
-  }
+  .customer-control-side { left:12px; right:12px; top:auto; bottom:12px; width:auto; max-height:min(62dvh, 620px); }
 }

@@ -11,8 +11,15 @@ import type { MapCanvasPoint, MapCanvasRoute } from '../components/MapCanvas';
 const MapCanvas = lazy(() => import('../components/MapCanvas').then((module) => ({ default: module.MapCanvas })));
 const locationRefreshIntervalMs = 60_000;
 
-export function CustomerDeliveryInquiryPage({ adminCustomerId }: { adminCustomerId?: string } = {}): ReactElement {
-  if (apiConfig.mode === 'remote') return <RemoteCustomerDeliveryInquiryPage adminCustomerId={adminCustomerId} />;
+type CustomerDeliveryInquiryPageProps = {
+  adminCustomerId?: string;
+  principalDisplayName?: string;
+};
+
+export function CustomerDeliveryInquiryPage({ adminCustomerId, principalDisplayName }: CustomerDeliveryInquiryPageProps = {}): ReactElement {
+  if (apiConfig.mode === 'remote') {
+    return <RemoteCustomerDeliveryInquiryPage adminCustomerId={adminCustomerId} principalDisplayName={principalDisplayName} />;
+  }
   return <MockCustomerDeliveryInquiryPage />;
 }
 
@@ -174,9 +181,20 @@ type RemoteInquiryState =
   | { status: 'ready'; data: RemoteCustomerDeliveries }
   | { status: 'error'; message: string };
 
-function RemoteCustomerDeliveryInquiryPage({ adminCustomerId }: { adminCustomerId?: string }): ReactElement {
+type CustomerInquiryView = 'control' | 'history';
+
+function RemoteCustomerDeliveryInquiryPage({
+  adminCustomerId,
+  principalDisplayName,
+}: CustomerDeliveryInquiryPageProps): ReactElement {
   const [state, setState] = useState<RemoteInquiryState>({ status: 'loading' });
   const [selectedKey, setSelectedKey] = useState<string>();
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>();
+  const [vehiclePanelOpen, setVehiclePanelOpen] = useState(true);
+  const [destinationPanelOpen, setDestinationPanelOpen] = useState(true);
+  const [view, setView] = useState<CustomerInquiryView>(() => (
+    new URLSearchParams(window.location.search).get('view') === 'history' ? 'history' : 'control'
+  ));
   const serviceDate = new URLSearchParams(window.location.search).get('serviceDate') ?? undefined;
 
   useEffect(() => {
@@ -191,6 +209,8 @@ function RemoteCustomerDeliveryInquiryPage({ adminCustomerId }: { adminCustomerI
         setState({ status: 'ready', data });
         const groups = customerDestinationGroups(data.deliveries);
         setSelectedKey((current) => current && groups.some((group) => group.destinationId === current) ? current : groups[0]?.destinationId);
+        const vehicles = customerVehicleGroups(data.deliveries);
+        setSelectedVehicleId((current) => current && vehicles.some((vehicle) => vehicle.id === current) ? current : undefined);
         initial = false;
       } catch (error: unknown) {
         if (controller.signal.aborted) return;
@@ -230,18 +250,60 @@ function RemoteCustomerDeliveryInquiryPage({ adminCustomerId }: { adminCustomerI
     );
   }
 
-  const destinationGroups = customerDestinationGroups(state.data.deliveries);
+  const customerName = state.data.customerDisplayName
+    ?? (adminCustomerId === undefined ? principalDisplayName : undefined)
+    ?? '고객사 배송조회';
+  const viewDeliveries = view === 'history'
+    ? state.data.deliveries.filter(isCompletedCustomerDelivery)
+    : state.data.deliveries;
+  const vehicleGroups = customerVehicleGroups(viewDeliveries);
+  const activeVehicleId = vehicleGroups.some((vehicle) => vehicle.id === selectedVehicleId) ? selectedVehicleId : undefined;
+  const visibleDeliveries = activeVehicleId === undefined
+    ? viewDeliveries
+    : viewDeliveries.filter((delivery) => customerVehicleGroupId(delivery) === activeVehicleId);
+  const destinationGroups = customerDestinationGroups(visibleDeliveries);
   const selected = destinationGroups.find((group) => group.destinationId === selectedKey) ?? destinationGroups[0];
   const points = customerMapPoints(destinationGroups);
-  const vehicles = customerVehiclePoints(state.data.deliveries);
-  const routes = customerMapRoutes(state.data.routes);
+  const vehicles = customerVehiclePoints(visibleDeliveries);
+  const visibleRoutes = view === 'history'
+    ? []
+    : activeVehicleId === undefined
+      ? state.data.routes
+      : state.data.routes.filter((route) => route.vehicleId === activeVehicleId);
+  const routes = customerMapRoutes(visibleRoutes, activeVehicleId !== undefined);
+  const departureLocation = state.data.departureLocation === undefined ? null : {
+    address: state.data.departureLocation.address ?? '물류센터',
+    latitude: state.data.departureLocation.latitude,
+    longitude: state.data.departureLocation.longitude,
+  };
+
+  const selectView = (nextView: CustomerInquiryView) => {
+    const url = new URL(window.location.href);
+    if (nextView === 'control') url.searchParams.delete('view');
+    else url.searchParams.set('view', nextView);
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+    setView(nextView);
+    setSelectedVehicleId(undefined);
+    setSelectedKey(undefined);
+  };
+
+  const selectVehicle = (vehicleId: string) => {
+    const nextVehicleId = activeVehicleId === vehicleId ? undefined : vehicleId;
+    setSelectedVehicleId(nextVehicleId);
+    const nextDeliveries = nextVehicleId === undefined
+      ? viewDeliveries
+      : viewDeliveries.filter((delivery) => customerVehicleGroupId(delivery) === nextVehicleId);
+    setSelectedKey(customerDestinationGroups(nextDeliveries)[0]?.destinationId);
+  };
 
   return (
-    <main className="page customer-delivery-demo">
+    <main className="page customer-delivery-demo nav-expanded">
+      <CustomerNavigation customerName={customerName} onSelect={selectView} view={view} />
       <section className="grid" aria-label="고객사 배송 조회">
         <Suspense fallback={<article className="card map-card" aria-label="지도 불러오는 중" />}>
           <MapCanvas
             ariaLabel="고객사 배송지 지도"
+            departureLocation={departureLocation}
             onPointSelect={(destinationId) => {
               const group = destinationGroups.find((item) => item.destinationId === destinationId);
               if (group !== undefined) setSelectedKey(group.destinationId);
@@ -249,47 +311,127 @@ function RemoteCustomerDeliveryInquiryPage({ adminCustomerId }: { adminCustomerI
             points={points}
             routes={routes}
             selectedPointId={selected?.destinationId}
+            selectedPointIds={activeVehicleId === undefined ? [] : destinationGroups.map((group) => group.destinationId)}
             showEveryPoint
             vehicles={vehicles}
           />
         </Suspense>
-        <section className="customer-order-card customer-destination-panel" aria-label="배송지 리스트">
-          <div className="customer-destination-panel-head">
-            <strong>배송지 리스트</strong>
-            <span>{destinationGroups.length}곳</span>
-          </div>
-          {destinationGroups.length ? (
-            <div className="customer-destination-list">
-              {destinationGroups.map((group) => {
-                const active = group.destinationId === selected?.destinationId;
-                return (
+        <aside className="customer-control-side" aria-label="고객사 관제 패널">
+          <section className={`card panel expand-card customer-panel customer-vehicle-panel${vehiclePanelOpen ? '' : ' collapsed'}`} aria-label="차량 목록">
+            <CustomerPanelHeader
+              count={`${vehicleGroups.length}대`}
+              label="차량 목록"
+              onToggle={() => setVehiclePanelOpen((open) => !open)}
+              open={vehiclePanelOpen}
+            />
+            {vehiclePanelOpen ? vehicleGroups.length ? (
+              <div className="customer-vehicle-list overlay-scroll">
+                {vehicleGroups.map((vehicle) => (
                   <button
-                    key={group.destinationId}
+                    key={vehicle.id}
                     type="button"
-                    className={`customer-destination-card${active ? ' active' : ''}`}
-                    aria-expanded={active}
-                    onClick={() => setSelectedKey(group.destinationId)}
+                    className={`customer-vehicle-row${vehicle.id === activeVehicleId ? ' active' : ''}`}
+                    aria-pressed={vehicle.id === activeVehicleId}
+                    onClick={() => selectVehicle(vehicle.id)}
                   >
-                    <span className="customer-destination-card-summary">
-                      <span className="customer-destination-card-copy">
-                        <strong>{group.destinationDisplayName}</strong>
-                        <small>{group.destinationAddress ?? '주소 확인 중'}</small>
-                      </span>
-                      <span className="customer-destination-card-meta">
-                        <span>{group.orderCount}건</span>
-                        <time>{formatCustomerTime(group.sharedEstimatedArrivalAt)}</time>
-                      </span>
-                    </span>
-                    {active ? <RemoteCustomerDeliveryDetail delivery={group} /> : null}
+                    <span><strong>{vehicle.label}</strong><small>{vehicle.orderCount}건 주문</small></span>
+                    <b>{vehicle.destinationCount}곳</b>
                   </button>
-                );
-              })}
-            </div>
-          ) : <div className="customer-empty-state" role="status"><strong>배송 없음</strong><span>{state.data.emptyReason ?? '세션 범위에서 조회할 배송이 없습니다.'}</span></div>}
-        </section>
+                ))}
+              </div>
+            ) : <CustomerPanelEmpty label={view === 'history' ? '완료 차량 없음' : '배정 차량 없음'} /> : null}
+          </section>
+
+          <section className={`customer-order-card card panel expand-card customer-panel customer-destination-panel${destinationPanelOpen ? '' : ' collapsed'}`} aria-label="배송지 리스트">
+            <CustomerPanelHeader
+              count={`${destinationGroups.length}곳`}
+              label={view === 'history' ? '배송 이력' : '배송지 리스트'}
+              onToggle={() => setDestinationPanelOpen((open) => !open)}
+              open={destinationPanelOpen}
+            />
+            {destinationPanelOpen ? destinationGroups.length ? (
+              <div className="customer-destination-list overlay-scroll">
+                {destinationGroups.map((group) => {
+                  const active = group.destinationId === selected?.destinationId;
+                  return (
+                    <button
+                      key={group.destinationId}
+                      type="button"
+                      className={`customer-destination-card${active ? ' active' : ''}`}
+                      aria-expanded={active}
+                      onClick={() => setSelectedKey(group.destinationId)}
+                    >
+                      <span className="customer-destination-card-summary">
+                        <span className="customer-destination-card-copy">
+                          <strong>{group.destinationDisplayName}</strong>
+                          <small>{group.destinationAddress ?? '주소 확인 중'}</small>
+                        </span>
+                        <span className="customer-destination-card-meta">
+                          <span>{group.orderCount}건</span>
+                          <time>{formatCustomerTime(group.sharedEstimatedArrivalAt)}</time>
+                        </span>
+                      </span>
+                      {active ? <RemoteCustomerDeliveryDetail delivery={group} /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : <div className="customer-empty-state" role="status"><strong>배송 없음</strong><span>{state.data.emptyReason ?? '세션 범위에서 조회할 배송이 없습니다.'}</span></div> : null}
+          </section>
+        </aside>
       </section>
     </main>
   );
+}
+
+function CustomerNavigation({
+  customerName,
+  onSelect,
+  view,
+}: {
+  customerName: string;
+  onSelect: (view: CustomerInquiryView) => void;
+  view: CustomerInquiryView;
+}): ReactElement {
+  return (
+    <nav className="left-tabs customer-navigation" aria-label="고객사 메뉴">
+      <div className="sidebar-brand customer-navigation-brand">
+        <span className="sidebar-brand-mark" aria-hidden="true">C</span>
+        <h1 className="sidebar-brand-title">CLEVER DSV</h1>
+      </div>
+      <strong className="customer-navigation-name" title={customerName}>{customerName}</strong>
+      <button type="button" className={`main-tab${view === 'control' ? ' active' : ''}`} aria-current={view === 'control' ? 'page' : undefined} onClick={() => onSelect('control')}>
+        <span className="main-tab-copy"><strong>관제</strong><small>배송 위치 확인</small></span>
+      </button>
+      <button type="button" className={`main-tab${view === 'history' ? ' active' : ''}`} aria-current={view === 'history' ? 'page' : undefined} onClick={() => onSelect('history')}>
+        <span className="main-tab-copy"><strong>이력</strong><small>완료 배송 확인</small></span>
+      </button>
+    </nav>
+  );
+}
+
+function CustomerPanelHeader({
+  count,
+  label,
+  onToggle,
+  open,
+}: {
+  count: string;
+  label: string;
+  onToggle: () => void;
+  open: boolean;
+}): ReactElement {
+  return (
+    <button type="button" className="customer-panel-head" aria-expanded={open} onClick={onToggle}>
+      <strong>{label}</strong>
+      <span>{count}</span>
+      <small>{open ? '접기' : '펼치기'}</small>
+    </button>
+  );
+}
+
+function CustomerPanelEmpty({ label }: { label: string }): ReactElement {
+  return <div className="customer-panel-empty" role="status">{label}</div>;
 }
 
 function RemoteCustomerDeliveryDetail({ delivery }: { delivery: CustomerDestinationGroup }): ReactElement {
@@ -325,6 +467,15 @@ type CustomerDestinationGroup = {
   shippedBoxes: number;
   vehicleSummary: string;
 };
+
+type CustomerVehicleGroup = {
+  destinationCount: number;
+  id: string;
+  label: string;
+  orderCount: number;
+};
+
+const unassignedCustomerVehicleId = '__unassigned__';
 
 function customerDestinationGroups(deliveries: CustomerDeliveryItem[]): CustomerDestinationGroup[] {
   const groups = new Map<string, CustomerDeliveryItem[]>();
@@ -400,6 +551,36 @@ function customerVehicleSummary(deliveries: CustomerDeliveryItem[]): string {
   return `${vehicles[0]} 외 ${vehicles.length - 1}대`;
 }
 
+function customerVehicleGroups(deliveries: CustomerDeliveryItem[]): CustomerVehicleGroup[] {
+  const groups = new Map<string, CustomerDeliveryItem[]>();
+  for (const delivery of deliveries) {
+    const id = customerVehicleGroupId(delivery);
+    const group = groups.get(id);
+    if (group === undefined) groups.set(id, [delivery]);
+    else group.push(delivery);
+  }
+  return [...groups.entries()]
+    .map(([id, orders]) => ({
+      destinationCount: new Set(orders.map((order) => order.destinationId)).size,
+      id,
+      label: orders.find((order) => order.vehicleDisplayName?.trim())?.vehicleDisplayName ?? '미배정',
+      orderCount: orders.length,
+    }))
+    .sort((left, right) => {
+      if (left.id === unassignedCustomerVehicleId) return 1;
+      if (right.id === unassignedCustomerVehicleId) return -1;
+      return left.label.localeCompare(right.label, 'ko');
+    });
+}
+
+function customerVehicleGroupId(delivery: CustomerDeliveryItem): string {
+  return delivery.vehicleId ?? unassignedCustomerVehicleId;
+}
+
+function isCompletedCustomerDelivery(delivery: CustomerDeliveryItem): boolean {
+  return delivery.actualCompletedAt !== undefined || delivery.deliveryStatus === 'DELIVERED';
+}
+
 function customerMapPoints(groups: CustomerDestinationGroup[]): MapCanvasPoint[] {
   return groups.flatMap((group) => (
     group.latitude !== undefined && group.longitude !== undefined
@@ -415,12 +596,12 @@ function customerMapPoints(groups: CustomerDestinationGroup[]): MapCanvasPoint[]
   ));
 }
 
-function customerMapRoutes(routes: RemoteCustomerDeliveries['routes']): MapCanvasRoute[] {
+function customerMapRoutes(routes: RemoteCustomerDeliveries['routes'], selected: boolean): MapCanvasRoute[] {
   return routes.map((route) => ({
     color: '#0066cc',
     coordinates: route.coordinates,
     id: route.vehicleId,
-    selected: true,
+    selected,
   }));
 }
 

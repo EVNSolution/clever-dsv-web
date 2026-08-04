@@ -31,8 +31,16 @@ export type CustomerDeliveryRoute = {
   vehicleId: string;
 };
 
+export type CustomerDepartureLocation = {
+  address?: string;
+  latitude: number;
+  longitude: number;
+};
+
 export type RemoteCustomerDeliveries = {
+  customerDisplayName?: string;
   deliveries: CustomerDeliveryItem[];
+  departureLocation?: CustomerDepartureLocation;
   emptyReason?: string;
   page?: CustomerDeliveryPageInfo;
   routes: CustomerDeliveryRoute[];
@@ -62,6 +70,8 @@ async function loadCustomerScopedDeliveries(
   const deliveries: CustomerDeliveryItem[] = [];
   const routes = new Map<string, CustomerDeliveryRoute>();
   let cursor: string | undefined;
+  let customerDisplayName: string | undefined;
+  let departureLocation: CustomerDepartureLocation | undefined;
   let emptyReason: string | undefined;
   let page: CustomerDeliveryPageInfo | undefined;
   do {
@@ -72,12 +82,14 @@ async function loadCustomerScopedDeliveries(
     const response = customerDeliveriesResponse(data);
     deliveries.push(...response.items.map(customerDeliveryFrom));
     for (const route of response.routes.map(customerDeliveryRouteFrom)) routes.set(route.vehicleId, route);
+    customerDisplayName ??= response.customerDisplayName;
+    departureLocation ??= response.departureLocation;
     emptyReason = response.emptyReason;
     page = response.page;
     cursor = page?.hasMore === true ? page.nextCursor : undefined;
     if (page?.hasMore === true && cursor === undefined) throw new Error('고객 배송 조회 페이지 정보가 올바르지 않습니다.');
   } while (cursor !== undefined);
-  return { deliveries, emptyReason, page, routes: [...routes.values()] };
+  return { customerDisplayName, deliveries, departureLocation, emptyReason, page, routes: [...routes.values()] };
 }
 
 async function loadAdminCustomerDeliveries(
@@ -88,6 +100,8 @@ async function loadAdminCustomerDeliveries(
   const deliveries: CustomerDeliveryItem[] = [];
   const routes = new Map<string, CustomerDeliveryRoute>();
   let cursor: string | undefined;
+  let customerDisplayName: string | undefined;
+  let departureLocation: CustomerDepartureLocation | undefined;
   let emptyReason: string | undefined;
   let page: CustomerDeliveryPageInfo | undefined;
   do {
@@ -101,29 +115,45 @@ async function loadAdminCustomerDeliveries(
     const response = customerDeliveriesResponse(data);
     deliveries.push(...response.items.map(customerDeliveryFrom));
     for (const route of response.routes.map(customerDeliveryRouteFrom)) routes.set(route.vehicleId, route);
+    customerDisplayName ??= response.customerDisplayName;
+    departureLocation ??= response.departureLocation;
     emptyReason = response.emptyReason;
     page = response.page;
     cursor = page?.hasMore === true ? page.nextCursor : undefined;
     if (page?.hasMore === true && cursor === undefined) throw new Error('고객사 배송 조회 페이지 정보가 올바르지 않습니다.');
   } while (cursor !== undefined);
-  return { deliveries, emptyReason, page, routes: [...routes.values()] };
+  return { customerDisplayName, deliveries, departureLocation, emptyReason, page, routes: [...routes.values()] };
 }
 
 function customerDeliveriesResponse(data: unknown): {
+  customerDisplayName?: string;
+  departureLocation?: CustomerDepartureLocation;
   emptyReason?: string;
   items: unknown[];
   page?: CustomerDeliveryPageInfo;
   routes: unknown[];
 } {
-  if (!hasOnlyKeys(data, ['items', 'page', 'emptyReason', 'routes']) || !Array.isArray(data.items)) {
+  if (!hasOnlyKeys(data, ['customerDisplayName', 'departureLocation', 'items', 'page', 'emptyReason', 'routes']) || !Array.isArray(data.items)) {
     throw new Error('고객 배송 조회 응답 형식이 올바르지 않습니다.');
   }
   if (data.routes !== undefined && !Array.isArray(data.routes)) throw new Error('고객 배송 경로 응답 형식이 올바르지 않습니다.');
   return {
+    customerDisplayName: optionalString(data, 'customerDisplayName'),
+    departureLocation: customerDepartureLocationFrom(data.departureLocation),
     emptyReason: optionalString(data, 'emptyReason'),
     items: data.items,
     page: pageInfoFrom(data.page),
     routes: data.routes ?? [],
+  };
+}
+
+function customerDepartureLocationFrom(value: unknown): CustomerDepartureLocation | undefined {
+  if (value === undefined) return undefined;
+  if (!hasOnlyKeys(value, ['address', 'latitude', 'longitude'])) throw new Error('고객 배송 출발 위치 응답 형식이 올바르지 않습니다.');
+  return {
+    address: optionalString(value, 'address'),
+    latitude: requiredNumber(value, 'latitude'),
+    longitude: requiredNumber(value, 'longitude'),
   };
 }
 
@@ -226,6 +256,12 @@ function optionalString(source: Record<string, unknown>, key: string): string | 
 function optionalNumber(source: Record<string, unknown>, key: string): number | undefined {
   const value = source[key];
   if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${key} 필드 형식이 올바르지 않습니다.`);
+  return value;
+}
+
+function requiredNumber(source: Record<string, unknown>, key: string): number {
+  const value = source[key];
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${key} 필드 형식이 올바르지 않습니다.`);
   return value;
 }

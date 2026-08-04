@@ -138,14 +138,17 @@ export function App(): ReactElement {
   if (path === adminCustomerDeliveryPath) {
     return (
       <Suspense fallback={<CustomerDeliveryFallback />}>
-        <CustomerDeliveryInquiryPage adminCustomerId={new URLSearchParams(window.location.search).get('customer') ?? undefined} />
+        <CustomerDeliveryInquiryPage
+          adminCustomerId={new URLSearchParams(window.location.search).get('customer') ?? undefined}
+          principalDisplayName={principal?.displayName ?? undefined}
+        />
       </Suspense>
     );
   }
   if (path === customerDeliveryPath) {
     return (
       <Suspense fallback={<CustomerDeliveryFallback />}>
-        <CustomerDeliveryInquiryPage />
+        <CustomerDeliveryInquiryPage principalDisplayName={principal?.displayName ?? undefined} />
       </Suspense>
     );
   }
