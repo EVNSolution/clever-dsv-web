@@ -13,3 +13,7 @@ docs/runbooks/.local/
 docs/runbooks/*.local.md
 docs/runbooks/*.log
 docs/runbooks/*.tgz
+
+# Local copies of third-party manuals are archived by location only.
+# They were never repository source and should not add large binaries to Git.
+docs/archive/external-manuals/

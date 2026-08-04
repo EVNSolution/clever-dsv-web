@@ -1,5 +1,7 @@
 # Control API contract: temperature and destination context
 
+> Archived 2026-08-04. 구현되지 않은 초기 Draft다. 현재 API 경계나 운영 데이터 계약으로 사용하지 않는다.
+
 Status: Draft v0.1
 
 Target frontend: `clever-dsv-web`

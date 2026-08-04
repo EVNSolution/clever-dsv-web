@@ -1,5 +1,7 @@
 # Dispatch API contract
 
+> Archived 2026-08-04. 현재 배차 계약은 [`../../contracts/dispatch.md`](../../contracts/dispatch.md)를 따른다.
+
 Status: Implemented foundation, external fields pending
 
 ## SellerOrder assignment
