@@ -342,6 +342,9 @@ function RemoteCustomerDeliveryInquiryPage({
             />
             {destinationGroups.length ? (
               <div className="customer-destination-list overlay-scroll">
+                <div className="customer-destination-columns" aria-hidden="true">
+                  <span>배송지</span><span>주문</span><span>도착 예정</span><span>실제 도착</span>
+                </div>
                 {destinationGroups.map((group) => {
                   const active = group.destinationId === selected?.destinationId;
                   return (
@@ -353,14 +356,13 @@ function RemoteCustomerDeliveryInquiryPage({
                       onClick={() => setSelectedKey((current) => current === group.destinationId ? undefined : group.destinationId)}
                     >
                       <span className="customer-destination-card-summary">
+                        <i aria-label={`배송지 순서 ${group.destinationSequence}`}>{group.destinationSequence}</i>
                         <span className="customer-destination-card-copy">
                           <strong>{group.destinationDisplayName}</strong>
-                          <small>{group.destinationAddress ?? '주소 확인 중'}</small>
                         </span>
-                        <span className="customer-destination-card-meta">
-                          <span>{group.orderCount}건</span>
-                          <time>{formatCustomerTime(group.sharedEstimatedArrivalAt)}</time>
-                        </span>
+                        <span className="customer-destination-order-count">{group.orderCount}건</span>
+                        <time>{formatCustomerTime(group.sharedEstimatedArrivalAt)}</time>
+                        <time className={group.sharedActualCompletedAt === undefined ? 'empty' : 'completed'}>{formatCustomerTime(group.sharedActualCompletedAt)}</time>
                       </span>
                       {active ? <RemoteCustomerDeliveryDetail delivery={group} /> : null}
                     </button>
@@ -424,7 +426,7 @@ function RemoteCustomerDeliveryDetail({ delivery }: { delivery: CustomerDestinat
   return (
     <span className="customer-destination-card-detail">
       <span className="customer-destination-facts">
-        <span><small>배정 차량</small><b>{delivery.vehicleSummary}</b></span>
+        <span className="customer-destination-address"><small>주소</small><b>{delivery.destinationAddress ?? '주소 확인 중'}</b></span>
         <span><small>박스</small><b>{delivery.shippedBoxes}개</b></span>
       </span>
       <span className="customer-destination-orders" aria-label={`${delivery.destinationDisplayName} 주문 목록`}>
@@ -449,9 +451,9 @@ type CustomerDestinationGroup = {
   longitude?: number;
   orderCount: number;
   orders: CustomerDeliveryItem[];
+  sharedActualCompletedAt?: string;
   sharedEstimatedArrivalAt?: string;
   shippedBoxes: number;
-  vehicleSummary: string;
 };
 
 type CustomerVehicleGroup = {
@@ -489,9 +491,9 @@ function customerDestinationGroups(deliveries: CustomerDeliveryItem[]): Customer
         longitude: coordinateAnchor?.longitude,
         orderCount: sortedOrders.length,
         orders: sortedOrders,
+        sharedActualCompletedAt: sharedActualCompletedAt(sortedOrders),
         sharedEstimatedArrivalAt: sharedEstimatedArrivalAt(sortedOrders),
         shippedBoxes: sortedOrders.reduce((total, order) => total + order.shippedBoxes, 0),
-        vehicleSummary: customerVehicleSummary(sortedOrders),
       };
     })
     .sort(compareCustomerDestinationGroup)
@@ -513,7 +515,7 @@ function compareCustomerDestinationGroup(left: CustomerDestinationGroup, right: 
 }
 
 function deliveryOrderTime(delivery: CustomerDeliveryItem): number {
-  const value = delivery.actualCompletedAt ?? delivery.estimatedArrivalAt;
+  const value = delivery.estimatedArrivalAt ?? delivery.actualCompletedAt;
   return customerTimeValue(value);
 }
 
@@ -530,11 +532,12 @@ function sharedEstimatedArrivalAt(deliveries: CustomerDeliveryItem[]): string | 
     .sort((left, right) => new Date(left).getTime() - new Date(right).getTime())[0];
 }
 
-function customerVehicleSummary(deliveries: CustomerDeliveryItem[]): string {
-  const vehicles = [...new Set(deliveries.map((delivery) => delivery.vehicleDisplayName).filter((value): value is string => value !== undefined && value.trim() !== ''))];
-  if (vehicles.length === 0) return '배정 차량 확인 중';
-  if (vehicles.length === 1) return vehicles[0];
-  return `${vehicles[0]} 외 ${vehicles.length - 1}대`;
+function sharedActualCompletedAt(deliveries: CustomerDeliveryItem[]): string | undefined {
+  if (deliveries.some((delivery) => delivery.actualCompletedAt === undefined)) return undefined;
+  return deliveries
+    .map((delivery) => delivery.actualCompletedAt)
+    .filter((value): value is string => value !== undefined && !Number.isNaN(new Date(value).getTime()))
+    .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0];
 }
 
 function customerVehicleGroups(deliveries: CustomerDeliveryItem[]): CustomerVehicleGroup[] {
@@ -573,6 +576,7 @@ function customerMapPoints(groups: CustomerDestinationGroup[]): MapCanvasPoint[]
       ? [{
           color: '#0066cc',
           id: group.destinationId,
+          label: String(group.destinationSequence),
           latitude: group.latitude,
           longitude: group.longitude,
           sortOrder: group.destinationSequence,
