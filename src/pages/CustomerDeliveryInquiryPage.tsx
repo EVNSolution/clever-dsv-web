@@ -261,8 +261,12 @@ function RemoteCustomerDeliveryInquiryPage({ adminCustomerId }: { adminCustomerI
             <div className="customer-list">
               {destinationGroups.map((group) => (
                 <button key={group.destinationId} type="button" className={`customer-route-group${group.destinationId === selected?.destinationId ? ' active' : ''}`} onClick={() => setSelectedKey(group.destinationId)}>
-                  <span className="customer-route-head"><strong>{group.customerSequence}. {group.destinationDisplayName}</strong><span>{formatCustomerTime(group.sharedEstimatedArrivalAt)}</span></span>
-                  <small><span>{group.vehicleSummary}</span><span>{group.orderCount}건 / {group.shippedBoxes}박스</span></small>
+                  <span className="customer-route-head">
+                    <strong>{group.destinationSequence}. {group.destinationDisplayName}</strong>
+                    <span className="customer-route-order-count" aria-label={`주문 ${group.orderCount}건`}>{group.orderCount}건</span>
+                    <time>{formatCustomerTime(group.sharedEstimatedArrivalAt)}</time>
+                  </span>
+                  <small><span>{group.destinationAddress ?? '주소 확인 중'}</span><span>{group.vehicleSummary}</span></small>
                 </button>
               ))}
             </div>
@@ -281,7 +285,7 @@ function RemoteCustomerDeliveryDetail({ delivery }: { delivery: CustomerDestinat
     <>
       <div className="customer-order-head">
         <div>
-          <strong>{delivery.customerSequence}. {delivery.destinationDisplayName}</strong>
+          <strong>{delivery.destinationSequence}. {delivery.destinationDisplayName}</strong>
           <small>{delivery.destinationAddress ?? delivery.destinationId}</small>
         </div>
         <span className="chip green">{delivery.orderCount}건 / {delivery.shippedBoxes}박스</span>
@@ -324,7 +328,7 @@ function RemoteCustomerDeliveryDetail({ delivery }: { delivery: CustomerDestinat
 }
 
 type CustomerDestinationGroup = {
-  customerSequence: number;
+  destinationSequence: number;
   destinationAddress?: string;
   destinationDisplayName: string;
   destinationId: string;
@@ -355,7 +359,7 @@ function customerDestinationGroups(deliveries: CustomerDeliveryItem[]): Customer
       const anchor = sortedOrders[0];
       const coordinateAnchor = sortedOrders.find((order) => order.latitude !== undefined && order.longitude !== undefined);
       return {
-        customerSequence: 0,
+        destinationSequence: 0,
         destinationAddress: anchor.destinationAddress,
         destinationDisplayName: anchor.destinationDisplayName,
         destinationId,
@@ -370,7 +374,7 @@ function customerDestinationGroups(deliveries: CustomerDeliveryItem[]): Customer
       };
     })
     .sort(compareCustomerDestinationGroup)
-    .map((group, index) => ({ ...group, customerSequence: index + 1 }));
+    .map((group, index) => ({ ...group, destinationSequence: index + 1 }));
 }
 
 function compareCustomerDeliveryOrder(left: CustomerDeliveryItem, right: CustomerDeliveryItem): number {
@@ -418,10 +422,10 @@ function customerMapPoints(groups: CustomerDestinationGroup[]): MapCanvasPoint[]
       ? [{
           color: '#0066cc',
           id: group.destinationId,
-          label: String(group.customerSequence),
+          label: String(group.destinationSequence),
           latitude: group.latitude,
           longitude: group.longitude,
-          sortOrder: group.customerSequence,
+          sortOrder: group.destinationSequence,
           tone: 'assigned' as const,
         }]
       : []

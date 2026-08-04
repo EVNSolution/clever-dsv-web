@@ -916,15 +916,19 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries');
   await expect(page.getByLabel('배송조회')).toContainText('2곳');
   const sharedDestination = page.getByRole('button', { name: /G006 Shared Hospital/ });
+  const otherDestination = page.getByRole('button', { name: /G006 Other Clinic/ });
+  await expect(sharedDestination).toContainText('1. G006 Shared Hospital');
   await expect(sharedDestination).toContainText('12:30');
-  await expect(sharedDestination).toContainText('2건 / 10박스');
+  await expect(sharedDestination.locator('.customer-route-order-count')).toHaveText('2건');
+  await expect(sharedDestination).toContainText('서울특별시 강남구 테헤란로 152');
   await expect(page.getByText('SELLER-G006-SAME-EARLY', { exact: true })).toBeVisible();
   await expect(page.getByText('DELIVERED', { exact: true })).toBeVisible();
   await expect(page.getByText('7박스', { exact: true })).toBeVisible();
   await expect(page.getByText('SELLER-G006-SAME-LATE', { exact: true })).toBeVisible();
   await expect(page.getByText('IN_TRANSIT', { exact: true })).toBeVisible();
   await expect(page.getByText('3박스', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: /G006 Other Clinic/ })).toContainText('1건 / 2박스');
+  await expect(otherDestination).toContainText('2. G006 Other Clinic');
+  await expect(otherDestination.locator('.customer-route-order-count')).toHaveText('1건');
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible' });
   await expect.poll(() => page.evaluate(() =>
     new Set(

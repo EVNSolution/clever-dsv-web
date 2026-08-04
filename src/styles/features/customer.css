@@ -78,8 +78,13 @@ body.customer-delivery-demo .grid { grid-template-columns: 1fr; }
   font-weight: 850;
 }
 .customer-route-group small span { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-.customer-route-head { display:flex; align-items:center; justify-content:space-between; gap:10px; font-weight:1000; }
-.customer-route-head span { color:var(--color-muted); font-size:12px; font-weight:900; white-space:nowrap; }
+.customer-route-head { display:grid; grid-template-columns:minmax(0, 1fr) auto 42px; align-items:center; gap:9px; font-weight:1000; }
+.customer-route-head strong { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.customer-route-head .customer-route-order-count {
+  min-width:34px; padding:0 7px; border-left:1px solid var(--color-border); border-right:1px solid var(--color-border);
+  color:var(--color-muted); font-size:11px; font-weight:900; line-height:20px; text-align:center; white-space:nowrap;
+}
+.customer-route-head time { color:var(--color-ink); font-size:12px; font-weight:900; font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
 .customer-order-row {
   display:flex; align-items:center; justify-content:space-between; gap:12px;
   padding:10px 12px; border:1px solid var(--color-border); border-radius:15px; background:var(--color-white);
