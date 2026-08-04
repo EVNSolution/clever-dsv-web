@@ -421,7 +421,7 @@ test('accepts a valid admin session only through the strict v1 session envelope'
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({
-      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Manufacturer', orderCount: 3, status: 'ACTIVE' }],
+      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Customer', orderCount: 3, status: 'ACTIVE' }],
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/dispatches': v1Envelope({ items: [], page: { hasMore: false } }),
@@ -438,7 +438,7 @@ test('accepts a valid admin session only through the strict v1 session envelope'
   const vehicleList = page.getByRole('region', { name: '차량 리스트', exact: true });
   await expect(vehicleList).not.toContainText('99테 6006');
   await expect(vehicleList).toContainText('차량이 없습니다.');
-  await expect(page.getByLabel('제조사별 주문 리스트')).toBeVisible();
+  await expect(page.getByLabel('고객사별 주문 리스트')).toBeVisible();
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session')).toBe(true);
   expect(api.unexpected).toEqual([]);
 });
@@ -493,7 +493,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({
-      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Manufacturer', orderCount: 3, status: 'ACTIVE' }],
+      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Customer', orderCount: 3, status: 'ACTIVE' }],
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/dispatches': v1Envelope({
@@ -559,12 +559,29 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
   await expect(scheduledFleet).toContainText('99테 6006');
   await expect(scheduledFleet).toContainText('77테 4004');
   await expect(scheduledFleet).not.toContainText('88테 5005');
-  const customerInquiryLink = page.getByRole('link', { name: 'Canonical Manufacturer 고객사 배송조회' });
+  const customerInquiryLink = page.getByRole('link', { name: 'Canonical Customer 고객사 조회 화면으로 이동' });
   await expect(customerInquiryLink).toBeVisible();
   await expect(customerInquiryLink).toHaveAttribute('href', `/customer/delivery-inquiry/admin?customer=customer-g006-control&serviceDate=${controlSummary.serviceDate}`);
-  await expect(page.getByLabel('제조사별 주문 리스트')).not.toContainText('destination-g006-control');
-  await expect(page.getByLabel('제조사별 주문 리스트')).not.toContainText('SELLER-G006-CONTROL');
-  await expect(page.locator('.manufacturer-order-head time')).toHaveText(/^\d{2}:\d{2}$/u);
+  await expect(customerInquiryLink).toContainText('클릭하여 고객사 조회 화면으로 이동');
+  await expect(customerInquiryLink).toHaveCSS('display', 'grid');
+  await expect(page.getByLabel('고객사별 주문 리스트')).not.toContainText('destination-g006-control');
+  await expect(page.getByLabel('고객사별 주문 리스트')).not.toContainText('SELLER-G006-CONTROL');
+  await expect(page.locator('.control-customer-order-meta time')).toHaveText(/^\d{2}:\d{2}$/u);
+  const customerCardLayout = await customerInquiryLink.evaluate((element) => {
+    const card = element.getBoundingClientRect();
+    const name = element.querySelector('strong')?.getBoundingClientRect();
+    const hint = element.querySelector('small')?.getBoundingClientRect();
+    return {
+      cardHeight: card.height,
+      hintBottom: hint?.bottom ?? 0,
+      nameTop: name?.top ?? 0,
+      cardBottom: card.bottom,
+      cardTop: card.top,
+    };
+  });
+  expect(customerCardLayout.cardHeight).toBeGreaterThanOrEqual(56);
+  expect(customerCardLayout.nameTop).toBeGreaterThanOrEqual(customerCardLayout.cardTop);
+  expect(customerCardLayout.hintBottom).toBeLessThanOrEqual(customerCardLayout.cardBottom);
   await expect.poll(() => page.evaluate(() => {
     const destinationSource = window.dsvMap?.getSource('operational-destinations');
     const routeSource = window.dsvMap?.getSource('operational-routes');
@@ -839,6 +856,10 @@ test('loads the administrator customer map through the customer-scoped contract'
           },
         ],
         page: { hasMore: false },
+        routes: [{
+          vehicleId: 'vehicle-g006-map',
+          coordinates: [[126.982, 37.564], [126.98, 37.565], [126.9779, 37.5663]],
+        }],
       });
     },
   });
@@ -846,7 +867,8 @@ test('loads the administrator customer map through the customer-scoped contract'
   await page.goto('/customer/delivery-inquiry/admin?customer=customer-g006-map&serviceDate=2026-08-03');
 
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customers/deliveries');
-  await expect(page.getByRole('article', { name: '제조사 배송지 지도' })).toBeVisible();
+  await expect(page.getByRole('article', { name: '고객사 배송지 지도' })).toBeVisible();
+  await expect(page.getByLabel('배송지 리스트')).toBeVisible();
   await expect(page.getByText('G006 Customer Destination', { exact: false }).first()).toBeVisible();
   await expect(page.getByText('서울86바3800', { exact: true }).first()).toBeVisible();
   expect(api.unexpected).toEqual([]);
@@ -861,7 +883,7 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
           sellerOrderId: 'order-g006-same-late',
           sellerOrderKey: 'SELLER-G006-SAME-LATE',
           destinationDisplayName: 'G006 Shared Hospital',
-          destinationAddress: '서울특별시 강남구 테헤란로 152',
+          destinationAddress: '서울특별시 강남구 테헤란로 152, 5층, 5층',
           destinationId: 'destination-g006-shared',
           deliveryStatus: 'IN_TRANSIT',
           etaStatus: 'DELAYED',
@@ -899,7 +921,7 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
           sellerOrderId: 'order-g006-same-early',
           sellerOrderKey: 'SELLER-G006-SAME-EARLY',
           destinationDisplayName: 'G006 Shared Hospital',
-          destinationAddress: '서울특별시 강남구 테헤란로 152',
+          destinationAddress: '서울특별시 강남구 테헤란로 152, 5층, 5층',
           destinationId: 'destination-g006-shared',
           deliveryStatus: 'DELIVERED',
           etaStatus: 'ON_TIME',
@@ -916,34 +938,48 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
         },
       ],
       page: { hasMore: false },
+      routes: [{
+        vehicleId: 'vehicle-g006-shared',
+        coordinates: [[127.02, 37.49], [127.01, 37.51], [126.99, 37.54], [126.9779, 37.5663]],
+      }],
     }),
   });
 
   await page.goto('/customer/delivery-inquiry');
 
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries');
-  await expect(page.getByLabel('배송조회')).toContainText('2곳');
+  await expect(page.getByLabel('배송지 리스트')).toContainText('2곳');
   const sharedDestination = page.getByRole('button', { name: /G006 Shared Hospital/ });
   const otherDestination = page.getByRole('button', { name: /G006 Other Clinic/ });
-  await expect(sharedDestination).toContainText('1. G006 Shared Hospital');
+  await expect(sharedDestination).toContainText('G006 Shared Hospital');
   await expect(sharedDestination).toContainText('12:30');
-  await expect(sharedDestination.locator('.customer-route-order-count')).toHaveText('2건');
-  await expect(sharedDestination).toContainText('서울특별시 강남구 테헤란로 152');
+  await expect(sharedDestination.locator('.customer-destination-card-meta')).toContainText('2건');
+  await expect(sharedDestination).toContainText('서울특별시 강남구 테헤란로 152, 5층');
+  await expect(sharedDestination).not.toContainText('5층, 5층');
   await expect(page.getByText('SELLER-G006-SAME-EARLY', { exact: true })).toBeVisible();
   await expect(page.getByText('DELIVERED', { exact: true })).toBeVisible();
   await expect(page.getByText('7박스', { exact: true })).toBeVisible();
   await expect(page.getByText('SELLER-G006-SAME-LATE', { exact: true })).toBeVisible();
   await expect(page.getByText('IN_TRANSIT', { exact: true })).toBeVisible();
   await expect(page.getByText('3박스', { exact: true })).toBeVisible();
-  await expect(otherDestination).toContainText('2. G006 Other Clinic');
-  await expect(otherDestination.locator('.customer-route-order-count')).toHaveText('1건');
+  await expect(otherDestination).toContainText('G006 Other Clinic');
+  await expect(otherDestination.locator('.customer-destination-card-meta')).toContainText('1건');
+  expect(await page.getByLabel('배송지 리스트').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible' });
-  await expect.poll(() => page.evaluate(() =>
-    new Set(
-      window.dsvMap?.querySourceFeatures('operational-destinations')
-        .map((feature) => feature.properties?.pointId) ?? [],
-    ).size,
-  )).toBe(2);
+  await expect.poll(() => page.evaluate(() => {
+    const destinationFeatures = window.dsvMap?.querySourceFeatures('operational-destinations') ?? [];
+    const routeSource = window.dsvMap?.getSource('operational-routes');
+    const routeData = routeSource && 'serialize' in routeSource ? routeSource.serialize().data : undefined;
+    return {
+      destinationCount: new Set(destinationFeatures.map((feature) => feature.properties?.pointId)).size,
+      destinationLabels: [...new Set(destinationFeatures.map((feature) => feature.properties?.label))],
+      routeCoordinates: routeData?.features?.[0]?.geometry?.coordinates,
+    };
+  })).toEqual({
+    destinationCount: 2,
+    destinationLabels: [''],
+    routeCoordinates: [[127.02, 37.49], [127.01, 37.51], [126.99, 37.54], [126.9779, 37.5663]],
+  });
   expect(api.unexpected).toEqual([]);
 });
 

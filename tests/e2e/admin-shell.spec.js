@@ -283,7 +283,7 @@ test('compact control starts with centered collapsed cards and opens empty state
   await page.waitForFunction(() => window.dsvMap?.isStyleLoaded());
 
   await expect(page.locator('#fleetList')).not.toBeVisible();
-  await expect(page.locator('#destinationList')).not.toBeVisible();
+  await expect(page.locator('#customerList')).not.toBeVisible();
   const mapBox = await page.locator('.map-card').boundingBox();
   expect(mapBox).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
   const bellBox = await page.locator('.notification-bell').boundingBox();
@@ -293,26 +293,26 @@ test('compact control starts with centered collapsed cards and opens empty state
   expect(390 - mapControlsBox.x - mapControlsBox.width).toBe(12);
   expect(844 - mapControlsBox.y - mapControlsBox.height).toBe(148);
   expect(390 - cardsBox.x - cardsBox.width).toBe(12);
-  for (const cardId of ['vehicleCard', 'destinationCard']) {
+  for (const cardId of ['vehicleCard', 'customerCard']) {
     const card = await page.locator(`#${cardId}`).boundingBox();
     const heading = await page.locator(`#${cardId} > .section-heading`).boundingBox();
     expect(Math.abs((card.y + card.height / 2) - (heading.y + heading.height / 2))).toBeLessThanOrEqual(.5);
   }
 
-  await page.getByRole('button', { name: '예정 차량 펼치기' }).click();
+  await page.getByRole('button', { name: '차량 리스트 펼치기' }).click();
   await expect(page.locator('#fleetList')).toBeVisible();
-  await expect(page.getByText('예정 차량이 없습니다.')).toBeVisible();
+  await expect(page.getByText('차량이 없습니다.')).toBeVisible();
   await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
   const panelBox = await page.locator('.panel-view').boundingBox();
   expect(panelBox).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
-  await page.getByRole('button', { name: '예정 차량 닫기' }).click();
-  await expect(page.getByRole('button', { name: '예정 차량 펼치기' })).toBeVisible();
+  await page.getByRole('button', { name: '차량 리스트 닫기' }).click();
+  await expect(page.getByRole('button', { name: '차량 리스트 펼치기' })).toBeVisible();
 
-  await page.getByRole('button', { name: '제조사별 주문 펼치기' }).click();
-  await expect(page.locator('#destinationList')).toBeVisible();
-  await expect(page.getByText('등록된 제조사 주문이 없습니다.')).toBeVisible();
-  await page.getByRole('button', { name: '제조사별 주문 닫기' }).click();
-  await expect(page.getByRole('button', { name: '제조사별 주문 펼치기' })).toBeVisible();
+  await page.getByRole('button', { name: '고객사별 주문 펼치기' }).click();
+  await expect(page.locator('#customerList')).toBeVisible();
+  await expect(page.getByText('등록된 고객사 주문이 없습니다.')).toBeVisible();
+  await page.getByRole('button', { name: '고객사별 주문 닫기' }).click();
+  await expect(page.getByRole('button', { name: '고객사별 주문 펼치기' })).toBeVisible();
   await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden');
 });
 

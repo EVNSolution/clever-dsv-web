@@ -226,7 +226,7 @@ function dispatchFixtures(fixtures = {}) {
       page: { hasMore: false },
     }, 'g006-dispatch-vehicles'),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({
-      items: [{ customerId: 'customer-g006', displayName: 'Canonical Manufacturer G006', orderCount: 4, status: 'ACTIVE' }],
+      items: [{ customerId: 'customer-g006', displayName: 'Canonical Customer G006', orderCount: 4, status: 'ACTIVE' }],
       page: { hasMore: false },
     }, 'g006-dispatch-customers'),
     'GET /api/dsv/v1/destinations?limit=100': v1Envelope({

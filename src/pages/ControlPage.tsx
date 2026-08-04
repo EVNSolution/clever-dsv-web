@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useState } from 'react';
-import { Info } from 'lucide-react';
+import { ChevronRight, Info } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { loadControlSummary } from '../services/control';
 import type { ControlSummary } from '../services/control';
@@ -10,8 +10,8 @@ import { loadControlManagementSnapshot } from '../services/management';
 import type { ManagementData } from '../demo/management';
 import { adminCustomerDeliveryPath } from '../app-routes';
 
-type MobileControlPanel = 'destinations' | 'manufacturers' | 'vehicles';
-type ManufacturerOrderGroup = {
+type MobileControlPanel = 'customers' | 'destinations' | 'vehicles';
+type CustomerOrderGroup = {
   id: string;
   name: string;
   orders: DispatchListItem[];
@@ -52,7 +52,7 @@ export function ControlPage({
   return (
     <ControlPanels
       loading={false}
-      manufacturerOrders={[]}
+      customerOrders={[]}
       orders={[]}
       ordersCount={0}
       vehicles={[]}
@@ -64,7 +64,7 @@ export function ControlPreviewPanels(): ReactElement {
   return (
     <ControlPanels
       loading
-      manufacturerOrders={[]}
+      customerOrders={[]}
       orders={[]}
       ordersCount={0}
       vehicles={[]}
@@ -143,7 +143,7 @@ function RemoteControlPage({
     <ControlPanels
       error={panelError}
       loading={panelLoading}
-      manufacturerOrders={groupOrdersByManufacturer(orders, management)}
+      customerOrders={groupOrdersByCustomer(orders, management)}
       estimatedArrivalByOrderId={estimatedArrivalByOrderId}
       orders={orders}
       ordersCount={orders.length}
@@ -162,7 +162,7 @@ function ControlPanels({
   error = '',
   estimatedArrivalByOrderId = new Map(),
   loading,
-  manufacturerOrders,
+  customerOrders,
   orders,
   ordersCount,
   summary,
@@ -175,7 +175,7 @@ function ControlPanels({
   error?: string;
   estimatedArrivalByOrderId?: ReadonlyMap<string, string>;
   loading: boolean;
-  manufacturerOrders: ManufacturerOrderGroup[];
+  customerOrders: CustomerOrderGroup[];
   orders: DispatchListItem[];
   ordersCount: number;
   summary?: ControlSummary;
@@ -203,7 +203,7 @@ function ControlPanels({
 
   useEffect(() => {
     setMobilePanel((current) => {
-      if (selectedVehicleId !== undefined && current === 'manufacturers') return undefined;
+      if (selectedVehicleId !== undefined && current === 'customers') return undefined;
       if (selectedVehicleId === undefined && current === 'destinations') return undefined;
       return current;
     });
@@ -300,32 +300,34 @@ function ControlPanels({
           </div>
         </section> : null}
 
-        {selectedVehicleId === undefined ? <section className={`card panel expand-card mobile-panel-${mobilePanel === 'manufacturers' ? 'expanded' : 'collapsed'}`} id="manufacturerCard" aria-label="제조사별 주문 리스트">
+        {selectedVehicleId === undefined ? <section className={`card panel expand-card mobile-panel-${mobilePanel === 'customers' ? 'expanded' : 'collapsed'}`} id="customerCard" aria-label="고객사별 주문 리스트">
           <div className="tab-line section-heading">
-            <span className="destination-title desktop-panel-title">제조사별 주문</span>
-            <button className="mobile-panel-toggle" type="button" aria-expanded={mobilePanel === 'manufacturers'} aria-label={`제조사별 주문 ${mobilePanel === 'manufacturers' ? '닫기' : '펼치기'}`} onClick={() => setMobilePanel((current) => current === 'manufacturers' ? undefined : 'manufacturers')}>
-              <span>제조사별 주문</span><span className="chip mini">{ordersCount}건</span><span className="mobile-panel-action">{mobilePanel === 'manufacturers' ? '닫기' : '펼치기'}</span>
+            <span className="destination-title desktop-panel-title">고객사별 주문</span>
+            <button className="mobile-panel-toggle" type="button" aria-expanded={mobilePanel === 'customers'} aria-label={`고객사별 주문 ${mobilePanel === 'customers' ? '닫기' : '펼치기'}`} onClick={() => setMobilePanel((current) => current === 'customers' ? undefined : 'customers')}>
+              <span>고객사별 주문</span><span className="chip mini">{ordersCount}건</span><span className="mobile-panel-action">{mobilePanel === 'customers' ? '닫기' : '펼치기'}</span>
             </button>
             <span className="chip mini desktop-panel-tools">{ordersCount}건</span>
           </div>
-          <div className="manufacturer-order-list stops overlay-scroll" id="manufacturerList">
-            {manufacturerOrders.map((group) => (
-              <section className="manufacturer-order-group" key={group.id}>
-                <div className="manufacturer-order-head">
-                  <a
-                    aria-label={`${group.name} 고객사 배송조회`}
-                    href={manufacturerInquiryHref(group.id, summary?.serviceDate)}
-                  >
-                    {group.name}
-                  </a>
-                  <span className="manufacturer-order-meta">
-                    <span>{group.orders.length}건</span>
-                    <time>{manufacturerFirstEta(group.orders, estimatedArrivalByOrderId)}</time>
-                  </span>
-                </div>
-              </section>
+          <div className="control-customer-order-list stops overlay-scroll" id="customerList">
+            {customerOrders.map((group) => (
+              <a
+                aria-label={`${group.name} 고객사 조회 화면으로 이동`}
+                className="control-customer-order-group"
+                href={customerInquiryHref(group.id, summary?.serviceDate)}
+                key={group.id}
+              >
+                <span className="control-customer-order-name">
+                  <strong>{group.name}</strong>
+                  <small>클릭하여 고객사 조회 화면으로 이동</small>
+                </span>
+                <span className="control-customer-order-meta">
+                  <span>{group.orders.length}건</span>
+                  <time>{customerFirstEta(group.orders, estimatedArrivalByOrderId)}</time>
+                </span>
+                <ChevronRight aria-hidden="true" />
+              </a>
             ))}
-            {!loading && !error && !manufacturerOrders.length ? <div className="panel-state">등록된 제조사 주문이 없습니다.</div> : null}
+            {!loading && !error && !customerOrders.length ? <div className="panel-state">등록된 고객사 주문이 없습니다.</div> : null}
           </div>
         </section> : null}
       </div>
@@ -333,7 +335,7 @@ function ControlPanels({
   );
 }
 
-function groupOrdersByManufacturer(orders: DispatchListItem[], management?: ManagementData): ManufacturerOrderGroup[] {
+function groupOrdersByCustomer(orders: DispatchListItem[], management?: ManagementData): CustomerOrderGroup[] {
   const names = new Map(management?.customers.map((customer) => [customer.id, customer.name]) ?? []);
   const groups = new Map<string, DispatchListItem[]>();
   for (const order of orders) groups.set(order.customerId, [...(groups.get(order.customerId) ?? []), order]);
@@ -362,7 +364,7 @@ function scheduledControlVehicles(orders: DispatchListItem[], management?: Manag
   return management.vehicles.filter((vehicle) => scheduledVehicleIds.has(vehicle.id));
 }
 
-function manufacturerFirstEta(orders: DispatchListItem[], configuredEtas: ReadonlyMap<string, string>): string {
+function customerFirstEta(orders: DispatchListItem[], configuredEtas: ReadonlyMap<string, string>): string {
   const first = [...orders].sort((left, right) => {
     const leftEta = controlEtaTimestamp(left, configuredEtas);
     const rightEta = controlEtaTimestamp(right, configuredEtas);
@@ -435,7 +437,7 @@ function compareControlStops(left: DispatchListItem, right: DispatchListItem): n
   return left.sellerOrderKey.localeCompare(right.sellerOrderKey, 'ko');
 }
 
-function manufacturerInquiryHref(customerId: string, serviceDate?: string): string {
+function customerInquiryHref(customerId: string, serviceDate?: string): string {
   const query = new URLSearchParams({ customer: customerId });
   if (serviceDate !== undefined) query.set('serviceDate', serviceDate);
   return `${adminCustomerDeliveryPath}?${query.toString()}`;

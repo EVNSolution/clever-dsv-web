@@ -60,8 +60,8 @@ test('control map renders the configured departure marker without synthetic rout
   await expect(page.getByRole('img', { name: /출발 위치: 경기도 군포시 번영로 82/ })).toBeVisible();
   const attributionText = await page.locator('.maplibregl-ctrl-attrib-inner').innerText();
   expect(attributionText.match(/OpenFreeMap/gu)).toHaveLength(1);
-  await expect(page.getByText('예정 차량이 없습니다.')).toBeVisible();
-  await expect(page.getByText('등록된 제조사 주문이 없습니다.')).toBeVisible();
+  await expect(page.getByText('차량이 없습니다.')).toBeVisible();
+  await expect(page.getByText('등록된 고객사 주문이 없습니다.')).toBeVisible();
 });
 
 test('control map stays flat and the notification occupies the former display-control slot', async ({ page }) => {

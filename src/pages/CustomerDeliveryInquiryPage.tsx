@@ -6,7 +6,7 @@ import { ProductHeader } from '../components/MapControls';
 import { apiConfig } from '../api/config';
 import { loadRemoteCustomerDeliveries } from '../services/customer-deliveries';
 import type { CustomerDeliveryItem, RemoteCustomerDeliveries } from '../services/customer-deliveries';
-import type { MapCanvasPoint } from '../components/MapCanvas';
+import type { MapCanvasPoint, MapCanvasRoute } from '../components/MapCanvas';
 
 const MapCanvas = lazy(() => import('../components/MapCanvas').then((module) => ({ default: module.MapCanvas })));
 const locationRefreshIntervalMs = 60_000;
@@ -234,46 +234,58 @@ function RemoteCustomerDeliveryInquiryPage({ adminCustomerId }: { adminCustomerI
   const selected = destinationGroups.find((group) => group.destinationId === selectedKey) ?? destinationGroups[0];
   const points = customerMapPoints(destinationGroups);
   const vehicles = customerVehiclePoints(state.data.deliveries);
+  const routes = customerMapRoutes(state.data.routes);
 
   return (
     <main className="page customer-delivery-demo">
-      <section className="grid" aria-label="제조사 배송 조회">
+      <section className="grid" aria-label="고객사 배송 조회">
         <Suspense fallback={<article className="card map-card" aria-label="지도 불러오는 중" />}>
           <MapCanvas
-            ariaLabel="제조사 배송지 지도"
+            ariaLabel="고객사 배송지 지도"
             onPointSelect={(destinationId) => {
               const group = destinationGroups.find((item) => item.destinationId === destinationId);
               if (group !== undefined) setSelectedKey(group.destinationId);
             }}
             points={points}
+            routes={routes}
             selectedPointId={selected?.destinationId}
             showEveryPoint
             vehicles={vehicles}
           />
         </Suspense>
-        <section className="customer-order-card overlay-scroll" aria-label="고객 배송 조회">
-        <div className="customer-section" aria-label="배송조회">
-          <div className="customer-section-head"><span>배송조회</span><span>{destinationGroups.length}곳</span></div>
-        </div>
-        {destinationGroups.length ? <>
-          <div className="customer-section" aria-label="배송지 목록">
-            <div className="customer-section-head"><span>배송지 목록</span><span>자사 배송 순서</span></div>
-            <div className="customer-list">
-              {destinationGroups.map((group) => (
-                <button key={group.destinationId} type="button" className={`customer-route-group${group.destinationId === selected?.destinationId ? ' active' : ''}`} onClick={() => setSelectedKey(group.destinationId)}>
-                  <span className="customer-route-head">
-                    <strong>{group.destinationSequence}. {group.destinationDisplayName}</strong>
-                    <span className="customer-route-order-count" aria-label={`주문 ${group.orderCount}건`}>{group.orderCount}건</span>
-                    <time>{formatCustomerTime(group.sharedEstimatedArrivalAt)}</time>
-                  </span>
-                  <small><span>{group.destinationAddress ?? '주소 확인 중'}</span><span>{group.vehicleSummary}</span></small>
-                </button>
-              ))}
-            </div>
+        <section className="customer-order-card customer-destination-panel" aria-label="배송지 리스트">
+          <div className="customer-destination-panel-head">
+            <strong>배송지 리스트</strong>
+            <span>{destinationGroups.length}곳</span>
           </div>
-
-          {selected ? <RemoteCustomerDeliveryDetail delivery={selected} /> : null}
-        </> : <div className="customer-empty-state" role="status"><strong>배송 없음</strong><span>{state.data.emptyReason ?? '세션 범위에서 조회할 배송이 없습니다.'}</span></div>}
+          {destinationGroups.length ? (
+            <div className="customer-destination-list">
+              {destinationGroups.map((group) => {
+                const active = group.destinationId === selected?.destinationId;
+                return (
+                  <button
+                    key={group.destinationId}
+                    type="button"
+                    className={`customer-destination-card${active ? ' active' : ''}`}
+                    aria-expanded={active}
+                    onClick={() => setSelectedKey(group.destinationId)}
+                  >
+                    <span className="customer-destination-card-summary">
+                      <span className="customer-destination-card-copy">
+                        <strong>{group.destinationDisplayName}</strong>
+                        <small>{group.destinationAddress ?? '주소 확인 중'}</small>
+                      </span>
+                      <span className="customer-destination-card-meta">
+                        <span>{group.orderCount}건</span>
+                        <time>{formatCustomerTime(group.sharedEstimatedArrivalAt)}</time>
+                      </span>
+                    </span>
+                    {active ? <RemoteCustomerDeliveryDetail delivery={group} /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : <div className="customer-empty-state" role="status"><strong>배송 없음</strong><span>{state.data.emptyReason ?? '세션 범위에서 조회할 배송이 없습니다.'}</span></div>}
         </section>
       </section>
     </main>
@@ -282,48 +294,20 @@ function RemoteCustomerDeliveryInquiryPage({ adminCustomerId }: { adminCustomerI
 
 function RemoteCustomerDeliveryDetail({ delivery }: { delivery: CustomerDestinationGroup }): ReactElement {
   return (
-    <>
-      <div className="customer-order-head">
-        <div>
-          <strong>{delivery.destinationSequence}. {delivery.destinationDisplayName}</strong>
-          <small>{delivery.destinationAddress ?? delivery.destinationId}</small>
-        </div>
-        <span className="chip green">{delivery.orderCount}건 / {delivery.shippedBoxes}박스</span>
-      </div>
-
-      <div className="customer-status-grid">
-        <div className="customer-status-item remaining"><span>배정 차량</span><b>{delivery.vehicleSummary}</b></div>
-        <div className="customer-status-item"><span>공통 ETA</span><b>{formatCustomerTime(delivery.sharedEstimatedArrivalAt)}</b></div>
-        <div className="customer-status-item"><span>주문 수량</span><b>{delivery.orderCount}건 / {delivery.shippedBoxes}박스</b></div>
-      </div>
-
-      <div className="customer-section">
-        <div className="customer-section-head"><span>주문 목록</span><span>{delivery.orderCount}건</span></div>
-        <div className="customer-list">
-          {delivery.orders.map((order) => (
-            <div key={order.sellerOrderId} className="customer-order-row">
-              <div><strong>{order.sellerOrderKey}</strong><small>{order.deliveryStatus}</small></div>
-              <span>{order.shippedBoxes}박스</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="customer-section">
-        <div className="customer-section-head"><span>이벤트 요약</span><span>{delivery.eventSummary.length}건</span></div>
-        <div className="customer-list">
-          {delivery.eventSummary.length ? delivery.eventSummary.map((event) => (
-            <div key={`${event.type}-${event.occurredAt}`} className="customer-destination-row status-current" data-status-tone="current">
-              <i>요</i>
-              <div><strong>{event.type}</strong><small>{event.occurredAt}</small></div>
-              <span className="chip blue">요약</span>
-            </div>
-          )) : (
-            <div className="customer-empty-state" role="status"><strong>이벤트 없음</strong><span>세부 내역은 원격 v1 요약 응답에서 제공되지 않습니다.</span></div>
-          )}
-        </div>
-      </div>
-    </>
+    <span className="customer-destination-card-detail">
+      <span className="customer-destination-facts">
+        <span><small>배정 차량</small><b>{delivery.vehicleSummary}</b></span>
+        <span><small>박스</small><b>{delivery.shippedBoxes}개</b></span>
+      </span>
+      <span className="customer-destination-orders" aria-label={`${delivery.destinationDisplayName} 주문 목록`}>
+        {delivery.orders.map((order) => (
+          <span key={order.sellerOrderId} className="customer-destination-order">
+            <span><strong>{order.sellerOrderKey}</strong><small>{order.deliveryStatus}</small></span>
+            <b>{order.shippedBoxes}박스</b>
+          </span>
+        ))}
+      </span>
+    </span>
   );
 }
 
@@ -360,7 +344,7 @@ function customerDestinationGroups(deliveries: CustomerDeliveryItem[]): Customer
       const coordinateAnchor = sortedOrders.find((order) => order.latitude !== undefined && order.longitude !== undefined);
       return {
         destinationSequence: 0,
-        destinationAddress: anchor.destinationAddress,
+        destinationAddress: customerAddressLabel(anchor.destinationAddress),
         destinationDisplayName: anchor.destinationDisplayName,
         destinationId,
         eventSummary: sortedOrders.flatMap((order) => order.eventSummary),
@@ -422,7 +406,6 @@ function customerMapPoints(groups: CustomerDestinationGroup[]): MapCanvasPoint[]
       ? [{
           color: '#0066cc',
           id: group.destinationId,
-          label: String(group.destinationSequence),
           latitude: group.latitude,
           longitude: group.longitude,
           sortOrder: group.destinationSequence,
@@ -430,6 +413,47 @@ function customerMapPoints(groups: CustomerDestinationGroup[]): MapCanvasPoint[]
         }]
       : []
   ));
+}
+
+function customerMapRoutes(routes: RemoteCustomerDeliveries['routes']): MapCanvasRoute[] {
+  return routes.map((route) => ({
+    color: '#0066cc',
+    coordinates: route.coordinates,
+    id: route.vehicleId,
+    selected: true,
+  }));
+}
+
+function customerAddressLabel(value?: string): string | undefined {
+  if (value === undefined) return undefined;
+  const parts = splitAddressParts(value);
+  const uniqueParts = parts.filter((part, index) => (
+    index === 0 || normalizedAddressPart(part) !== normalizedAddressPart(parts[index - 1] ?? '')
+  ));
+  const normalized = uniqueParts.join(', ').trim();
+  return normalized === '' ? undefined : normalized;
+}
+
+function splitAddressParts(value: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === '(') depth += 1;
+    if (character === ')') depth = Math.max(0, depth - 1);
+    if (character !== ',' || depth !== 0) continue;
+    const part = value.slice(start, index).trim();
+    if (part !== '') parts.push(part);
+    start = index + 1;
+  }
+  const tail = value.slice(start).trim();
+  if (tail !== '') parts.push(tail);
+  return parts;
+}
+
+function normalizedAddressPart(value: string): string {
+  return value.normalize('NFKC').replace(/[\s,]/gu, '').toLocaleLowerCase('ko-KR');
 }
 
 function customerVehiclePoints(deliveries: CustomerDeliveryItem[]) {

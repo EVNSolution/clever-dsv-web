@@ -26,10 +26,16 @@ export type CustomerDeliveryItem = {
   vehicleLongitude?: number;
 };
 
+export type CustomerDeliveryRoute = {
+  coordinates: Array<[longitude: number, latitude: number]>;
+  vehicleId: string;
+};
+
 export type RemoteCustomerDeliveries = {
   deliveries: CustomerDeliveryItem[];
   emptyReason?: string;
   page?: CustomerDeliveryPageInfo;
+  routes: CustomerDeliveryRoute[];
 };
 
 type CustomerDeliveryPageInfo = {
@@ -54,6 +60,7 @@ async function loadCustomerScopedDeliveries(
   options: CustomerDeliveryLoadOptions,
 ): Promise<RemoteCustomerDeliveries> {
   const deliveries: CustomerDeliveryItem[] = [];
+  const routes = new Map<string, CustomerDeliveryRoute>();
   let cursor: string | undefined;
   let emptyReason: string | undefined;
   let page: CustomerDeliveryPageInfo | undefined;
@@ -64,20 +71,22 @@ async function loadCustomerScopedDeliveries(
     const data = await requestV1ReadJson<unknown>(`customer/deliveries?${query.toString()}`, { signal: options.signal });
     const response = customerDeliveriesResponse(data);
     deliveries.push(...response.items.map(customerDeliveryFrom));
+    for (const route of response.routes.map(customerDeliveryRouteFrom)) routes.set(route.vehicleId, route);
     emptyReason = response.emptyReason;
     page = response.page;
     cursor = page?.hasMore === true ? page.nextCursor : undefined;
     if (page?.hasMore === true && cursor === undefined) throw new Error('고객 배송 조회 페이지 정보가 올바르지 않습니다.');
   } while (cursor !== undefined);
-  return { deliveries, emptyReason, page };
+  return { deliveries, emptyReason, page, routes: [...routes.values()] };
 }
 
 async function loadAdminCustomerDeliveries(
   options: CustomerDeliveryLoadOptions & { adminCustomerId?: string },
 ): Promise<RemoteCustomerDeliveries> {
   const customerId = options.adminCustomerId?.trim();
-  if (!customerId) throw new Error('조회할 제조사를 선택해야 합니다.');
+  if (!customerId) throw new Error('조회할 고객사를 선택해야 합니다.');
   const deliveries: CustomerDeliveryItem[] = [];
+  const routes = new Map<string, CustomerDeliveryRoute>();
   let cursor: string | undefined;
   let emptyReason: string | undefined;
   let page: CustomerDeliveryPageInfo | undefined;
@@ -91,26 +100,47 @@ async function loadAdminCustomerDeliveries(
     const data = await requestV1ReadJson<unknown>(`customers/deliveries?${query.toString()}`, { signal: options.signal });
     const response = customerDeliveriesResponse(data);
     deliveries.push(...response.items.map(customerDeliveryFrom));
+    for (const route of response.routes.map(customerDeliveryRouteFrom)) routes.set(route.vehicleId, route);
     emptyReason = response.emptyReason;
     page = response.page;
     cursor = page?.hasMore === true ? page.nextCursor : undefined;
-    if (page?.hasMore === true && cursor === undefined) throw new Error('제조사 배송 조회 페이지 정보가 올바르지 않습니다.');
+    if (page?.hasMore === true && cursor === undefined) throw new Error('고객사 배송 조회 페이지 정보가 올바르지 않습니다.');
   } while (cursor !== undefined);
-  return { deliveries, emptyReason, page };
+  return { deliveries, emptyReason, page, routes: [...routes.values()] };
 }
 
 function customerDeliveriesResponse(data: unknown): {
   emptyReason?: string;
   items: unknown[];
   page?: CustomerDeliveryPageInfo;
+  routes: unknown[];
 } {
-  if (!hasOnlyKeys(data, ['items', 'page', 'emptyReason']) || !Array.isArray(data.items)) {
+  if (!hasOnlyKeys(data, ['items', 'page', 'emptyReason', 'routes']) || !Array.isArray(data.items)) {
     throw new Error('고객 배송 조회 응답 형식이 올바르지 않습니다.');
   }
+  if (data.routes !== undefined && !Array.isArray(data.routes)) throw new Error('고객 배송 경로 응답 형식이 올바르지 않습니다.');
   return {
     emptyReason: optionalString(data, 'emptyReason'),
     items: data.items,
     page: pageInfoFrom(data.page),
+    routes: data.routes ?? [],
+  };
+}
+
+function customerDeliveryRouteFrom(value: unknown): CustomerDeliveryRoute {
+  if (!hasOnlyKeys(value, ['coordinates', 'vehicleId'])) throw new Error('고객 배송 경로 응답 형식이 올바르지 않습니다.');
+  const coordinates = requiredArray(value, 'coordinates').map((coordinate) => {
+    if (!Array.isArray(coordinate) || coordinate.length !== 2) throw new Error('고객 배송 경로 좌표 형식이 올바르지 않습니다.');
+    const [longitude, latitude] = coordinate;
+    if (typeof longitude !== 'number' || !Number.isFinite(longitude) || typeof latitude !== 'number' || !Number.isFinite(latitude)) {
+      throw new Error('고객 배송 경로 좌표 형식이 올바르지 않습니다.');
+    }
+    return [longitude, latitude] as [number, number];
+  });
+  if (coordinates.length < 2) throw new Error('고객 배송 경로 좌표가 부족합니다.');
+  return {
+    coordinates,
+    vehicleId: requiredString(value, 'vehicleId'),
   };
 }
 
