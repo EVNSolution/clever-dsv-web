@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { expectPath } from './helpers.js';
 
-test('admin tab labels keep English paths', async ({ page }) => {
+test('admin shell navigation preserves its geometry across English routes', async ({ page }) => {
   await page.goto('/control');
   await expect(page.getByRole('button', { name: '사이드바 펼치기' })).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('.sidebar-brand-title')).not.toBeVisible();
@@ -12,7 +12,6 @@ test('admin tab labels keep English paths', async ({ page }) => {
   await page.getByRole('button', { name: '사이드바 펼치기' }).click();
   await expect(page.locator('.left-tabs')).toHaveCSS('width', '206px');
   await expect(page.locator('.left-tabs')).toHaveCSS('border-right-color', 'rgb(72, 72, 74)');
-  await page.waitForTimeout(400);
   const fixedHeaderBox = await page.locator('.sidebar-brand').boundingBox();
   await expect(page.locator('.sidebar-brand')).toHaveCSS('height', '40px');
   await expect(page.locator('.sidebar-logout')).toHaveCSS('height', '40px');
@@ -20,7 +19,7 @@ test('admin tab labels keep English paths', async ({ page }) => {
   await expect(page.locator('.notification-bell')).toHaveCSS('border-color', 'rgb(229, 229, 234)');
   await expect(page.locator('.notification-bell svg')).toHaveCSS('color', 'rgb(0, 0, 0)');
   await expect(page.locator('#vehicleCard')).toHaveCSS('border-color', 'rgb(229, 229, 234)');
-  await expect(page.locator('#destinationCard')).toHaveCSS('border-color', 'rgb(229, 229, 234)');
+  await expect(page.locator('#customerCard')).toHaveCSS('border-color', 'rgb(229, 229, 234)');
   await expect(page.locator('.side')).toHaveCSS('top', '20px');
   const bellBox = await page.locator('.notification-bell').boundingBox();
   const expandedTabsBox = await page.locator('.left-tabs').boundingBox();
@@ -72,7 +71,6 @@ test('admin tab labels keep English paths', async ({ page }) => {
   await page.getByRole('button', { name: '사이드바 접기', exact: true }).click();
   await expect(page.getByRole('button', { name: '사이드바 펼치기' })).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('.left-tabs')).toHaveCSS('width', '76px');
-  await page.waitForTimeout(400);
   await expect(page.locator('.sidebar-brand-title')).not.toBeVisible();
   await expect(page.locator('.sidebar-brand-mark')).toHaveText('C');
   await expect(page.locator('.sidebar-brand-mark')).toHaveCSS('width', '60px');
@@ -90,7 +88,6 @@ test('admin tab labels keep English paths', async ({ page }) => {
   expect(collapsedActiveTabBox.x).toBe(expandedActiveTabBox.x);
   await page.getByRole('button', { name: '사이드바 펼치기' }).click();
   await expect(page.locator('.left-tabs')).toHaveCSS('width', '206px');
-  await page.waitForTimeout(400);
   await expect(page.locator('.sidebar-brand-title')).toHaveText('CLEVER DSV');
   await expect(page.locator('.sidebar-brand')).toHaveCSS('width', '180px');
   await expect(page.locator('.tab-icon')).toHaveCount(0);
@@ -114,7 +111,8 @@ test('admin tab labels keep English paths', async ({ page }) => {
     expect(currentHeaderBox.height).toBe(fixedHeaderBox.height);
     expect(Math.abs(currentHeaderBox.x - fixedHeaderBox.x)).toBeLessThanOrEqual(3);
     expect(Math.abs(currentHeaderBox.y - fixedHeaderBox.y)).toBeLessThanOrEqual(2);
-    await expect(page.locator('.map-card .maplibregl-canvas')).toHaveCount(0);
+    if (path === '/dispatch') await expect(page.locator('.map-card .maplibregl-canvas')).toBeVisible();
+    else await expect(page.locator('.map-card .maplibregl-canvas')).toHaveCount(0);
     await expect(page.locator('main.page')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     await expect(page.getByText(/Demo|Simulation/)).toHaveCount(0);
   }
@@ -209,6 +207,8 @@ test('dispatch keeps the driver workspace at a fixed desktop width', async ({ pa
 test('dispatch separates the filter bar without sacrificing workspace height', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/dispatch');
+  await expect(page.locator('.dispatch-assignment-toolbar')).toBeVisible();
+  await expect(page.locator('.dispatch-map-workspace')).toBeVisible();
 
   const geometry = await page.evaluate(() => {
     const toolbar = document.querySelector('.dispatch-assignment-toolbar');
@@ -242,6 +242,7 @@ test('admin shell keeps 12 pixel outer geometry and inline page descriptions', a
   await page.setViewportSize({ width: 1440, height: 900 });
   for (const path of ['/dispatch', '/records', '/master-data', '/settings']) {
     await page.goto(path);
+    await expect(page.locator('.page-hero')).toBeVisible();
     const geometry = await page.evaluate(() => {
       const navigation = document.querySelector('.left-tabs');
       const content = document.querySelector('.page-content');
@@ -316,7 +317,7 @@ test('compact control starts with centered collapsed cards and opens empty state
   await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden');
 });
 
-test('all primary interactive buttons mutate visible UI state', async ({ page }) => {
+test('notification center opens, closes, and remains empty after reload', async ({ page }) => {
   await page.goto('/control');
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
 
@@ -331,12 +332,17 @@ test('all primary interactive buttons mutate visible UI state', async ({ page })
   await expect(page.locator('.notification-count')).toBeHidden();
 
   await expect(page.getByText(/Demo|Simulation/)).toHaveCount(0);
+});
 
+test('management customer workspace omits unsupported delivery links', async ({ page }) => {
   await page.goto('/master-data');
   await expect(page.getByRole('button', { name: '운송자원', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '고객사', exact: true }).click();
   await expect(page.getByText('고객사를 등록하세요.').first()).toBeVisible();
+  await expect(page.getByRole('link', { name: /배송조회/ })).toHaveCount(0);
+});
 
+test('dispatch upload exposes validation and can be cancelled', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 620 });
   await page.goto('/dispatch');
   await expect(page.getByText('표시할 배송지가 없습니다.')).toBeVisible();
@@ -391,10 +397,10 @@ test('all primary interactive buttons mutate visible UI state', async ({ page })
   await issueDetails.locator('summary').click();
   await expect(issueDetails.locator('.dispatch-upload-toggle-open')).toBeHidden();
   await expect(issueDetails.locator('.dispatch-upload-toggle-close')).toBeVisible();
-  const firstBoxIssue = issueDetails.locator('.dispatch-upload-issue-list p').filter({ hasText: '2행' }).filter({ hasText: 'E열' });
+  const firstBoxIssue = issueDetails.locator('.dispatch-upload-issue-row').filter({ hasText: '2행' }).filter({ hasText: 'E열' });
   await expect(firstBoxIssue).toContainText('박스 수량은 1 이상의 정수여야 합니다.');
-  await expect(issueDetails.locator('.dispatch-upload-issue-list p').filter({ hasText: 'A열' }).first()).toContainText('등록된 배송원을 찾을 수 없습니다.');
-  await expect(issueDetails.locator('.dispatch-upload-issue-list p').filter({ hasText: 'B열' }).first()).toContainText('등록된 차량 번호를 찾을 수 없습니다.');
+  await expect(issueDetails.locator('.dispatch-upload-issue-row').filter({ hasText: 'A열' }).first()).toContainText('등록된 배송원을 찾을 수 없습니다.');
+  await expect(issueDetails.locator('.dispatch-upload-issue-row').filter({ hasText: 'B열' }).first()).toContainText('등록된 차량 번호를 찾을 수 없습니다.');
   await expect(issueDetails).toContainText('등록된 배송원을 찾을 수 없습니다.');
   await expect(issueDetails).toContainText('등록된 차량 번호를 찾을 수 없습니다.');
   await expect(issueDetails).not.toContainText('대상을 찾을 수 없습니다.');
@@ -416,10 +422,6 @@ test('all primary interactive buttons mutate visible UI state', async ({ page })
   await expect(page.getByRole('button', { name: '예제 업로드', exact: true })).toBeVisible();
   await expect(page.locator('.dispatch-upload-summary')).toHaveCount(0);
   await page.getByRole('button', { name: '닫기' }).click();
-
-  await page.goto('/master-data');
-  await page.getByRole('button', { name: '고객사', exact: true }).click();
-  await expect(page.getByRole('link', { name: /배송조회/ })).toHaveCount(0);
 });
 
 test('empty notification center does not fabricate vehicle actions', async ({ page }) => {

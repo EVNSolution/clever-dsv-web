@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { apiConfig } from '../api/config';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
 import { MapPreview } from '../components/MapPreview';
-import { loadManualEmailConfig, recipientsFromInput, sendManualEmail } from '../services/manual-email';
+import { loadManualEmailConfig, manualEmailRecipientError, recipientsFromInput, sendManualEmail } from '../services/manual-email';
 import type { ManualEmailConfig } from '../services/manual-email';
 import {
   defaultAdminSettings,
@@ -317,7 +317,7 @@ function ManualEmailPanel({
 
   const send = async () => {
     const recipientList = recipientsFromInput(recipients);
-    if (recipientList.length === 0 || subject.trim() === '' || textContent.trim() === '' || !confirmed) return;
+    if (manualEmailRecipientError(recipients) !== null || subject.trim() === '' || textContent.trim() === '' || !confirmed) return;
     setState('sending');
     setMessage('');
     try {
@@ -331,6 +331,7 @@ function ManualEmailPanel({
     }
   };
 
+  const recipientError = recipients.trim() === '' ? null : manualEmailRecipientError(recipients);
   const readyToSend = enabled
     && config?.apiConfigured === true
     && config.senderEmail === senderEmail.trim().toLowerCase()
@@ -339,6 +340,7 @@ function ManualEmailPanel({
     && state !== 'loading'
     && state !== 'sending'
     && confirmed
+    && recipientError === null
     && recipientsFromInput(recipients).length > 0
     && subject.trim() !== ''
     && textContent.trim() !== '';
@@ -349,7 +351,7 @@ function ManualEmailPanel({
       <p className="settings-email-description">배차와 연결되지 않은 수동 발송입니다. 버튼을 누른 경우에만 한 번 요청하며 자동 재시도하지 않습니다.</p>
       <div className="settings-email-grid">
         <label><span>발신자</span><input aria-label="테스트 이메일 발신자" type="email" maxLength={320} value={senderEmail} onChange={(event) => { onSenderEmailChange(event.target.value); setConfirmed(false); }} placeholder="Brevo에서 인증한 이메일" /></label>
-        <label><span>수신자</span><input aria-label="테스트 이메일 수신자" type="text" value={recipients} onChange={(event) => { setRecipients(event.target.value); setConfirmed(false); }} placeholder="쉼표로 구분" /></label>
+        <label><span>수신자</span><input aria-label="테스트 이메일 수신자" aria-invalid={recipientError !== null} type="text" value={recipients} onChange={(event) => { setRecipients(event.target.value); setConfirmed(false); }} placeholder="쉼표로 구분, 최대 10명" /></label>
         <label className="settings-email-wide"><span>제목</span><input aria-label="테스트 이메일 제목" type="text" maxLength={200} value={subject} onChange={(event) => { onSubjectChange(event.target.value); setConfirmed(false); }} /></label>
         <label className="settings-email-wide"><span>본문</span><textarea aria-label="테스트 이메일 본문" maxLength={10000} rows={8} value={textContent} onChange={(event) => { onTextContentChange(event.target.value); setConfirmed(false); }} /></label>
       </div>
@@ -359,6 +361,7 @@ function ManualEmailPanel({
           {config?.apiConfigured === false ? <span role="status">Brevo API 설정이 필요합니다.</span> : null}
           {config?.apiConfigured === true && config.senderEmail !== senderEmail.trim().toLowerCase() ? <span role="status">발신자 이메일을 저장해 주세요.</span> : null}
           {config?.apiConfigured === true && (config.defaultSubject !== subject.trim() || config.defaultTextContent !== textContent.trim()) ? <span role="status">이메일 내용을 저장해 주세요.</span> : null}
+          {recipientError ? <span className="error" role="alert">{recipientError}</span> : null}
           {message ? <span className={state === 'error' ? 'error' : ''} role={state === 'error' ? 'alert' : 'status'}>{message}</span> : null}
           <button className="btn primary" type="button" disabled={!readyToSend} onClick={() => void send()}>{state === 'sending' ? '발송 중' : '1회 발송'}</button>
         </div>

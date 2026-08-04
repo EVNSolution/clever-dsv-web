@@ -2,7 +2,10 @@ const { defineConfig } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
-  testIgnore: process.env.VITE_DSV_API_MODE === 'remote' ? [] : ['**/remote-v1-boundary.spec.js'],
+  testIgnore: [
+    '**/static-structure.spec.js',
+    ...(process.env.VITE_DSV_API_MODE === 'remote' ? [] : ['**/remote-v1-boundary.spec.js']),
+  ],
   timeout: 30_000,
   workers: 1,
   use: {

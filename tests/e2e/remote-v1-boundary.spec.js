@@ -1565,6 +1565,12 @@ test('confirms and clears selected dispatch time constraints with exact IDs and 
   await expect(confirmButton).toBeEnabled();
   await expect(clearButton).toBeEnabled();
 
+  await startInput.fill('11:00');
+  await endInput.fill('10:30');
+  await confirmButton.click();
+  await expect(instruction.getByRole('alert')).toContainText('시작 시간을 종료 시간보다 빠르게');
+  expect(commandBodies).toEqual([]);
+
   await startInput.fill('10:30');
   await endInput.fill('11:00');
   await confirmButton.click();

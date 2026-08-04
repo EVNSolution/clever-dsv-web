@@ -97,9 +97,9 @@ test('operational mock fixtures stay absent until fixed dispatch data is rebuilt
   await page.goto('/records');
   await expect(page).toHaveURL(/\/records$/);
   await expect(page.getByRole('heading', { name: '이력', exact: true })).toBeVisible();
-  await expect(page.getByText('완료 배송 기록')).toBeVisible();
+  await expect(page.getByText('배송 이력', { exact: true })).toBeVisible();
   await expect(page.getByText('배송 이력이 없습니다.')).toBeVisible();
-  await expect(page.getByText('0건 저장됨')).toBeVisible();
+  await expect(page.getByText('0건', { exact: true })).toBeVisible();
 
   await page.goto('/settings');
   await expect(page.getByRole('heading', { name: '설정' })).toBeVisible();
@@ -153,7 +153,7 @@ test('runtime scroll owners remain scrollable without visible scrollbars', async
   for (const [path, selector] of ownership) {
     await page.goto(path);
     const owners = page.locator(selector);
-    expect(await owners.count()).toBeGreaterThan(0);
+    await expect(owners).not.toHaveCount(0);
     expect(await owners.evaluateAll((elements) => elements.every((element) => element.classList.contains('overlay-scroll')))).toBe(true);
     expect(await owners.evaluateAll((elements) => elements.every((element) => getComputedStyle(element).scrollbarGutter === 'auto'))).toBe(true);
     expect(await owners.evaluateAll((elements) => elements.every((element) => {
@@ -238,6 +238,8 @@ test('mock dispatch keeps the upload entry and empty map workspace', async ({ pa
 test('compact dispatch stacks the map and driver workspace without horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 449, height: 835 });
   await page.goto('/dispatch');
+  await expect(page.locator('.dispatch-map-workspace')).toBeVisible();
+  await expect(page.locator('.dispatch-workspace-panel')).toHaveCount(2);
 
   const layout = await page.evaluate(() => {
     const workspace = document.querySelector('.dispatch-map-workspace');
