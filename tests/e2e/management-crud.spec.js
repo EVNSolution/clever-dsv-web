@@ -156,6 +156,10 @@ test('resources keep create and delete on lists and edit on details', async ({ p
   const inviteDialog = page.getByRole('dialog', { name: '배송원 초대' });
   await expect(inviteDialog).toContainText('배송원 정보는 미리 입력하지 않습니다.');
   await expect(inviteDialog.getByRole('textbox')).toHaveCount(0);
+  await expect(inviteDialog.getByRole('link', { name: 'Android 앱 설치', exact: true })).toHaveAttribute(
+    'href',
+    'https://drive.google.com/file/d/1XRXAqREGtJJRMUsRnKgRAhFsiikE4V1y/view?usp=share_link',
+  );
   await inviteDialog.getByRole('button', { name: '취소', exact: true }).click();
   await expect(driverList.getByRole('button', { name: '배송원 등록', exact: true })).toBeVisible();
   await expect(driverList.getByRole('button', { name: '배송원 삭제', exact: true })).toBeDisabled();
