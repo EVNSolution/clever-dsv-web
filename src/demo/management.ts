@@ -26,10 +26,12 @@ export type ManagementVehicle = {
   temperatureB?: number | null;
   temperatureObservedAt?: string | null;
   temperatureStale?: boolean | null;
+  telemetryActivity?: 'ACTIVE' | 'DORMANT';
   vehicleLatitude?: number | null;
   vehicleLongitude?: number | null;
   vehiclePositionObservedAt?: string | null;
   vehiclePositionStale?: boolean | null;
+  vehicleStopped?: boolean | null;
 };
 
 export type ManagementAssignment = ManagementAssignmentRelation;

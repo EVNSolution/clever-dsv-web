@@ -38,12 +38,14 @@ type V1VehicleListItem = {
   temperatureB?: number | null;
   temperatureObservedAt?: string | null;
   temperatureStale?: boolean | null;
+  telemetryActivity?: 'ACTIVE' | 'DORMANT';
   type?: string;
   vehicleId: string;
   vehicleLatitude?: number | null;
   vehicleLongitude?: number | null;
   vehiclePositionObservedAt?: string | null;
   vehiclePositionStale?: boolean | null;
+  vehicleStopped?: boolean | null;
   vehiclePlate?: string;
   vehicleType?: string;
 };
@@ -284,11 +286,13 @@ function vehicleViewModel(vehicle: V1VehicleListItem): ManagementVehicle {
     temperatureB: vehicle.temperatureB,
     temperatureObservedAt: vehicle.temperatureObservedAt,
     temperatureStale: vehicle.temperatureStale,
+    telemetryActivity: vehicle.telemetryActivity,
     type: vehicle.type ?? (vehicle.vehicleType === 'OTHER' ? '' : (vehicle.vehicleType ?? vehicle.displayName)),
     vehicleLatitude: vehicle.vehicleLatitude,
     vehicleLongitude: vehicle.vehicleLongitude,
     vehiclePositionObservedAt: vehicle.vehiclePositionObservedAt,
     vehiclePositionStale: vehicle.vehiclePositionStale,
+    vehicleStopped: vehicle.vehicleStopped,
   };
 }
 
@@ -369,12 +373,14 @@ function isV1VehicleListItem(value: unknown): value is V1VehicleListItem {
     'temperatureB',
     'temperatureObservedAt',
     'temperatureStale',
+    'telemetryActivity',
     'type',
     'vehicleId',
     'vehicleLatitude',
     'vehicleLongitude',
     'vehiclePositionObservedAt',
     'vehiclePositionStale',
+    'vehicleStopped',
     'vehiclePlate',
     'vehicleType',
   ])
@@ -394,9 +400,11 @@ function isV1VehicleListItem(value: unknown): value is V1VehicleListItem {
     && isOptionalNullableFiniteNumber(value.temperatureB)
     && isOptionalNullableDateTimeString(value.temperatureObservedAt)
     && isOptionalNullableBoolean(value.temperatureStale)
+    && (value.telemetryActivity === undefined || value.telemetryActivity === 'ACTIVE' || value.telemetryActivity === 'DORMANT')
     && isOptionalNullableCoordinatePair(value.vehicleLatitude, value.vehicleLongitude)
     && isOptionalNullableDateTimeString(value.vehiclePositionObservedAt)
     && isOptionalNullableBoolean(value.vehiclePositionStale)
+    && isOptionalNullableBoolean(value.vehicleStopped)
     && isOptionalString(value.vehiclePlate)
     && isOptionalString(value.vehicleType)
     && isOptionalString(value.type);

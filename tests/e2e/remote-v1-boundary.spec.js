@@ -479,12 +479,14 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
           temperatureB: null,
           temperatureObservedAt: '2026-07-23T00:10:00.000Z',
           temperatureStale: false,
+          telemetryActivity: 'ACTIVE',
           vehicleId: 'vehicle-g006-scheduled',
           vehicleLatitude: 37.5021,
           vehicleLongitude: 127.0412,
           vehiclePlate: '99테 6006',
           vehiclePositionObservedAt: '2026-07-23T00:11:00.000Z',
           vehiclePositionStale: false,
+          vehicleStopped: false,
         },
         {
           displayName: 'Second Scheduled Truck',
@@ -494,10 +496,12 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
           temperatureB: null,
           temperatureObservedAt: null,
           temperatureStale: true,
+          telemetryActivity: 'DORMANT',
           vehicleId: 'vehicle-g006-second',
           vehiclePlate: '77테 4004',
           vehiclePositionObservedAt: null,
           vehiclePositionStale: null,
+          vehicleStopped: null,
         },
         {
           displayName: 'Unscheduled Truck',
@@ -505,10 +509,12 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
           status: 'ACTIVE',
           temperatureA: -18.2,
           temperatureB: -17.9,
+          telemetryActivity: 'ACTIVE',
           vehicleId: 'vehicle-g006-unscheduled',
           vehicleLatitude: 37.61,
           vehicleLongitude: 127.12,
           vehiclePlate: '88테 5005',
+          vehicleStopped: true,
         },
       ],
       page: { hasMore: false },
@@ -578,8 +584,10 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
 
   const scheduledFleet = page.getByRole('region', { name: '차량 리스트', exact: true });
   await expect(scheduledFleet).toContainText('99테 6006');
+  await expect(scheduledFleet).toContainText('이동');
   await expect(scheduledFleet).toContainText('A 4.2℃ B 미수신');
   await expect(scheduledFleet).toContainText('77테 4004');
+  await expect(scheduledFleet).toContainText('운행 미확인');
   await expect(scheduledFleet).toContainText('온도 지연 미수신');
   await expect(scheduledFleet).not.toContainText('88테 5005');
   await expect(scheduledFleet).not.toContainText('vehicle-g006');
@@ -718,12 +726,14 @@ test('marks previously loaded telemetry stale when a background refresh fails', 
           temperatureB: null,
           temperatureObservedAt: '2026-07-23T00:10:00.000Z',
           temperatureStale: false,
+          telemetryActivity: 'ACTIVE',
           vehicleId: 'vehicle-g006-refresh',
           vehicleLatitude: 37.5021,
           vehicleLongitude: 127.0412,
           vehiclePlate: '99테 6006',
           vehiclePositionObservedAt: '2026-07-23T00:11:00.000Z',
           vehiclePositionStale: false,
+          vehicleStopped: true,
         }],
         page: { hasMore: false },
       });
@@ -752,6 +762,7 @@ test('marks previously loaded telemetry stale when a background refresh fails', 
 
   const scheduledFleet = page.getByRole('region', { name: '차량 리스트', exact: true });
   await expect(scheduledFleet).toContainText('A 4.2℃ B 미수신');
+  await expect(scheduledFleet).toContainText('정차');
   await page.clock.fastForward(30_000);
   await expect.poll(() => vehicleReads).toBeGreaterThan(1);
   await expect(scheduledFleet).toContainText('온도 지연 A 4.2℃ B 미수신');

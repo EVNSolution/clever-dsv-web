@@ -276,7 +276,7 @@ function ControlPanels({
                   type="button"
                 >
                   <i aria-hidden="true" />
-                  <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong><small>{vehicle.type || '차종 미등록'} {controlVehicleTemperatureText(vehicle)}</small></span>
+                  <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong><small>{vehicle.type || '차종 미등록'} {controlVehicleMotionText(vehicle)} {controlVehicleTemperatureText(vehicle)}</small></span>
                   <em>{assignments.some((assignment) => assignment.vehicleId === vehicle.id) ? '배차 준비' : '배송원 미배정'}</em>
                 </button>
               ))}
@@ -391,6 +391,13 @@ function controlVehicleTemperatureText(vehicle: ManagementData['vehicles'][numbe
     return pairText === '온도 미수신' ? '온도 지연 미수신' : `온도 지연 ${pairText}`;
   }
   return controlTemperaturePairText(vehicle);
+}
+
+function controlVehicleMotionText(vehicle: ManagementData['vehicles'][number]): string {
+  if (vehicle.vehiclePositionStale === true) return '위치 지연';
+  if (vehicle.vehicleStopped === true) return '정차';
+  if (vehicle.vehicleStopped === false) return '이동';
+  return '운행 미확인';
 }
 
 function controlTemperaturePairText(vehicle: ManagementData['vehicles'][number]): string {
