@@ -469,25 +469,52 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
     'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
       items: [
         {
+          distanceTodayKm: 128.4,
           displayName: 'Scheduled Truck',
           driverAssignments: [],
+          ignitionOn: true,
+          speedKph: 42.5,
           status: 'ACTIVE',
+          temperatureA: 4.2,
+          temperatureB: null,
+          temperatureObservedAt: '2026-07-23T00:10:00.000Z',
+          temperatureStale: false,
+          telemetryActivity: 'ACTIVE',
           vehicleId: 'vehicle-g006-scheduled',
+          vehicleLatitude: 37.5021,
+          vehicleLongitude: 127.0412,
           vehiclePlate: '99테 6006',
+          vehiclePositionObservedAt: '2026-07-23T00:11:00.000Z',
+          vehiclePositionStale: false,
+          vehicleStopped: false,
         },
         {
           displayName: 'Second Scheduled Truck',
           driverAssignments: [],
           status: 'ACTIVE',
+          temperatureA: null,
+          temperatureB: null,
+          temperatureObservedAt: null,
+          temperatureStale: true,
+          telemetryActivity: 'DORMANT',
           vehicleId: 'vehicle-g006-second',
           vehiclePlate: '77테 4004',
+          vehiclePositionObservedAt: null,
+          vehiclePositionStale: null,
+          vehicleStopped: null,
         },
         {
           displayName: 'Unscheduled Truck',
           driverAssignments: [],
           status: 'ACTIVE',
+          temperatureA: -18.2,
+          temperatureB: -17.9,
+          telemetryActivity: 'ACTIVE',
           vehicleId: 'vehicle-g006-unscheduled',
+          vehicleLatitude: 37.61,
+          vehicleLongitude: 127.12,
           vehiclePlate: '88테 5005',
+          vehicleStopped: true,
         },
       ],
       page: { hasMore: false },
@@ -557,8 +584,13 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
 
   const scheduledFleet = page.getByRole('region', { name: '차량 리스트', exact: true });
   await expect(scheduledFleet).toContainText('99테 6006');
+  await expect(scheduledFleet).toContainText('이동');
+  await expect(scheduledFleet).toContainText('A 4.2℃ B 미수신');
   await expect(scheduledFleet).toContainText('77테 4004');
+  await expect(scheduledFleet).toContainText('운행 미확인');
+  await expect(scheduledFleet).toContainText('온도 지연 미수신');
   await expect(scheduledFleet).not.toContainText('88테 5005');
+  await expect(scheduledFleet).not.toContainText('vehicle-g006');
   const customerInquiryLink = page.getByRole('link', { name: 'Canonical Customer 고객사 조회 화면으로 이동' });
   await expect(customerInquiryLink).toBeVisible();
   await expect(customerInquiryLink).toHaveAttribute('href', `/customer/delivery-inquiry/admin?customer=customer-g006-control&serviceDate=${controlSummary.serviceDate}`);
@@ -603,7 +635,11 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
         color: feature.properties.color,
         routeId: feature.properties.routeId,
       })),
-      vehicles: vehicleSource.serialize().data.features.map((feature) => feature.properties.label),
+      vehicles: vehicleSource.serialize().data.features.map((feature) => ({
+        coordinates: feature.geometry.coordinates,
+        label: feature.properties.label,
+        vehicleId: feature.properties.vehicleId ?? null,
+      })),
     };
   })).toMatchObject({
     destinations: [
@@ -619,7 +655,10 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       { routeId: 'route-plan-g006-scheduled' },
       { routeId: 'route-plan-g006-second' },
     ],
-    vehicles: ['2대 예정'],
+    vehicles: [
+      { coordinates: [127.0412, 37.5021], label: '99테 6006', vehicleId: null },
+      { coordinates: [126.9372235, 37.330948], label: '1대 예정', vehicleId: null },
+    ],
   });
   const colors = await page.evaluate(() => (
     window.dsvMap.getSource('operational-routes').serialize().data.features.map((feature) => feature.properties.color)
@@ -660,6 +699,99 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
     destinationCount: 2,
     iconAllowOverlap: false,
   });
+  expect(api.unexpected).toEqual([]);
+});
+
+test('marks previously loaded telemetry stale when a background refresh fails', async ({ page }) => {
+  await page.clock.install();
+  let vehicleReads = 0;
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Envelope({
+      ...controlSummary,
+      assignedCount: 1,
+      totalDispatchCount: 1,
+      unassignedCount: 0,
+    }),
+    'GET /api/dsv/v1/control/routes': v1Envelope({ routes: [], serviceDate: controlSummary.serviceDate }),
+    'GET /api/dsv/v1/vehicles?limit=100': () => {
+      vehicleReads += 1;
+      if (vehicleReads > 1) return v1Error(503, 'temporary telemetry read failure');
+      return v1Envelope({
+        items: [{
+          displayName: 'Refresh Test Truck',
+          driverAssignments: [],
+          status: 'ACTIVE',
+          temperatureA: 4.2,
+          temperatureB: null,
+          temperatureObservedAt: '2026-07-23T00:10:00.000Z',
+          temperatureStale: false,
+          telemetryActivity: 'ACTIVE',
+          vehicleId: 'vehicle-g006-refresh',
+          vehicleLatitude: 37.5021,
+          vehicleLongitude: 127.0412,
+          vehiclePlate: '99테 6006',
+          vehiclePositionObservedAt: '2026-07-23T00:11:00.000Z',
+          vehiclePositionStale: false,
+          vehicleStopped: true,
+        }],
+        page: { hasMore: false },
+      });
+    },
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({ items: [], page: { hasMore: false } }),
+    'GET /api/dsv/v1/dispatches': v1Envelope({
+      items: [{
+        assignmentStatus: 'ASSIGNED',
+        customerId: 'customer-g006-refresh',
+        destinationId: 'destination-g006-refresh',
+        driverId: 'driver-g006-refresh',
+        etaStatus: 'PENDING',
+        latitude: 37.500643,
+        longitude: 127.036545,
+        routePlanId: 'route-plan-g006-refresh',
+        routeStopSequence: 1,
+        sellerOrderId: 'seller-order-g006-refresh',
+        sellerOrderKey: 'SELLER-G006-REFRESH',
+        vehicleId: 'vehicle-g006-refresh',
+      }],
+      page: { hasMore: false },
+    }),
+  });
+
+  await page.goto('/control');
+
+  const scheduledFleet = page.getByRole('region', { name: '차량 리스트', exact: true });
+  await expect(scheduledFleet).toContainText('A 4.2℃ B 미수신');
+  await expect(scheduledFleet).toContainText('정차');
+  await page.clock.fastForward(30_000);
+  await expect.poll(() => vehicleReads).toBeGreaterThan(1);
+  await expect(scheduledFleet).toContainText('온도 지연 A 4.2℃ B 미수신');
+  expect(api.unexpected).toEqual([]);
+});
+
+test('rejects one-sided and out-of-range vehicle coordinates at the v1 boundary', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Envelope(controlSummary),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
+      items: [{
+        displayName: 'Malformed Coordinate Truck',
+        driverAssignments: [],
+        status: 'ACTIVE',
+        vehicleId: 'vehicle-g006-malformed-coordinate',
+        vehicleLatitude: 91,
+        vehicleLongitude: null,
+        vehiclePlate: '99테 6006',
+      }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({ items: [], page: { hasMore: false } }),
+    'GET /api/dsv/v1/dispatches': v1Envelope({ items: [], page: { hasMore: false } }),
+  });
+
+  await page.goto('/control');
+
+  await expect(page.getByRole('alert')).toContainText('API v1 관리 목록 형식이 올바르지 않습니다.');
   expect(api.unexpected).toEqual([]);
 });
 

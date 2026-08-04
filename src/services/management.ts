@@ -26,15 +26,26 @@ type V1DriverListItem = {
 
 type V1VehicleListItem = {
   displayName: string;
+  distanceTodayKm?: number | null;
   driverAssignments: V1VehicleDriverAssignment[];
+  ignitionOn?: boolean | null;
   note?: string;
+  speedKph?: number | null;
   status?: string;
   telematicsCapabilities?: string[];
   telematicsSerialNumber?: string;
+  temperatureA?: number | null;
+  temperatureB?: number | null;
+  temperatureObservedAt?: string | null;
+  temperatureStale?: boolean | null;
+  telemetryActivity?: 'ACTIVE' | 'DORMANT';
   type?: string;
   vehicleId: string;
-  vehicleLatitude?: number;
-  vehicleLongitude?: number;
+  vehicleLatitude?: number | null;
+  vehicleLongitude?: number | null;
+  vehiclePositionObservedAt?: string | null;
+  vehiclePositionStale?: boolean | null;
+  vehicleStopped?: boolean | null;
   vehiclePlate?: string;
   vehicleType?: string;
 };
@@ -263,12 +274,25 @@ function driverViewModel(driver: V1DriverListItem): ManagementDriver {
 
 function vehicleViewModel(vehicle: V1VehicleListItem): ManagementVehicle {
   return {
+    distanceTodayKm: vehicle.distanceTodayKm,
     id: vehicle.vehicleId,
+    ignitionOn: vehicle.ignitionOn,
     note: vehicle.note ?? '',
     plate: vehicle.vehiclePlate ?? '',
+    speedKph: vehicle.speedKph,
     telematicsCapabilities: vehicle.telematicsCapabilities,
     telematicsSerialNumber: vehicle.telematicsSerialNumber,
+    temperatureA: vehicle.temperatureA,
+    temperatureB: vehicle.temperatureB,
+    temperatureObservedAt: vehicle.temperatureObservedAt,
+    temperatureStale: vehicle.temperatureStale,
+    telemetryActivity: vehicle.telemetryActivity,
     type: vehicle.type ?? (vehicle.vehicleType === 'OTHER' ? '' : (vehicle.vehicleType ?? vehicle.displayName)),
+    vehicleLatitude: vehicle.vehicleLatitude,
+    vehicleLongitude: vehicle.vehicleLongitude,
+    vehiclePositionObservedAt: vehicle.vehiclePositionObservedAt,
+    vehiclePositionStale: vehicle.vehiclePositionStale,
+    vehicleStopped: vehicle.vehicleStopped,
   };
 }
 
@@ -337,15 +361,26 @@ function isV1DriverListItem(value: unknown): value is V1DriverListItem {
 function isV1VehicleListItem(value: unknown): value is V1VehicleListItem {
   return hasOnlyKeys(value, [
     'displayName',
+    'distanceTodayKm',
     'driverAssignments',
+    'ignitionOn',
     'note',
+    'speedKph',
     'status',
     'telematicsCapabilities',
     'telematicsSerialNumber',
+    'temperatureA',
+    'temperatureB',
+    'temperatureObservedAt',
+    'temperatureStale',
+    'telemetryActivity',
     'type',
     'vehicleId',
     'vehicleLatitude',
     'vehicleLongitude',
+    'vehiclePositionObservedAt',
+    'vehiclePositionStale',
+    'vehicleStopped',
     'vehiclePlate',
     'vehicleType',
   ])
@@ -358,8 +393,18 @@ function isV1VehicleListItem(value: unknown): value is V1VehicleListItem {
     && isOptionalString(value.status)
     && isOptionalStringArray(value.telematicsCapabilities)
     && isOptionalString(value.telematicsSerialNumber)
-    && isOptionalFiniteNumber(value.vehicleLatitude)
-    && isOptionalFiniteNumber(value.vehicleLongitude)
+    && isOptionalNullableFiniteNumber(value.distanceTodayKm)
+    && isOptionalNullableBoolean(value.ignitionOn)
+    && isOptionalNullableFiniteNumber(value.speedKph)
+    && isOptionalNullableFiniteNumber(value.temperatureA)
+    && isOptionalNullableFiniteNumber(value.temperatureB)
+    && isOptionalNullableDateTimeString(value.temperatureObservedAt)
+    && isOptionalNullableBoolean(value.temperatureStale)
+    && (value.telemetryActivity === undefined || value.telemetryActivity === 'ACTIVE' || value.telemetryActivity === 'DORMANT')
+    && isOptionalNullableCoordinatePair(value.vehicleLatitude, value.vehicleLongitude)
+    && isOptionalNullableDateTimeString(value.vehiclePositionObservedAt)
+    && isOptionalNullableBoolean(value.vehiclePositionStale)
+    && isOptionalNullableBoolean(value.vehicleStopped)
     && isOptionalString(value.vehiclePlate)
     && isOptionalString(value.vehicleType)
     && isOptionalString(value.type);
@@ -420,6 +465,32 @@ function isOptionalStringArray(value: unknown): value is string[] | undefined {
 
 function isOptionalFiniteNumber(value: unknown): value is number | undefined {
   return value === undefined || (typeof value === 'number' && Number.isFinite(value));
+}
+
+function isOptionalNullableFiniteNumber(value: unknown): value is number | null | undefined {
+  return value === null || isOptionalFiniteNumber(value);
+}
+
+function isOptionalNullableBoolean(value: unknown): value is boolean | null | undefined {
+  return value === undefined || value === null || typeof value === 'boolean';
+}
+
+function isOptionalNullableCoordinatePair(latitude: unknown, longitude: unknown): boolean {
+  const latitudeMissing = latitude === undefined || latitude === null;
+  const longitudeMissing = longitude === undefined || longitude === null;
+  if (latitudeMissing || longitudeMissing) return latitudeMissing && longitudeMissing;
+  return typeof latitude === 'number'
+    && Number.isFinite(latitude)
+    && latitude >= -90
+    && latitude <= 90
+    && typeof longitude === 'number'
+    && Number.isFinite(longitude)
+    && longitude >= -180
+    && longitude <= 180;
+}
+
+function isOptionalNullableDateTimeString(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || (typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Date.parse(value)));
 }
 
 function driverPayload(driver: ManagementDriver): Omit<ManagementDriver, 'id'> {

@@ -21,3 +21,4 @@ docs/archive/external-manuals/
 # Secret-bearing vendor specifications must remain outside the repository.
 docs/private/
 docs/171. 인터페이스사양서_이브이앤솔루션_20260804.pdf
+docs/**/*인터페이스사양서*.pdf
