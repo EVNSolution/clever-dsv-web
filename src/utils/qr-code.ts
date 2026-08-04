@@ -1,8 +1,8 @@
-const QR_SIZE = 37;
-const DATA_CODEWORDS = 86;
-const ERROR_CORRECTION_CODEWORDS = 24;
-const BLOCK_COUNT = 2;
-const MAX_BYTE_LENGTH = 84;
+const QR_SIZE = 41;
+const DATA_CODEWORDS = 108;
+const ERROR_CORRECTION_CODEWORDS = 16;
+const BLOCK_COUNT = 4;
+const MAX_BYTE_LENGTH = 106;
 
 type QrMatrix = {
   functionModules: boolean[][];
@@ -103,7 +103,7 @@ function drawFunctionPatterns(matrix: QrMatrix): void {
   drawFinderPattern(matrix, 3, 3);
   drawFinderPattern(matrix, QR_SIZE - 4, 3);
   drawFinderPattern(matrix, 3, QR_SIZE - 4);
-  drawAlignmentPattern(matrix, 30, 30);
+  drawAlignmentPattern(matrix, 34, 34);
   drawFormatBits(matrix, 0);
 }
 
