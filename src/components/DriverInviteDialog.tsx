@@ -1,9 +1,11 @@
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Copy, QrCode, UserPlus, X } from 'lucide-react';
+import { Check, Copy, Download, ExternalLink, QrCode, UserPlus, X } from 'lucide-react';
 import { issueDriverSignupInvite } from '../services/management';
 import type { DriverSignupInvite } from '../services/management';
 import { createQrCodeModules } from '../utils/qr-code';
+
+const DRIVER_APP_DOWNLOAD_URL = 'https://drive.google.com/file/d/1XRXAqREGtJJRMUsRnKgRAhFsiikE4V1y/view?usp=share_link';
 
 export function DriverInviteDialog({ onClose }: { onClose: () => void }): ReactElement {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -11,6 +13,7 @@ export function DriverInviteDialog({ onClose }: { onClose: () => void }): ReactE
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'copied' | 'error' | 'idle'>('idle');
+  const [downloadCopyState, setDownloadCopyState] = useState<'copied' | 'error' | 'idle'>('idle');
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -40,6 +43,15 @@ export function DriverInviteDialog({ onClose }: { onClose: () => void }): ReactE
       setCopyState('copied');
     } catch {
       setCopyState('error');
+    }
+  };
+
+  const copyDownloadLink = async () => {
+    try {
+      await navigator.clipboard.writeText(DRIVER_APP_DOWNLOAD_URL);
+      setDownloadCopyState('copied');
+    } catch {
+      setDownloadCopyState('error');
     }
   };
 
@@ -92,6 +104,19 @@ export function DriverInviteDialog({ onClose }: { onClose: () => void }): ReactE
             </div>
           </div>
         )}
+        <section aria-labelledby="driver-app-download-title" className="driver-app-download">
+          <span className="driver-app-download-icon"><Download aria-hidden="true" /></span>
+          <span className="driver-app-download-copy">
+            <strong id="driver-app-download-title">배송원 앱 설치</strong>
+            <small>앱이 없다면 Android 설치 파일을 먼저 전달하세요.</small>
+            {downloadCopyState === 'copied' ? <span className="driver-invite-copy-status success" role="status">앱 설치 링크를 복사했습니다.</span> : null}
+            {downloadCopyState === 'error' ? <span className="driver-invite-copy-status" role="alert">앱 설치 링크를 복사하지 못했습니다.</span> : null}
+          </span>
+          <span className="driver-app-download-actions">
+            <button type="button" onClick={() => void copyDownloadLink()}><Copy aria-hidden="true" /> 앱 설치 링크 복사</button>
+            <a href={DRIVER_APP_DOWNLOAD_URL} rel="noopener noreferrer" target="_blank"><ExternalLink aria-hidden="true" /> Android 앱 설치</a>
+          </span>
+        </section>
         {error ? <p className="driver-invite-error" role="alert">{error}</p> : null}
       </div>
 
