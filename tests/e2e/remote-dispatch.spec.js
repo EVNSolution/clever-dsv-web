@@ -26,5 +26,6 @@ test('remote DSV session previews, registers a condition, and commits one dispat
   await candidate.getByRole('button', { name: '등록', exact: true }).click();
   await expect(page.getByRole('button', { name: '업로드 확정', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: '업로드 확정', exact: true }).click();
-  await expect(page.getByText('1건 업로드 완료')).toBeVisible();
+  await expect(page.getByRole('region', { name: '주문 업로드' })).toBeHidden();
+  await expect(page.getByRole('region', { name: '지도' })).toBeVisible();
 });

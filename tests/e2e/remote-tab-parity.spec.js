@@ -1601,4 +1601,55 @@ test('failed dispatch apply leaves the dispatch sentinel untouched', async ({ pa
   expect(api.calls.some((call) => call.key === 'POST /api/dsv/dispatch-imports/import-g006/apply')).toBe(true);
   expectOnlyFixtureCalls(api);
 });
+
+test('successful dispatch apply closes the upload workspace and returns to the map', async ({ page }) => {
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+    'POST /api/dsv/dispatch-imports/preview': ({ request }) => {
+      const input = request.postDataJSON();
+      return legacyEnvelope({
+        canCommit: true,
+        conditionCandidates: [],
+        fileName: input.fileName,
+        planDate: input.planDate,
+        rows: input.rows.map((row) => ({ ...row, driverId: 'driver-g006', issues: [], status: 'READY', vehicleId: 'vehicle-g006' })),
+        summary: { errorRows: 0, readyRows: input.rows.length, reviewRows: 0, totalRows: input.rows.length },
+      });
+    },
+    'POST /api/dsv/dispatch-imports': ({ request }) => {
+      const input = request.postDataJSON();
+      return legacyEnvelope({
+        dispatchImport: {
+          createdAt: '2026-07-30T00:00:00.000Z',
+          fileName: input.fileName,
+          id: 'import-g006-success',
+          planDate: input.planDate,
+          rowCount: input.rows.length,
+          rows: input.rows,
+          sourceHash: 'b'.repeat(64),
+          status: 'READY',
+        },
+      });
+    },
+    'POST /api/dsv/dispatch-imports/import-g006-success/apply': legacyEnvelope({ applyResult: { status: 'APPLIED' } }),
+  })));
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await expect(page.getByRole('region', { name: '목록' })).toBeVisible();
+  await page.getByRole('button', { name: '주문 업로드', exact: true }).click();
+  await page.getByLabel('배차 파일').setInputFiles({
+    buffer: Buffer.from(dispatchCsv('SELLER-G006-SUCCESS')),
+    mimeType: 'text/csv',
+    name: 'g006-success.csv',
+  });
+  await expect(page.getByRole('button', { name: '업로드 확정', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: '업로드 확정', exact: true }).click();
+
+  await expect(page.getByRole('region', { name: '주문 업로드' })).toBeHidden();
+  await expect(page.getByRole('region', { name: '지도' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '지도', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  expect(api.calls.some((call) => call.key === 'POST /api/dsv/dispatch-imports/import-g006-success/apply')).toBe(true);
+  expectOnlyFixtureCalls(api);
+});
 }

@@ -31,7 +31,6 @@ import type {
   DispatchImportIssue,
   DispatchImportPreview,
   DispatchImportRow,
-  DispatchImportView,
 } from '../services/dispatch-imports';
 import type { ManagementData } from '../demo/management';
 import type { DepartureLocation } from '../components/DepartureMarker';
@@ -84,7 +83,6 @@ export function DispatchPage({ title, description }: { title: string; descriptio
   const [uploadSheet, setUploadSheet] = useState<DispatchFileParseResult['sheet'] | null>(null);
   const [uploadPlanDate, setUploadPlanDate] = useState(todayInKorea);
   const [uploadPreview, setUploadPreview] = useState<DispatchImportPreview | null>(null);
-  const [uploadedImport, setUploadedImport] = useState<DispatchImportView | null>(null);
   const [uploadError, setUploadError] = useState('');
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadActivity, setUploadActivity] = useState<UploadActivity>('idle');
@@ -96,6 +94,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
   const [remoteStatus, setRemoteStatus] = useState<'error' | 'loading' | 'ready'>(() => apiConfig.mode === 'remote' ? 'loading' : 'ready');
   const [remoteError, setRemoteError] = useState('');
   const [remoteReloadKey, setRemoteReloadKey] = useState(0);
+  const [mapReturnKey, setMapReturnKey] = useState(0);
   const [serviceDate, setServiceDate] = useState(todayInKorea);
   const [dispatchSearch, setDispatchSearch] = useState<DispatchSearch>({ destinationName: '', orderNumber: '' });
   const saveDepartureTime = async () => {
@@ -194,7 +193,6 @@ export function DispatchPage({ title, description }: { title: string; descriptio
     setUploadBusy(true);
     setUploadActivity('geocoding');
     setUploadError('');
-    setUploadedImport(null);
     try {
       const preview = await previewDispatchImport(input);
       if (request !== uploadPreviewRequest.current) return;
@@ -221,7 +219,6 @@ export function DispatchPage({ title, description }: { title: string; descriptio
     const resolvedPlanDate = useDetectedPlanDate && result.planDate !== null ? result.planDate : planDate;
     const nextRows = preservePreview ? preserveResolvedRows(uploadRows, result.rows) : result.rows;
     if (!preservePreview || result.error) setUploadPreview(null);
-    setUploadedImport(null);
     if (!preservePreview || result.error) setConditionCandidates([]);
     setUploadFileName(fileName);
     setUploadRows(nextRows);
@@ -240,7 +237,6 @@ export function DispatchPage({ title, description }: { title: string; descriptio
     setUploadRows([]);
     setUploadSheet(null);
     setUploadPreview(null);
-    setUploadedImport(null);
     setConditionCandidates([]);
     setUploadError('');
     try {
@@ -321,7 +317,6 @@ export function DispatchPage({ title, description }: { title: string; descriptio
     setUploadSheet(null);
     setUploadPlanDate(todayInKorea());
     setUploadPreview(null);
-    setUploadedImport(null);
     setUploadError('');
     setUploadDragging(false);
     setUploadCellFocusTarget(null);
@@ -379,11 +374,14 @@ export function DispatchPage({ title, description }: { title: string; descriptio
     setUploadBusy(true);
     setUploadError('');
     try {
-      setUploadedImport(await commitDispatchImport(input));
+      await commitDispatchImport(input);
       if (apiConfig.mode === 'remote') {
         setServiceDate(uploadPlanDate);
         setRemoteReloadKey((current) => current + 1);
       }
+      cancelUpload();
+      setWorkAction('');
+      setMapReturnKey((current) => current + 1);
     } catch (error) {
       setUploadError(errorMessage(error));
     } finally {
@@ -460,11 +458,10 @@ export function DispatchPage({ title, description }: { title: string; descriptio
                 <label>배차일<input aria-label="배차일" type="date" value={uploadPlanDate} onChange={(event) => {
                   const planDate = event.target.value;
                   setUploadPlanDate(planDate);
-                  setUploadedImport(null);
                   if (uploadRows.length > 0) void inspectUpload({ fileName: uploadFileName, planDate, rows: uploadRows });
                 }} /></label>
                 {uploadError ? <p className="dispatch-upload-error" role="alert">{uploadError}</p> : null}
-                <button className="btn primary" type="button" disabled={uploadBusy || uploadPreview?.canCommit !== true || uploadedImport !== null} onClick={() => void commitUpload()}>업로드 확정</button>
+                <button className="btn primary" type="button" disabled={uploadBusy || uploadPreview?.canCommit !== true} onClick={() => void commitUpload()}>업로드 확정</button>
               </div>
             ) : null}
             {!uploadFileName && uploadError ? <p className="dispatch-upload-error" role="alert">{uploadError}</p> : null}
@@ -557,7 +554,6 @@ export function DispatchPage({ title, description }: { title: string; descriptio
               </div>
             ))}
             {conditionCandidates.map((candidate) => <div className="condition-candidate" key={candidate.code}><strong>{candidate.code}</strong><label>명칭<input value={candidate.name} onChange={(event) => updateConditionCandidate(candidate.code, 'name', event.target.value)} /></label><label>설명<input value={candidate.description} onChange={(event) => updateConditionCandidate(candidate.code, 'description', event.target.value)} /></label><button type="button" disabled={uploadBusy || !candidate.name.trim() || !candidate.description.trim()} onClick={() => void registerCondition(candidate)}>등록</button></div>)}
-            {uploadedImport ? <p className="dispatch-upload-complete" role="status"><strong>{uploadedImport.rowCount}건 업로드 완료</strong><span>배차일 {uploadedImport.planDate}</span><small>ID {uploadedImport.id}</small></p> : null}
           </div>
         </section>
       </div>
@@ -577,6 +573,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
           onSearchChange={setDispatchSearch}
           onServiceDateChange={setServiceDate}
           onAssignmentChanged={() => setRemoteReloadKey((current) => current + 1)}
+          mapReturnKey={mapReturnKey}
           operationsBusy={operationsBusy}
           operationsError={operationsError}
           operationsStatus={operationsStatus}
@@ -596,6 +593,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
             setDepartureError(false);
           }}
           onDepartureSave={() => void saveDepartureTime()}
+          mapReturnKey={mapReturnKey}
           onSearchChange={setDispatchSearch}
           onServiceDateChange={setServiceDate}
           search={dispatchSearch}
@@ -838,6 +836,7 @@ function MockDispatchBoard({
   departureDraft,
   departureError,
   departureLocation,
+  mapReturnKey,
   onDepartureChange,
   onDepartureSave,
   onSearchChange,
@@ -848,6 +847,7 @@ function MockDispatchBoard({
   departureDraft: string;
   departureError: boolean;
   departureLocation: DepartureLocation | null;
+  mapReturnKey: number;
   onDepartureChange: (value: string) => void;
   onDepartureSave: () => void;
   onSearchChange: (value: DispatchSearch) => void;
@@ -859,6 +859,7 @@ function MockDispatchBoard({
     <DispatchWorkspace
       departureControl={<RemoteDepartureTime busy={false} draft={departureDraft} error="" invalid={departureError} onChange={onDepartureChange} onSave={onDepartureSave} status="ready" />}
       departureLocation={departureLocation}
+      mapReturnKey={mapReturnKey}
       onSearchChange={onSearchChange}
       onServiceDateChange={onServiceDateChange}
       references={null}
@@ -875,6 +876,7 @@ function RemoteDispatchBoard({
   departureError,
   departureLocation,
   error,
+  mapReturnKey,
   onAssignmentChanged,
   onDepartureChange,
   onDepartureSave,
@@ -894,6 +896,7 @@ function RemoteDispatchBoard({
   departureError: boolean;
   departureLocation: DepartureLocation | null;
   error: string;
+  mapReturnKey: number;
   onAssignmentChanged: () => void;
   onDepartureChange: (value: string) => void;
   onDepartureSave: () => void;
@@ -926,6 +929,7 @@ function RemoteDispatchBoard({
         departureControl={departureControl}
         departureLocation={departureLocation}
         loading
+        mapReturnKey={mapReturnKey}
         onSearchChange={onSearchChange}
         onServiceDateChange={onServiceDateChange}
         references={references}
@@ -942,6 +946,7 @@ function RemoteDispatchBoard({
         departureControl={departureControl}
         departureLocation={departureLocation}
         error={error || '잠시 후 다시 시도하세요.'}
+        mapReturnKey={mapReturnKey}
         onRetry={onRetry}
         onSearchChange={onSearchChange}
         onServiceDateChange={onServiceDateChange}
@@ -957,6 +962,7 @@ function RemoteDispatchBoard({
     <DispatchWorkspace
       departureControl={departureControl}
       departureLocation={departureLocation}
+      mapReturnKey={mapReturnKey}
       onAssignmentChanged={onAssignmentChanged}
       onSearchChange={onSearchChange}
       onServiceDateChange={onServiceDateChange}
@@ -977,6 +983,7 @@ function DispatchWorkspace({
   departureLocation,
   error = '',
   loading = false,
+  mapReturnKey,
   onAssignmentChanged,
   onRetry,
   onSearchChange,
@@ -991,6 +998,7 @@ function DispatchWorkspace({
   departureLocation: DepartureLocation | null;
   error?: string;
   loading?: boolean;
+  mapReturnKey: number;
   onAssignmentChanged?: () => void;
   onRetry?: () => void;
   onSearchChange: (value: DispatchSearch) => void;
@@ -1064,6 +1072,10 @@ function DispatchWorkspace({
   useEffect(() => {
     setSearchDraft(search);
   }, [search.destinationName, search.orderNumber]);
+
+  useEffect(() => {
+    setWorkspaceView('MAP');
+  }, [mapReturnKey]);
 
   useEffect(() => {
     setConstraintError('');
