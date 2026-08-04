@@ -1024,12 +1024,12 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
           destinationDisplayName: 'G006 Shared Hospital',
           destinationAddress: '서울특별시 강남구 테헤란로 152, 5층, 5층',
           destinationId: 'destination-g006-shared',
-          deliveryStatus: 'IN_TRANSIT',
+          deliveryStatus: 'DELIVERED',
           etaStatus: 'DELAYED',
           estimatedArrivalAt: '2026-08-03T05:00:00.000Z',
           proofStatus: 'NONE',
           shippedBoxes: 3,
-          eventSummary: [],
+          eventSummary: [{ type: 'STOP_DELIVERED', occurredAt: '2026-08-03T04:15:00.000Z' }],
           latitude: 37.500643,
           longitude: 127.036545,
           vehicleDisplayName: '서울86바3800',
@@ -1067,7 +1067,7 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
           estimatedArrivalAt: '2026-08-03T03:30:00.000Z',
           proofStatus: 'SIGNED',
           shippedBoxes: 7,
-          eventSummary: [],
+          eventSummary: [{ type: 'STOP_DELIVERED', occurredAt: '2026-08-03T03:40:00.000Z' }],
           latitude: 37.500643,
           longitude: 127.036545,
           vehicleDisplayName: '서울86바3800',
@@ -1090,22 +1090,28 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
   await expect(page.getByLabel('배송지 리스트')).toContainText('2곳');
   const sharedDestination = page.getByRole('button', { name: /G006 Shared Hospital/ });
   const otherDestination = page.getByRole('button', { name: /G006 Other Clinic/ });
+  await expect(page.getByLabel('배송지 리스트').locator('.customer-destination-columns')).toContainText('도착 예정');
+  await expect(page.getByLabel('배송지 리스트').locator('.customer-destination-columns')).toContainText('실제 도착');
   await expect(sharedDestination).toContainText('G006 Shared Hospital');
+  await expect(sharedDestination.getByLabel('배송지 순서 1')).toHaveText('1');
   await expect(sharedDestination).toContainText('12:30');
-  await expect(sharedDestination.locator('.customer-destination-card-meta')).toContainText('2건');
-  await expect(sharedDestination).toContainText('서울특별시 강남구 테헤란로 152, 5층');
+  await expect(sharedDestination).toContainText('13:15');
+  await expect(sharedDestination.locator('.customer-destination-order-count')).toContainText('2건');
+  await expect(sharedDestination).not.toContainText('서울특별시 강남구 테헤란로 152, 5층');
   await expect(sharedDestination).not.toContainText('5층, 5층');
   await expect(sharedDestination).toHaveAttribute('aria-expanded', 'false');
   await sharedDestination.click();
   await expect(sharedDestination).toHaveAttribute('aria-expanded', 'true');
+  await expect(sharedDestination).toContainText('서울특별시 강남구 테헤란로 152, 5층');
+  await expect(sharedDestination).not.toContainText('서울86바3800');
   await expect(page.getByText('SELLER-G006-SAME-EARLY', { exact: true })).toBeVisible();
-  await expect(page.getByText('DELIVERED', { exact: true })).toBeVisible();
+  await expect(sharedDestination.getByText('DELIVERED', { exact: true })).toHaveCount(2);
   await expect(page.getByText('7박스', { exact: true })).toBeVisible();
   await expect(page.getByText('SELLER-G006-SAME-LATE', { exact: true })).toBeVisible();
-  await expect(page.getByText('IN_TRANSIT', { exact: true })).toBeVisible();
   await expect(page.getByText('3박스', { exact: true })).toBeVisible();
   await expect(otherDestination).toContainText('G006 Other Clinic');
-  await expect(otherDestination.locator('.customer-destination-card-meta')).toContainText('1건');
+  await expect(otherDestination.getByLabel('배송지 순서 2')).toHaveText('2');
+  await expect(otherDestination.locator('.customer-destination-order-count')).toContainText('1건');
   expect(await page.getByLabel('배송지 리스트').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible' });
   await expect.poll(() => page.evaluate(() => {
@@ -1119,7 +1125,7 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
     };
   })).toEqual({
     destinationCount: 2,
-    destinationLabels: [''],
+    destinationLabels: ['1', '2'],
     routeCoordinates: [[127.02, 37.49], [127.01, 37.51], [126.99, 37.54], [126.9779, 37.5663]],
   });
   await page.getByRole('navigation', { name: '고객사 메뉴' }).getByRole('button', { name: /이력/ }).click();
