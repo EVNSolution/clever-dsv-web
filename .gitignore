@@ -6,3 +6,10 @@ test-results/
 .env.*
 !.env.example
 .DS_Store
+
+# Agent-only deployment evidence and temporary release artifacts.
+# The canonical procedure is versioned in docs/runbooks/dsv-production-deploy.md.
+docs/runbooks/.local/
+docs/runbooks/*.local.md
+docs/runbooks/*.log
+docs/runbooks/*.tgz
