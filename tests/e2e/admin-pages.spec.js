@@ -78,8 +78,8 @@ test('dispatch switches between map and table views without replacing the driver
 
 test('operational mock fixtures stay absent until fixed dispatch data is rebuilt', async ({ page }) => {
   await page.goto('/control');
-  await expect(page.getByText('예정 차량이 없습니다.')).toBeVisible();
-  await expect(page.getByText('등록된 제조사 주문이 없습니다.')).toBeVisible();
+  await expect(page.getByText('차량이 없습니다.')).toBeVisible();
+  await expect(page.getByText('등록된 고객사 주문이 없습니다.')).toBeVisible();
   await expect(page.locator('[data-vehicle-id]')).toHaveCount(0);
 
   await page.goto('/dispatch');

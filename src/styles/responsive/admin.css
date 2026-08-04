@@ -33,7 +33,7 @@
   .page-content.master-data-page .courier-grid { grid-template-columns:minmax(280px, .9fr) minmax(420px, 1.1fr); }
 }
 @media (max-width: 920px) {
-  #manufacturerList { max-height: 260px; }
+  #customerList { max-height: 260px; }
   .page-content.master-data-page .management-resource-shell {
     grid-template-rows:repeat(2, minmax(320px, auto));
   }

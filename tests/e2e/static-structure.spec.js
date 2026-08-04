@@ -184,7 +184,7 @@ test('CSS ownership manifest matches source usage', () => {
     { selector: '.left-tabs a.main-tab', owner: 'src/styles/components/navigation.css' },
     { selector: '.nav-expanded .left-tabs a.main-tab', owner: 'src/styles/components/navigation.css' },
     { selector: '.maplibregl-canvas', owner: 'src/styles/components/map.css' },
-    { selector: '.manufacturer-order-list', owner: 'src/styles/features/control.css' },
+    { selector: '.control-customer-order-list', owner: 'src/styles/features/control.css' },
     { selector: '.customer-route-group small', owner: 'src/styles/features/customer.css' },
     { selector: '.master-data-shell', owner: 'src/styles/features/management.css' },
     { selector: '.driver-history', owner: null },

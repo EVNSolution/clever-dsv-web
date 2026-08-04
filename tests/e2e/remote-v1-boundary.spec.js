@@ -421,7 +421,7 @@ test('accepts a valid admin session only through the strict v1 session envelope'
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({
-      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Manufacturer', orderCount: 3, status: 'ACTIVE' }],
+      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Customer', orderCount: 3, status: 'ACTIVE' }],
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/dispatches': v1Envelope({ items: [], page: { hasMore: false } }),
@@ -438,7 +438,7 @@ test('accepts a valid admin session only through the strict v1 session envelope'
   const vehicleList = page.getByRole('region', { name: '차량 리스트', exact: true });
   await expect(vehicleList).not.toContainText('99테 6006');
   await expect(vehicleList).toContainText('차량이 없습니다.');
-  await expect(page.getByLabel('제조사별 주문 리스트')).toBeVisible();
+  await expect(page.getByLabel('고객사별 주문 리스트')).toBeVisible();
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session')).toBe(true);
   expect(api.unexpected).toEqual([]);
 });
@@ -493,7 +493,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({
-      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Manufacturer', orderCount: 3, status: 'ACTIVE' }],
+      items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Customer', orderCount: 3, status: 'ACTIVE' }],
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/dispatches': v1Envelope({
@@ -559,12 +559,29 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
   await expect(scheduledFleet).toContainText('99테 6006');
   await expect(scheduledFleet).toContainText('77테 4004');
   await expect(scheduledFleet).not.toContainText('88테 5005');
-  const customerInquiryLink = page.getByRole('link', { name: 'Canonical Manufacturer 고객사 배송조회' });
+  const customerInquiryLink = page.getByRole('link', { name: 'Canonical Customer 고객사 조회 화면으로 이동' });
   await expect(customerInquiryLink).toBeVisible();
   await expect(customerInquiryLink).toHaveAttribute('href', `/customer/delivery-inquiry/admin?customer=customer-g006-control&serviceDate=${controlSummary.serviceDate}`);
-  await expect(page.getByLabel('제조사별 주문 리스트')).not.toContainText('destination-g006-control');
-  await expect(page.getByLabel('제조사별 주문 리스트')).not.toContainText('SELLER-G006-CONTROL');
-  await expect(page.locator('.manufacturer-order-head time')).toHaveText(/^\d{2}:\d{2}$/u);
+  await expect(customerInquiryLink).toContainText('클릭하여 고객사 조회 화면으로 이동');
+  await expect(customerInquiryLink).toHaveCSS('display', 'grid');
+  await expect(page.getByLabel('고객사별 주문 리스트')).not.toContainText('destination-g006-control');
+  await expect(page.getByLabel('고객사별 주문 리스트')).not.toContainText('SELLER-G006-CONTROL');
+  await expect(page.locator('.control-customer-order-meta time')).toHaveText(/^\d{2}:\d{2}$/u);
+  const customerCardLayout = await customerInquiryLink.evaluate((element) => {
+    const card = element.getBoundingClientRect();
+    const name = element.querySelector('strong')?.getBoundingClientRect();
+    const hint = element.querySelector('small')?.getBoundingClientRect();
+    return {
+      cardHeight: card.height,
+      hintBottom: hint?.bottom ?? 0,
+      nameTop: name?.top ?? 0,
+      cardBottom: card.bottom,
+      cardTop: card.top,
+    };
+  });
+  expect(customerCardLayout.cardHeight).toBeGreaterThanOrEqual(56);
+  expect(customerCardLayout.nameTop).toBeGreaterThanOrEqual(customerCardLayout.cardTop);
+  expect(customerCardLayout.hintBottom).toBeLessThanOrEqual(customerCardLayout.cardBottom);
   await expect.poll(() => page.evaluate(() => {
     const destinationSource = window.dsvMap?.getSource('operational-destinations');
     const routeSource = window.dsvMap?.getSource('operational-routes');
