@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useState } from 'react';
+import { Info } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { loadControlSummary } from '../services/control';
 import type { ControlSummary } from '../services/control';
@@ -19,6 +20,7 @@ type ControlDestinationGroup = {
   anchor: DispatchListItem;
   destinationId: string;
   orders: DispatchListItem[];
+  sequence: number;
 };
 
 const mobileControlQuery = '(max-width: 768px)';
@@ -271,13 +273,24 @@ function ControlPanels({
             <span className="chip mini desktop-panel-tools">{selectedVehicleDestinations.length}곳</span>
           </div>
           <div className="control-destination-list overlay-scroll">
-            <div className="control-destination-columns" aria-hidden="true"><span>배송지</span><span>예상 도착</span><span>실제 완료</span></div>
+            <div className="control-destination-columns" aria-hidden="true"><span>배송지</span><span /><span>예상 도착</span><span>실제 완료</span></div>
             {selectedVehicleDestinations.map((destination) => (
               <div className="control-destination-row" key={destination.destinationId}>
-                <i className="control-order-sequence" aria-label={`배송 순서 ${controlSequence(destination.orders)}`}>{controlSequence(destination.orders)}</i>
+                <i className="control-order-sequence" aria-label={`배송지 순서 ${destination.sequence}`}>{destination.sequence}</i>
                 <span>
                   <b>{destination.anchor.destinationDisplayName || '배송지 미등록'}</b>
                   <small>{controlDestinationMeta(destination)}</small>
+                </span>
+                <span className="control-order-info" tabIndex={0} aria-label={`주문 정보 ${destination.orders.length}건`}>
+                  <Info aria-hidden="true" />
+                  <span className="control-order-tooltip" role="tooltip">
+                    <strong>주문 정보</strong>
+                    <ul>
+                      {destination.orders.map((order) => (
+                        <li key={order.sellerOrderId}>{controlOrderSummary(order)}</li>
+                      ))}
+                    </ul>
+                  </span>
                 </span>
                 <time>{formatControlTime(sharedControlEta(destination.orders, estimatedArrivalByOrderId))}</time>
                 <time className={controlDestinationCompletedAt(destination.orders) === null ? 'empty' : 'completed'}>{formatControlTime(controlDestinationCompletedAt(destination.orders))}</time>
@@ -330,14 +343,13 @@ function groupOrdersByManufacturer(orders: DispatchListItem[], management?: Mana
 function groupControlDestinations(orders: DispatchListItem[]): ControlDestinationGroup[] {
   const groups = new Map<string, DispatchListItem[]>();
   for (const order of orders) groups.set(order.destinationId, [...(groups.get(order.destinationId) ?? []), order]);
-  return [...groups.entries()].map(([destinationId, groupedOrders]) => {
-    const sortedOrders = [...groupedOrders].sort(compareControlStops);
-    return {
-      anchor: sortedOrders[0],
-      destinationId,
-      orders: sortedOrders,
-    };
-  });
+  return [...groups.entries()]
+    .map(([destinationId, groupedOrders]) => {
+      const sortedOrders = [...groupedOrders].sort(compareControlStops);
+      return { anchor: sortedOrders[0], destinationId, orders: sortedOrders };
+    })
+    .sort((left, right) => compareControlStops(left.anchor, right.anchor))
+    .map((destination, index) => ({ ...destination, sequence: index + 1 }));
 }
 
 function scheduledControlVehicles(orders: DispatchListItem[], management?: ManagementData): ManagementData['vehicles'] {
@@ -379,17 +391,14 @@ function controlDestinationCompletedAt(orders: DispatchListItem[]): string | nul
     .sort((left, right) => controlTimeValue(right) - controlTimeValue(left))[0] ?? null;
 }
 
-function controlSequence(orders: DispatchListItem[]): string {
-  const first = orders
-    .map((order) => order.routeStopSequence)
-    .filter((value): value is number => value !== null)
-    .sort((left, right) => left - right)[0];
-  return first === undefined ? '-' : String(first);
+function controlDestinationMeta(destination: ControlDestinationGroup): string {
+  return destination.anchor.destinationAddress || destination.anchor.sellerOrderKey;
 }
 
-function controlDestinationMeta(destination: ControlDestinationGroup): string {
-  const address = destination.anchor.destinationAddress || destination.anchor.sellerOrderKey;
-  return destination.orders.length > 1 ? `${address} / ${destination.orders.length}건` : address;
+function controlOrderSummary(order: DispatchListItem): string {
+  const condition = order.conditionCode ?? '조건 미등록';
+  const boxes = order.shippedBoxes === null ? '박스 수 미등록' : `${order.shippedBoxes}박스`;
+  return `${condition} - ${boxes}`;
 }
 
 function controlEtaTimestamp(order: DispatchListItem, configuredEtas: ReadonlyMap<string, string>): number {

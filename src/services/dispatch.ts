@@ -43,6 +43,7 @@ export type DispatchTimeConstraintCommandResult = {
 export type DispatchListItem = {
   actualCompletedAt: string | null;
   assignmentStatus: DispatchAssignmentStatus;
+  conditionCode: string | null;
   customerId: string;
   destinationAddress: string | null;
   destinationDisplayName: string | null;
@@ -61,6 +62,7 @@ export type DispatchListItem = {
   routeVersionId: string | null;
   sellerOrderId: string;
   sellerOrderKey: string;
+  shippedBoxes: number | null;
   timeConstraint: DispatchTimeConstraint | null;
   vehicleId: string | null;
 };
@@ -89,6 +91,7 @@ export type DispatchSearch = {
 type RawDispatch = {
   actualCompletedAt?: string;
   assignmentStatus: DispatchAssignmentStatus;
+  conditionCode?: string;
   customerId: string;
   destinationAddress?: string;
   destinationDisplayName?: string;
@@ -107,6 +110,7 @@ type RawDispatch = {
   routeVersionId?: string;
   sellerOrderId: string;
   sellerOrderKey: string;
+  shippedBoxes?: number;
   timeConstraint?: DispatchTimeConstraint | null;
   vehicleId?: string;
 };
@@ -335,6 +339,7 @@ function toDispatchListItem(raw: unknown): DispatchListItem {
   return {
     actualCompletedAt: dispatch.actualCompletedAt ?? null,
     assignmentStatus: dispatch.assignmentStatus,
+    conditionCode: dispatch.conditionCode ?? null,
     customerId: dispatch.customerId,
     destinationAddress: dispatch.destinationAddress ?? null,
     destinationDisplayName: dispatch.destinationDisplayName ?? null,
@@ -353,6 +358,7 @@ function toDispatchListItem(raw: unknown): DispatchListItem {
     routeVersionId: dispatch.routeVersionId ?? null,
     sellerOrderId: dispatch.sellerOrderId,
     sellerOrderKey: dispatch.sellerOrderKey,
+    shippedBoxes: dispatch.shippedBoxes ?? null,
     timeConstraint: dispatch.timeConstraint ?? null,
     vehicleId: dispatch.vehicleId ?? null,
   };
@@ -361,8 +367,10 @@ function toDispatchListItem(raw: unknown): DispatchListItem {
 function rawDispatch(value: unknown): RawDispatch {
   if (!hasOnlyKeys(value, [
     'actualCompletedAt',
+    'conditionCode',
     'sellerOrderId',
     'sellerOrderKey',
+    'shippedBoxes',
     'customerId',
     'destinationId',
     'deliveryStopId',
@@ -392,6 +400,12 @@ function rawDispatch(value: unknown): RawDispatch {
   if (!['FAILED', 'NOT_REQUIRED', 'PENDING', 'READY', 'STALE'].includes(value.etaStatus as string)) throw new Error('배차 항목의 etaStatus 필드가 올바르지 않습니다.');
   for (const field of ['actualCompletedAt', 'deliveryStopId', 'destinationDisplayName', 'destinationAddress', 'driverId', 'vehicleId', 'estimatedArrivalAt', 'routePlanId', 'rawNote', 'routeVersionId'] as const) {
     if (value[field] !== undefined && typeof value[field] !== 'string') throw new Error(`배차 항목의 ${field} 필드가 올바르지 않습니다.`);
+  }
+  if (value.conditionCode !== undefined && (typeof value.conditionCode !== 'string' || value.conditionCode.trim() === '')) {
+    throw new Error('배차 항목의 conditionCode 필드가 올바르지 않습니다.');
+  }
+  if (value.shippedBoxes !== undefined && (!Number.isInteger(value.shippedBoxes) || (value.shippedBoxes as number) < 1)) {
+    throw new Error('배차 항목의 shippedBoxes 필드가 올바르지 않습니다.');
   }
   if (value.reviewStatus !== undefined && !isReviewStatus(value.reviewStatus)) throw new Error('배차 항목의 reviewStatus 필드가 올바르지 않습니다.');
   if (value.routeConstraintStatus !== undefined && !isRouteConstraintStatus(value.routeConstraintStatus)) throw new Error('배차 항목의 routeConstraintStatus 필드가 올바르지 않습니다.');

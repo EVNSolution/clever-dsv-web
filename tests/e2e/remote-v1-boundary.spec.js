@@ -500,6 +500,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       items: [
         {
           assignmentStatus: 'ASSIGNED',
+          conditionCode: 'COLD',
           customerId: 'customer-g006-control',
           destinationAddress: '서울특별시 강남구 테헤란로 152',
           destinationDisplayName: 'Shared Control Destination',
@@ -509,13 +510,15 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
           latitude: 37.500643,
           longitude: 127.036545,
           routePlanId: 'route-plan-g006-scheduled',
-          routeStopSequence: 1,
+          routeStopSequence: 5,
           sellerOrderId: 'seller-order-g006-control',
           sellerOrderKey: 'SELLER-G006-CONTROL',
+          shippedBoxes: 4,
           vehicleId: 'vehicle-g006-scheduled',
         },
         {
           assignmentStatus: 'ASSIGNED',
+          conditionCode: 'AMBIENT',
           customerId: 'customer-g006-control',
           destinationAddress: '서울특별시 강남구 테헤란로 152',
           destinationDisplayName: 'Shared Control Destination',
@@ -525,9 +528,10 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
           latitude: 37.508844,
           longitude: 127.06316,
           routePlanId: 'route-plan-g006-scheduled',
-          routeStopSequence: 2,
+          routeStopSequence: 6,
           sellerOrderId: 'seller-order-g006-control-2',
           sellerOrderKey: 'SELLER-G006-CONTROL-2',
+          shippedBoxes: 2,
           vehicleId: 'vehicle-g006-scheduled',
         },
         {
@@ -586,7 +590,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
     };
   })).toMatchObject({
     destinations: [
-      { label: '1', pinImage: expect.stringMatching(/-1$/), pointId: 'destination-g006-control' },
+      { label: '5', pinImage: expect.stringMatching(/-5$/), pointId: 'destination-g006-control' },
       { label: '1', pinImage: expect.stringMatching(/-1$/), pointId: 'destination-g006-second' },
     ],
     destinationSymbol: {
@@ -609,8 +613,12 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
   await selectedVehicle.click();
   await expect(selectedVehicle).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#destinationCard .control-destination-row')).toHaveCount(1);
-  await expect(page.locator('#destinationCard .control-destination-row')).toContainText('1');
-  await expect(page.locator('#destinationCard .control-destination-row')).toContainText('2건');
+  await expect(page.getByLabel('배송지 순서 1')).toHaveText('1');
+  await expect(page.locator('#destinationCard .control-destination-row')).not.toContainText('/ 2건');
+  const orderInfo = page.getByLabel('주문 정보 2건');
+  await orderInfo.focus();
+  await expect(orderInfo.getByRole('tooltip')).toContainText('COLD - 4박스');
+  await expect(orderInfo.getByRole('tooltip')).toContainText('AMBIENT - 2박스');
   await expect.poll(() => page.evaluate(() => ({
     destinations: window.dsvMap.getSource('operational-destinations').serialize().data.features.map((feature) => ({
       pointId: feature.properties.pointId,
@@ -620,7 +628,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
     routeIds: window.dsvMap.getSource('operational-routes').serialize().data.features.map((feature) => feature.properties.routeId),
   }))).toEqual({
     destinations: [
-      { pointId: 'destination-g006-control', sortKey: -1 },
+      { pointId: 'destination-g006-control', sortKey: -5 },
     ],
     iconAllowOverlap: true,
     routeIds: ['route-plan-g006-scheduled'],
