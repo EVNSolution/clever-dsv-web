@@ -822,6 +822,7 @@ test('requests customer deliveries only after a valid customer v1 session', asyn
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/session');
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries');
   expectSessionBeforeDelivery(api.calls);
+  await page.getByRole('button', { name: /G006 Authorized Clinic/u }).click();
   await expect(page.getByText('SELLER-G006-AUTHORIZED', { exact: true }).first()).toBeVisible();
   await expect(page.locator('body')).not.toContainText(/forged-customer|forged-account/u);
   expect(api.unexpected).toEqual([]);
@@ -875,15 +876,58 @@ test('loads the administrator customer map through the customer-scoped contract'
   await expect(page.getByRole('article', { name: '고객사 배송지 지도' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: '고객사 메뉴' })).toContainText('G006 Healthcare');
   await expect(page.getByLabel('차량 목록')).toContainText('서울86바3800');
+  await expect.poll(() => page.getByLabel('차량 목록').locator('.customer-vehicle-list').evaluate((element) => element.clientHeight)).toBe(56);
   await expect(page.getByLabel('배송지 리스트')).toBeVisible();
   await expect(page.getByText('G006 Customer Destination', { exact: false }).first()).toBeVisible();
   await expect(page.getByText('서울86바3800', { exact: true }).first()).toBeVisible();
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible' });
   await expect(page.locator('.departure-map-marker')).toHaveAttribute('aria-label', '출발 위치: 물류센터');
-  await page.getByLabel('배송지 리스트').locator('.customer-panel-head').click();
-  await expect(page.getByLabel('배송지 리스트').locator('.customer-destination-list')).toHaveCount(0);
-  await page.getByLabel('배송지 리스트').locator('.customer-panel-head').click();
-  await expect(page.getByLabel('배송지 리스트').locator('.customer-destination-list')).toBeVisible();
+  await expect(page.getByLabel('차량 목록')).not.toContainText(/접기|펼치기/u);
+  const destination = page.getByRole('button', { name: /G006 Customer Destination/u });
+  await expect(destination).toHaveAttribute('aria-expanded', 'false');
+  await destination.click();
+  await expect(destination).toHaveAttribute('aria-expanded', 'true');
+  await expect(destination).toContainText('SELLER-G006-MAP');
+  await destination.click();
+  await expect(destination).toHaveAttribute('aria-expanded', 'false');
+  await expect(destination).not.toContainText('SELLER-G006-MAP');
+  expect(api.unexpected).toEqual([]);
+});
+
+test('grows the customer vehicle list through three rows and scrolls additional vehicles', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(customerSession),
+    'GET /api/dsv/v1/customer/deliveries': v1Envelope({
+      items: Array.from({ length: 4 }, (_, index) => ({
+        sellerOrderId: `order-g006-vehicle-${index + 1}`,
+        sellerOrderKey: `SELLER-G006-VEHICLE-${index + 1}`,
+        destinationDisplayName: `G006 Vehicle Destination ${index + 1}`,
+        destinationId: `destination-g006-vehicle-${index + 1}`,
+        deliveryStatus: 'PLANNED',
+        etaStatus: 'READY',
+        estimatedArrivalAt: '2026-08-04T01:30:00.000Z',
+        proofStatus: 'NONE',
+        shippedBoxes: 1,
+        eventSummary: [],
+        latitude: 37.5 + index * 0.01,
+        longitude: 127.01 + index * 0.01,
+        vehicleDisplayName: `테스트차량${index + 1}`,
+        vehicleId: `vehicle-g006-${index + 1}`,
+      })),
+      page: { hasMore: false },
+      routes: [],
+    }),
+  });
+
+  await page.goto('/customer/delivery-inquiry');
+
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries');
+  const vehicleList = page.getByLabel('차량 목록').locator('.customer-vehicle-list');
+  await expect(vehicleList.locator('.customer-vehicle-row')).toHaveCount(4);
+  await expect.poll(() => vehicleList.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }))).toEqual({ clientHeight: 168, scrollHeight: 224 });
   expect(api.unexpected).toEqual([]);
 });
 
@@ -1051,6 +1095,9 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
   await expect(sharedDestination.locator('.customer-destination-card-meta')).toContainText('2건');
   await expect(sharedDestination).toContainText('서울특별시 강남구 테헤란로 152, 5층');
   await expect(sharedDestination).not.toContainText('5층, 5층');
+  await expect(sharedDestination).toHaveAttribute('aria-expanded', 'false');
+  await sharedDestination.click();
+  await expect(sharedDestination).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByText('SELLER-G006-SAME-EARLY', { exact: true })).toBeVisible();
   await expect(page.getByText('DELIVERED', { exact: true })).toBeVisible();
   await expect(page.getByText('7박스', { exact: true })).toBeVisible();

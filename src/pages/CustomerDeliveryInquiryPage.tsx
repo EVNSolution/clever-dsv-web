@@ -190,8 +190,6 @@ function RemoteCustomerDeliveryInquiryPage({
   const [state, setState] = useState<RemoteInquiryState>({ status: 'loading' });
   const [selectedKey, setSelectedKey] = useState<string>();
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>();
-  const [vehiclePanelOpen, setVehiclePanelOpen] = useState(true);
-  const [destinationPanelOpen, setDestinationPanelOpen] = useState(true);
   const [view, setView] = useState<CustomerInquiryView>(() => (
     new URLSearchParams(window.location.search).get('view') === 'history' ? 'history' : 'control'
   ));
@@ -208,7 +206,7 @@ function RemoteCustomerDeliveryInquiryPage({
         const data = await loadRemoteCustomerDeliveries({ adminCustomerId, serviceDate, signal: controller.signal });
         setState({ status: 'ready', data });
         const groups = customerDestinationGroups(data.deliveries);
-        setSelectedKey((current) => current && groups.some((group) => group.destinationId === current) ? current : groups[0]?.destinationId);
+        setSelectedKey((current) => current && groups.some((group) => group.destinationId === current) ? current : undefined);
         const vehicles = customerVehicleGroups(data.deliveries);
         setSelectedVehicleId((current) => current && vehicles.some((vehicle) => vehicle.id === current) ? current : undefined);
         initial = false;
@@ -262,7 +260,7 @@ function RemoteCustomerDeliveryInquiryPage({
     ? viewDeliveries
     : viewDeliveries.filter((delivery) => customerVehicleGroupId(delivery) === activeVehicleId);
   const destinationGroups = customerDestinationGroups(visibleDeliveries);
-  const selected = destinationGroups.find((group) => group.destinationId === selectedKey) ?? destinationGroups[0];
+  const selected = destinationGroups.find((group) => group.destinationId === selectedKey);
   const points = customerMapPoints(destinationGroups);
   const vehicles = customerVehiclePoints(visibleDeliveries);
   const visibleRoutes = view === 'history'
@@ -290,10 +288,7 @@ function RemoteCustomerDeliveryInquiryPage({
   const selectVehicle = (vehicleId: string) => {
     const nextVehicleId = activeVehicleId === vehicleId ? undefined : vehicleId;
     setSelectedVehicleId(nextVehicleId);
-    const nextDeliveries = nextVehicleId === undefined
-      ? viewDeliveries
-      : viewDeliveries.filter((delivery) => customerVehicleGroupId(delivery) === nextVehicleId);
-    setSelectedKey(customerDestinationGroups(nextDeliveries)[0]?.destinationId);
+    setSelectedKey(undefined);
   };
 
   return (
@@ -317,14 +312,12 @@ function RemoteCustomerDeliveryInquiryPage({
           />
         </Suspense>
         <aside className="customer-control-side" aria-label="고객사 관제 패널">
-          <section className={`card panel expand-card customer-panel customer-vehicle-panel${vehiclePanelOpen ? '' : ' collapsed'}`} aria-label="차량 목록">
+          <section className="card panel expand-card customer-panel customer-vehicle-panel" aria-label="차량 목록">
             <CustomerPanelHeader
               count={`${vehicleGroups.length}대`}
               label="차량 목록"
-              onToggle={() => setVehiclePanelOpen((open) => !open)}
-              open={vehiclePanelOpen}
             />
-            {vehiclePanelOpen ? vehicleGroups.length ? (
+            {vehicleGroups.length ? (
               <div className="customer-vehicle-list overlay-scroll">
                 {vehicleGroups.map((vehicle) => (
                   <button
@@ -339,17 +332,15 @@ function RemoteCustomerDeliveryInquiryPage({
                   </button>
                 ))}
               </div>
-            ) : <CustomerPanelEmpty label={view === 'history' ? '완료 차량 없음' : '배정 차량 없음'} /> : null}
+            ) : <CustomerPanelEmpty label={view === 'history' ? '완료 차량 없음' : '배정 차량 없음'} />}
           </section>
 
-          <section className={`customer-order-card card panel expand-card customer-panel customer-destination-panel${destinationPanelOpen ? '' : ' collapsed'}`} aria-label="배송지 리스트">
+          <section className="customer-order-card card panel expand-card customer-panel customer-destination-panel" aria-label="배송지 리스트">
             <CustomerPanelHeader
               count={`${destinationGroups.length}곳`}
               label={view === 'history' ? '배송 이력' : '배송지 리스트'}
-              onToggle={() => setDestinationPanelOpen((open) => !open)}
-              open={destinationPanelOpen}
             />
-            {destinationPanelOpen ? destinationGroups.length ? (
+            {destinationGroups.length ? (
               <div className="customer-destination-list overlay-scroll">
                 {destinationGroups.map((group) => {
                   const active = group.destinationId === selected?.destinationId;
@@ -359,7 +350,7 @@ function RemoteCustomerDeliveryInquiryPage({
                       type="button"
                       className={`customer-destination-card${active ? ' active' : ''}`}
                       aria-expanded={active}
-                      onClick={() => setSelectedKey(group.destinationId)}
+                      onClick={() => setSelectedKey((current) => current === group.destinationId ? undefined : group.destinationId)}
                     >
                       <span className="customer-destination-card-summary">
                         <span className="customer-destination-card-copy">
@@ -376,7 +367,7 @@ function RemoteCustomerDeliveryInquiryPage({
                   );
                 })}
               </div>
-            ) : <div className="customer-empty-state" role="status"><strong>배송 없음</strong><span>{state.data.emptyReason ?? '세션 범위에서 조회할 배송이 없습니다.'}</span></div> : null}
+            ) : <div className="customer-empty-state" role="status"><strong>배송 없음</strong><span>{state.data.emptyReason ?? '세션 범위에서 조회할 배송이 없습니다.'}</span></div>}
           </section>
         </aside>
       </section>
@@ -413,20 +404,15 @@ function CustomerNavigation({
 function CustomerPanelHeader({
   count,
   label,
-  onToggle,
-  open,
 }: {
   count: string;
   label: string;
-  onToggle: () => void;
-  open: boolean;
 }): ReactElement {
   return (
-    <button type="button" className="customer-panel-head" aria-expanded={open} onClick={onToggle}>
+    <div className="customer-panel-head">
       <strong>{label}</strong>
       <span>{count}</span>
-      <small>{open ? '접기' : '펼치기'}</small>
-    </button>
+    </div>
   );
 }
 

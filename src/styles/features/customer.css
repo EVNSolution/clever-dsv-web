@@ -3,7 +3,7 @@
 .customer-delivery-demo,
 .customer-delivery-demo .grid { min-width:0; overflow:hidden; }
 .customer-delivery-demo .grid { grid-template-columns:1fr; }
-.customer-navigation { z-index:9; }
+.customer-delivery-demo.nav-expanded .customer-navigation { z-index:9; border-right-color:var(--color-border); }
 .customer-navigation-brand { cursor:default; }
 .customer-navigation-name {
   width:180px; min-width:0; min-height:38px; display:flex; align-items:center; padding:0 10px;
@@ -32,25 +32,20 @@
   border:1px solid var(--color-border); border-radius:24px; background:rgba(255,255,255,.94);
   box-shadow:var(--shadow-floating); backdrop-filter:blur(18px);
 }
-.customer-control-side .customer-panel.collapsed { flex:0 0 58px; height:58px; padding-block:7px; }
-.customer-vehicle-panel { flex:0 1 252px; max-height:252px; }
+.customer-vehicle-panel { flex:0 0 auto; }
 .customer-destination-panel { flex:1 1 auto; min-height:0; }
 .customer-panel-head {
-  width:100%; min-height:44px; display:grid; grid-template-columns:minmax(0, 1fr) auto auto; align-items:center; gap:10px;
-  padding:0 6px; border:0; border-bottom:1px solid var(--color-border); background:transparent;
-  color:var(--color-ink); cursor:pointer; font:inherit; text-align:left;
+  width:100%; min-height:44px; display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; gap:10px;
+  padding:0 6px; border-bottom:1px solid var(--color-border); color:var(--color-ink); text-align:left;
 }
-.customer-panel.collapsed .customer-panel-head { border-bottom:0; }
 .customer-panel-head strong { min-width:0; font-size:var(--text-section-title); font-weight:1000; letter-spacing:-.04em; }
 .customer-panel-head span {
   min-width:34px; min-height:24px; display:inline-grid; place-items:center; padding:0 9px;
   border-radius:var(--radius-pill); background:#f6f6f8; color:var(--color-muted); font-size:11px; font-weight:900;
 }
-.customer-panel-head small { color:var(--color-muted); font-size:11px; font-weight:900; }
-.customer-panel-head:hover small { color:var(--color-ink); }
-.customer-panel-head:focus-visible { outline:2px solid var(--color-primary); outline-offset:2px; border-radius:12px; }
 .customer-vehicle-list {
-  min-height:0; display:grid; grid-auto-rows:max-content; align-content:start; overflow:auto; overscroll-behavior:contain;
+  min-height:0; max-height:168px; display:grid; grid-auto-rows:56px; align-content:start;
+  overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain;
 }
 .customer-vehicle-row {
   width:100%; min-width:0; min-height:56px; display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; gap:12px;

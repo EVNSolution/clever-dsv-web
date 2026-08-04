@@ -207,7 +207,7 @@
   .customer-delivery-demo.nav-expanded .customer-navigation {
     inset:12px auto auto 12px; width:206px; height:auto; max-height:calc(100dvh - 24px);
     padding:12px 15px 12px 7px; gap:8px; overflow:hidden;
-    border:1px solid var(--color-border); border-right-color:#48484a; border-radius:24px;
+    border:1px solid var(--color-border); border-radius:24px;
     background:rgba(255,255,255,.96);
   }
   .customer-delivery-demo.nav-expanded .customer-navigation .sidebar-brand {
@@ -226,7 +226,6 @@
   .customer-delivery-demo.nav-expanded .customer-navigation .main-tab-copy small { display:block; padding-left:7px; font-size:11px; }
   .customer-delivery-demo.nav-expanded .grid { pointer-events:auto; }
   .customer-control-side .customer-panel { border-radius:18px; }
-  .customer-control-side .customer-panel.collapsed { flex-basis:56px; height:56px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
