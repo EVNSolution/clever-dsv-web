@@ -8,8 +8,11 @@ import {
   confirmDispatchTimeConstraint,
   deleteDispatchOrders,
   loadDispatchList,
+  MAX_DISPATCH_ASSIGNMENT_COUNT,
   MAX_DISPATCH_DELETE_COUNT,
+  reassignDispatchOrder,
   reassignDispatchOrders,
+  unassignDispatchOrder,
   unassignDispatchOrders,
 } from '../services/dispatch';
 import type { DispatchListItem, DispatchListView, DispatchSearch } from '../services/dispatch';
@@ -1030,24 +1033,31 @@ function DispatchWorkspace({
     () => filter === 'ALL' ? rows : rows.filter((row) => row.assignmentStatus === filter),
     [filter, rows],
   );
+  const visibleDestinationGroups = useMemo(() => groupDispatchDestinations(visibleRows), [visibleRows]);
   const visibleIds = useMemo(() => new Set(visibleRows.map((row) => row.sellerOrderId)), [visibleRows]);
   const selectedIdSet = useMemo(() => new Set(selectedOrderIds), [selectedOrderIds]);
   const selectedOrders = useMemo(
     () => rows.filter((row) => selectedIdSet.has(row.sellerOrderId)),
     [rows, selectedIdSet],
   );
+  const selectedDestinationGroups = useMemo(() => groupDispatchDestinations(selectedOrders), [selectedOrders]);
+  const selectedDestinationIds = useMemo(
+    () => selectedDestinationGroups.map((group) => group.destinationId),
+    [selectedDestinationGroups],
+  );
   const allVisibleSelected = visibleRows.length > 0 && visibleRows.every((row) => selectedIdSet.has(row.sellerOrderId));
   const someVisibleSelected = !allVisibleSelected && visibleRows.some((row) => selectedIdSet.has(row.sellerOrderId));
-  const points = useMemo(() => visibleRows.flatMap((row) => {
-    if (row.latitude === null || row.longitude === null) return [];
+  const points = useMemo(() => visibleDestinationGroups.flatMap((group) => {
+    const anchor = dispatchDestinationCoordinateAnchor(group.orders);
+    if (anchor === null || anchor.latitude === null || anchor.longitude === null) return [];
     return [{
-      id: row.sellerOrderId,
-      latitude: row.latitude,
-      longitude: row.longitude,
-      tone: row.assignmentStatus === 'ASSIGNED' ? 'assigned' as const : 'unassigned' as const,
+      id: group.destinationId,
+      latitude: anchor.latitude,
+      longitude: anchor.longitude,
+      tone: group.orders.every((row) => row.assignmentStatus === 'ASSIGNED') ? 'assigned' as const : 'unassigned' as const,
     }];
-  }), [visibleRows]);
-  const missingCoordinateCount = visibleRows.length - points.length;
+  }), [visibleDestinationGroups]);
+  const missingCoordinateCount = visibleDestinationGroups.length - points.length;
   const drivers = references?.drivers ?? [];
   const vehicles = references?.vehicles ?? [];
   const assignments = references?.assignments ?? [];
@@ -1059,11 +1069,11 @@ function DispatchWorkspace({
     : rows.find((row) => row.driverId === selectedDriver.id && row.routePlanId !== null)?.routePlanId ?? undefined;
   const assignedSelectionCount = selectedOrders.filter((row) => row.assignmentStatus === 'ASSIGNED').length;
   const assignmentCandidates = selectedOrders.filter((row) => row.driverId !== selectedDriver?.id);
-  const selectedDestinationSummary = selectedOrders.length === 0
+  const selectedDestinationSummary = selectedDestinationGroups.length === 0
     ? '지도 또는 목록에서 배송지를 선택하세요.'
-    : selectedOrders.length === 1
-      ? dispatchDestinationName(selectedOrders[0], references)
-      : `${dispatchDestinationName(selectedOrders[0], references)} 외 ${selectedOrders.length - 1}곳`;
+    : selectedDestinationGroups.length === 1
+      ? dispatchDestinationName(selectedDestinationGroups[0].orders[0], references)
+      : `${dispatchDestinationName(selectedDestinationGroups[0].orders[0], references)} 외 ${selectedDestinationGroups.length - 1}곳`;
   const selectedOrder = selectedOrders.length === 1 ? selectedOrders[0] : null;
   const selectedOrderMissingStop = selectedOrder?.deliveryStopId === null;
   const canClearSelectedTimeConstraint = selectedOrder !== null
@@ -1103,14 +1113,30 @@ function DispatchWorkspace({
     if (!drivers.some((driver) => driver.id === selectedDriverId)) setSelectedDriverId(drivers[0].id);
   }, [drivers, selectedDriverId]);
 
-  const selectPoint = useCallback((pointId: string) => {
+  const selectOrder = useCallback((orderId: string) => {
     setMutationError('');
     setSelectionCoordinates([]);
     setSelectionMode(false);
-    setSelectedOrderIds((current) => current.includes(pointId)
-      ? current.filter((id) => id !== pointId)
-      : [...current, pointId]);
+    setSelectedOrderIds((current) => current.includes(orderId)
+      ? current.filter((id) => id !== orderId)
+      : [...current, orderId]);
   }, []);
+
+  const selectDestination = useCallback((destinationId: string) => {
+    const destinationOrderIds = visibleRows
+      .filter((row) => row.destinationId === destinationId)
+      .map((row) => row.sellerOrderId);
+    if (destinationOrderIds.length === 0) return;
+    setMutationError('');
+    setSelectionCoordinates([]);
+    setSelectionMode(false);
+    setSelectedOrderIds((current) => {
+      const currentIds = new Set(current);
+      const removeDestination = destinationOrderIds.every((id) => currentIds.has(id));
+      if (removeDestination) return current.filter((id) => !destinationOrderIds.includes(id));
+      return [...new Set([...current, ...destinationOrderIds])];
+    });
+  }, [visibleRows]);
 
   const addSelectionPoint = useCallback((coordinate: [number, number]) => {
     setMutationError('');
@@ -1175,38 +1201,52 @@ function DispatchWorkspace({
       setMutationError('지도에서 세 점 이상을 선택하세요.');
       return;
     }
-    const matchedIds = visibleRows.flatMap((row) => {
-      if (row.latitude === null || row.longitude === null) return [];
-      return pointInPolygon([row.longitude, row.latitude], coordinates) ? [row.sellerOrderId] : [];
+    const matchedIds = visibleDestinationGroups.flatMap((group) => {
+      const anchor = dispatchDestinationCoordinateAnchor(group.orders);
+      if (anchor === null || anchor.latitude === null || anchor.longitude === null) return [];
+      return pointInPolygon([anchor.longitude, anchor.latitude], coordinates)
+        ? group.orders.map((row) => row.sellerOrderId)
+        : [];
     });
     setSelectedOrderIds(matchedIds);
     setSelectionMode(false);
     setSelectionCoordinates(coordinates);
     setMutationError(matchedIds.length === 0 ? '선택 영역 안에 배송지가 없습니다.' : '');
-  }, [visibleRows]);
+  }, [visibleDestinationGroups]);
 
   const changeAreaSelection = useCallback((coordinates: Array<[number, number]>) => {
     setSelectionCoordinates(coordinates);
     if (selectionMode || coordinates.length < 3) return;
-    const matchedIds = visibleRows.flatMap((row) => {
-      if (row.latitude === null || row.longitude === null) return [];
-      return pointInPolygon([row.longitude, row.latitude], coordinates) ? [row.sellerOrderId] : [];
+    const matchedIds = visibleDestinationGroups.flatMap((group) => {
+      const anchor = dispatchDestinationCoordinateAnchor(group.orders);
+      if (anchor === null || anchor.latitude === null || anchor.longitude === null) return [];
+      return pointInPolygon([anchor.longitude, anchor.latitude], coordinates)
+        ? group.orders.map((row) => row.sellerOrderId)
+        : [];
     });
     setSelectedOrderIds(matchedIds);
     setMutationError(matchedIds.length === 0 ? '선택 영역 안에 배송지가 없습니다.' : '');
-  }, [selectionMode, visibleRows]);
+  }, [selectionMode, visibleDestinationGroups]);
 
   async function assignSelected(): Promise<void> {
     if (assignmentCandidates.length === 0 || selectedDriver === null || selectedVehicle === null || readOnly) return;
+    if (assignmentCandidates.length > MAX_DISPATCH_ASSIGNMENT_COUNT) {
+      setMutationError(`배송 배정은 한 번에 최대 ${MAX_DISPATCH_ASSIGNMENT_COUNT}건까지 가능합니다.`);
+      return;
+    }
     setMutationBusy(true);
     setMutationError('');
     try {
-      await reassignDispatchOrders({
+      const assignmentInput = {
         driverId: selectedDriver.id,
-        orders: assignmentCandidates,
         routePlanId: selectedDriverRoutePlanId,
         vehicleId: selectedVehicle.id,
-      });
+      };
+      if (assignmentCandidates.length === 1) {
+        await reassignDispatchOrder({ ...assignmentInput, order: assignmentCandidates[0] });
+      } else {
+        await reassignDispatchOrders({ ...assignmentInput, orders: assignmentCandidates });
+      }
       clearSelection();
     } catch (caught) {
       setMutationError(errorMessage(caught));
@@ -1219,10 +1259,15 @@ function DispatchWorkspace({
   async function unassignSelected(): Promise<void> {
     const assignedOrders = selectedOrders.filter((row) => row.assignmentStatus === 'ASSIGNED');
     if (assignedOrders.length === 0 || readOnly) return;
+    if (assignedOrders.length > MAX_DISPATCH_ASSIGNMENT_COUNT) {
+      setMutationError(`배정 해제는 한 번에 최대 ${MAX_DISPATCH_ASSIGNMENT_COUNT}건까지 가능합니다.`);
+      return;
+    }
     setMutationBusy(true);
     setMutationError('');
     try {
-      await unassignDispatchOrders(assignedOrders);
+      if (assignedOrders.length === 1) await unassignDispatchOrder(assignedOrders[0]);
+      else await unassignDispatchOrders(assignedOrders);
       clearSelection();
       onAssignmentChanged?.();
     } catch (caught) {
@@ -1256,7 +1301,7 @@ function DispatchWorkspace({
     if (selectedOrder === null || readOnly) return;
     if (!isHardTimeRange(constraintStart, constraintEnd)) {
       setConstraintStatus('');
-      setConstraintError('시작과 종료를 HH:mm 범위로 입력하세요.');
+      setConstraintError('시간을 HH:mm 형식으로 입력하고 시작 시간을 종료 시간보다 빠르게 설정하세요.');
       return;
     }
     setConstraintBusy(true);
@@ -1297,7 +1342,7 @@ function DispatchWorkspace({
   return (
     <section className="dispatch-assignment" aria-label="배차 작업">
       <div className="dispatch-assignment-toolbar">
-        <label className="dispatch-date-field">배차일<input aria-label="배차일 선택" type="date" value={serviceDate} onChange={(event) => onServiceDateChange(event.target.value)} /></label>
+        <label className="dispatch-date-field">배차일<input aria-label="배차일 선택" required type="date" value={serviceDate} onChange={(event) => { if (event.target.value !== '') onServiceDateChange(event.target.value); }} /></label>
         <div className="dispatch-progress" aria-label="배정 진행"><span>전체 <b>{summary.total}</b></span><span>배정 <b>{summary.assigned}</b></span><span>미배정 <b>{summary.unassigned}</b></span></div>
         {summary.total > 0 && summary.unassigned === 0 ? <strong className="dispatch-complete">배정 완료</strong> : null}
         {readOnly ? <span className="dispatch-readonly">지난 배차는 조회만 가능합니다.</span> : null}
@@ -1309,7 +1354,13 @@ function DispatchWorkspace({
             <AdminSectionHeader
               title={workspaceView === 'MAP' ? '배차 지도' : '배차 목록'}
               side={workspaceView === 'MAP'
-                ? <span className="section-meta">좌표 {points.length}곳{missingCoordinateCount > 0 ? ` · 미확인 ${missingCoordinateCount}건` : ''}</span>
+                ? (
+                    <span className="dispatch-map-counts" aria-label="배차 지도 집계">
+                      <span>주문 <b>{visibleRows.length}</b>건</span>
+                      <span>배송지 <b>{visibleDestinationGroups.length}</b>곳</span>
+                      {missingCoordinateCount > 0 ? <span>좌표 미확인 <b>{missingCoordinateCount}</b>곳</span> : null}
+                    </span>
+                  )
                 : <span className="section-meta">{visibleRows.length}건</span>}
             />
             <div className="dispatch-map-tools">
@@ -1393,13 +1444,13 @@ function DispatchWorkspace({
                   ariaLabel="배차 배송지 지도"
                   departureLocation={departureLocation}
                   onMapPointAdd={addSelectionPoint}
-                  onPointSelect={selectPoint}
+                  onPointSelect={selectDestination}
                   onSelectionChange={changeAreaSelection}
                   onSelectionComplete={completeAreaSelection}
                   points={points}
                   selectionCoordinates={selectionCoordinates}
                   selectionMode={selectionMode}
-                  selectedPointIds={selectedOrderIds}
+                  selectedPointIds={selectedDestinationIds}
                   showEveryPoint
                   variant="embedded"
                 />
@@ -1454,14 +1505,14 @@ function DispatchWorkspace({
                         aria-selected={selectedIdSet.has(row.sellerOrderId)}
                         className={selectedIdSet.has(row.sellerOrderId) ? 'selected' : ''}
                         key={row.sellerOrderId}
-                        onClick={() => selectPoint(row.sellerOrderId)}
+                        onClick={() => selectOrder(row.sellerOrderId)}
                       >
                         <td onClick={(event) => event.stopPropagation()}>
                           <input
                             aria-label={`${destinationName} 선택`}
                             checked={selectedIdSet.has(row.sellerOrderId)}
                             type="checkbox"
-                            onChange={() => selectPoint(row.sellerOrderId)}
+                            onChange={() => selectOrder(row.sellerOrderId)}
                           />
                         </td>
                         <td title={row.sellerOrderKey}><strong>{row.sellerOrderKey}</strong></td>
@@ -1532,8 +1583,10 @@ function DispatchWorkspace({
           </div>
           <div className="dispatch-assignment-action">
             <div className="dispatch-selected-order">
-              <span>선택 배송지</span>
-              <strong>{selectedOrders.length}곳</strong>
+              <div className="dispatch-selected-counts" aria-label="선택 집계">
+                <span><small>배송지</small><strong>{selectedDestinationGroups.length}곳</strong></span>
+                <span><small>주문</small><strong>{selectedOrders.length}건</strong></span>
+              </div>
               <small>{selectedDestinationSummary}</small>
             </div>
             {selectedOrders.length > 0 || selectionCoordinates.length > 0 ? <button className="dispatch-selection-clear" type="button" onClick={clearSelection}>선택 지우기</button> : null}
@@ -1565,10 +1618,11 @@ function DispatchWorkspace({
               </div>
             ) : null}
             <div>
-              <button className="btn" type="button" disabled={mutationBusy || readOnly || assignedSelectionCount === 0} onClick={() => void unassignSelected()}>배정 해제</button>
+              <button aria-label="배정 해제" className="btn" type="button" disabled={mutationBusy || readOnly || assignedSelectionCount === 0} onClick={() => void unassignSelected()}>배정 해제<span className="dispatch-action-count">{assignedSelectionCount}건</span></button>
               <button className="btn danger" type="button" disabled={mutationBusy || readOnly || selectedOrders.length === 0} onClick={() => void deleteSelected()}>배송 삭제</button>
-              <button className="btn primary" type="button" disabled={mutationBusy || readOnly || assignmentCandidates.length === 0 || selectedDriver === null || selectedVehicle === null} onClick={() => void assignSelected()}>
+              <button aria-label={assignedSelectionCount > 0 ? '선택 이관' : '선택 배정'} className="btn primary" type="button" disabled={mutationBusy || readOnly || assignmentCandidates.length === 0 || selectedDriver === null || selectedVehicle === null} onClick={() => void assignSelected()}>
                 {mutationBusy ? '처리 중' : assignedSelectionCount > 0 ? '선택 이관' : '선택 배정'}
+                {!mutationBusy ? <span className="dispatch-action-count">{assignmentCandidates.length}건</span> : null}
               </button>
             </div>
           </div>
@@ -1576,6 +1630,26 @@ function DispatchWorkspace({
       </div>
     </section>
   );
+}
+
+type DispatchDestinationGroup = {
+  destinationId: string;
+  orders: DispatchListItem[];
+};
+
+function groupDispatchDestinations(rows: DispatchListItem[]): DispatchDestinationGroup[] {
+  const groups = new Map<string, DispatchListItem[]>();
+  for (const row of rows) groups.set(row.destinationId, [...(groups.get(row.destinationId) ?? []), row]);
+  return [...groups].map(([destinationId, orders]) => ({ destinationId, orders }));
+}
+
+function dispatchDestinationCoordinateAnchor(orders: DispatchListItem[]): DispatchListItem | null {
+  return orders.find((row) => (
+    row.latitude !== null
+    && row.longitude !== null
+    && Number.isFinite(row.latitude)
+    && Number.isFinite(row.longitude)
+  )) ?? null;
 }
 
 function pointInPolygon(point: [number, number], polygon: Array<[number, number]>): boolean {

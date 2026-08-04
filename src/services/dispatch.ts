@@ -133,6 +133,7 @@ export type DispatchBatchDeleteResult = {
   receiptId: string;
 };
 
+export const MAX_DISPATCH_ASSIGNMENT_COUNT = 100;
 export const MAX_DISPATCH_DELETE_COUNT = 100;
 
 export async function loadDispatchList(
@@ -195,6 +196,10 @@ export async function reassignDispatchOrders(input: {
   routePlanId?: string;
   vehicleId: string;
 }): Promise<DispatchBatchAssignmentResult> {
+  if (input.orders.length === 0) throw new Error('배정할 배송을 선택하세요.');
+  if (input.orders.length > MAX_DISPATCH_ASSIGNMENT_COUNT) {
+    throw new Error(`배송 배정은 한 번에 최대 ${MAX_DISPATCH_ASSIGNMENT_COUNT}건까지 가능합니다.`);
+  }
   const data = await requestV1AssignmentCommandJson<unknown>('seller-order-assignments/reassign', {
     json: {
       items: input.orders.map((order) => ({
@@ -228,6 +233,10 @@ export async function unassignDispatchOrder(order: DispatchListItem): Promise<Di
 }
 
 export async function unassignDispatchOrders(orders: DispatchListItem[]): Promise<DispatchBatchAssignmentResult> {
+  if (orders.length === 0) throw new Error('배정을 해제할 배송을 선택하세요.');
+  if (orders.length > MAX_DISPATCH_ASSIGNMENT_COUNT) {
+    throw new Error(`배정 해제는 한 번에 최대 ${MAX_DISPATCH_ASSIGNMENT_COUNT}건까지 가능합니다.`);
+  }
   const data = await requestV1AssignmentCommandJson<unknown>('seller-order-assignments/unassign', {
     json: {
       items: orders.map((order) => ({

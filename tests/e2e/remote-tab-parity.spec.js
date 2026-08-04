@@ -282,6 +282,74 @@ test('dispatch renders the canonical v1 seller orders on the map without a dupli
   expectOnlyFixtureCalls(api);
 });
 
+test('dispatch keeps every order in the list and groups map markers by destination', async ({ page }) => {
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': v1Envelope({
+      items: [
+        {
+          assignmentStatus: 'UNASSIGNED',
+          customerId: 'customer-g006',
+          destinationDisplayName: 'Canonical Shared Destination',
+          destinationId: 'destination-g006-shared',
+          etaStatus: 'NOT_REQUIRED',
+          latitude: 37.5,
+          longitude: 127,
+          sellerOrderId: 'seller-order-g006-shared-one',
+          sellerOrderKey: 'SELLER-G006-SHARED-ONE',
+        },
+        {
+          assignmentStatus: 'UNASSIGNED',
+          customerId: 'customer-g006',
+          destinationDisplayName: 'Canonical Shared Destination',
+          destinationId: 'destination-g006-shared',
+          etaStatus: 'NOT_REQUIRED',
+          latitude: 37.5,
+          longitude: 127,
+          sellerOrderId: 'seller-order-g006-shared-two',
+          sellerOrderKey: 'SELLER-G006-SHARED-TWO',
+        },
+        {
+          assignmentStatus: 'UNASSIGNED',
+          customerId: 'customer-g006',
+          destinationDisplayName: 'Canonical Other Destination',
+          destinationId: 'destination-g006-other',
+          etaStatus: 'NOT_REQUIRED',
+          latitude: 37.51,
+          longitude: 127.01,
+          sellerOrderId: 'seller-order-g006-other',
+          sellerOrderKey: 'SELLER-G006-OTHER',
+        },
+      ],
+      page: { hasMore: false },
+    }, 'g006-dispatch-destination-groups'),
+  })));
+
+  await page.goto('/dispatch');
+  await page.locator('.map-canvas.ready').waitFor({ state: 'visible' });
+  const mapCounts = page.getByLabel('배차 지도 집계');
+  await expect(mapCounts).toContainText('주문 3건');
+  await expect(mapCounts).toContainText('배송지 2곳');
+  await expect.poll(() => page.evaluate(() => {
+    const source = window.dsvMap.getSource('operational-destinations');
+    const features = source?.serialize().data.features ?? [];
+    return features.map((feature) => ({
+      label: feature.properties.label,
+      pointId: feature.properties.pointId,
+    })).sort((left, right) => left.pointId.localeCompare(right.pointId));
+  })).toEqual([
+    { label: '', pointId: 'destination-g006-other' },
+    { label: '', pointId: 'destination-g006-shared' },
+  ]);
+
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await expect(page.locator('.dispatch-order-table tbody tr[aria-selected]')).toHaveCount(3);
+  await page.getByRole('checkbox', { name: '전체 선택' }).check();
+  const selectedCounts = page.getByLabel('선택 집계');
+  await expect(selectedCounts).toContainText('배송지2곳');
+  await expect(selectedCounts).toContainText('주문3건');
+  expectOnlyFixtureCalls(api);
+});
+
 test('dispatch list selects and clears every visible order from the header checkbox', async ({ page }) => {
   const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
     'GET /api/dsv/v1/dispatches': v1Envelope({
@@ -326,52 +394,67 @@ test('dispatch list selects and clears every visible order from the header check
   expectOnlyFixtureCalls(api);
 });
 
-test('dispatch assigns an unassigned order to the selected driver and vehicle', async ({ page }) => {
+test('dispatch moves one assigned order through the compatible single-order endpoint', async ({ page }) => {
   let dispatchReads = 0;
   let assignmentPayload;
   const dispatchItem = {
-    assignmentStatus: 'UNASSIGNED',
+    assignmentStatus: 'ASSIGNED',
     customerId: 'customer-g006',
     destinationAddress: 'Seoul Canonical Address 6006',
     destinationDisplayName: 'Canonical Destination G006',
     destinationId: 'destination-g006',
-    etaStatus: 'NOT_REQUIRED',
+    driverId: 'driver-g006-current',
+    etaStatus: 'PENDING',
     latitude: 37.5,
     longitude: 127,
+    routePlanId: 'route-plan-g006-current',
+    routeVersionId: 'route-version-g006-current',
     sellerOrderId: 'seller-order-g006-assignment',
     sellerOrderKey: 'SELLER-G006-ASSIGNMENT',
+    vehicleId: 'vehicle-g006-current',
   };
   const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/drivers?limit=100': v1Envelope({
+      items: [
+        { age: 42, career: '6년', displayName: 'Canonical Driver G006 Target', driverId: 'driver-g006-target', gender: '남성', phone: '010-7006-7006', score: 'A', status: 'ACTIVE', traits: [], zone: '서울' },
+        { age: 42, career: '6년', displayName: 'Canonical Driver G006 Current', driverId: 'driver-g006-current', gender: '남성', phone: '010-6006-6006', score: 'A', status: 'ACTIVE', traits: [], zone: '서울' },
+      ],
+      page: { hasMore: false },
+    }, 'g006-dispatch-move-drivers'),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
+      items: [
+        { displayName: 'Canonical Vehicle G006 Target', driverAssignments: [{ assignmentId: 'assignment-g006-target', driverId: 'driver-g006-target' }], status: 'ACTIVE', vehicleId: 'vehicle-g006-target', vehiclePlate: '70가 7006', vehicleType: 'OTHER' },
+        { displayName: 'Canonical Vehicle G006 Current', driverAssignments: [{ assignmentId: 'assignment-g006-current', driverId: 'driver-g006-current' }], status: 'ACTIVE', vehicleId: 'vehicle-g006-current', vehiclePlate: '60가 6006', vehicleType: 'OTHER' },
+      ],
+      page: { hasMore: false },
+    }, 'g006-dispatch-move-vehicles'),
     'GET /api/dsv/v1/dispatches': () => {
       dispatchReads += 1;
       return v1Envelope({
         items: dispatchReads === 1 ? [dispatchItem] : [{
           ...dispatchItem,
-          assignmentStatus: 'ASSIGNED',
-          driverId: 'driver-g006',
-          etaStatus: 'PENDING',
+          driverId: 'driver-g006-target',
           routePlanId: 'route-plan-g006-assignment',
           routeVersionId: 'route-version-g006-assignment',
-          vehicleId: 'vehicle-g006',
+          vehicleId: 'vehicle-g006-target',
         }],
         page: { hasMore: false },
       }, `g006-dispatch-assignment-${dispatchReads}`);
     },
-    'POST /api/dsv/v1/seller-order-assignments/reassign': async ({ request }) => {
+    'POST /api/dsv/v1/seller-orders/seller-order-g006-assignment/assignment/reassign': async ({ request }) => {
       assignmentPayload = await request.postDataJSON();
       return legacyEnvelope({
-        assignmentResults: [{
+        assignmentResult: {
           assignmentStatus: 'ASSIGNED',
           auditEventId: 'audit-g006-assignment',
-          commandId: assignmentPayload.items[0].commandId,
+          commandId: assignmentPayload.commandId,
           etaStatus: 'PENDING',
           newRouteVersionId: 'route-version-g006-assignment',
-          previousRouteVersionId: null,
+          previousRouteVersionId: 'route-version-g006-current',
           receiptId: 'receipt-g006-assignment',
           routePlanId: 'route-plan-g006-assignment',
           sellerOrderId: 'seller-order-g006-assignment',
-        }],
-        routePlanId: 'route-plan-g006-assignment',
+        },
       });
     },
   })));
@@ -395,17 +478,84 @@ test('dispatch assigns an unassigned order to the selected driver and vehicle', 
   }
   const driverRegion = page.getByRole('region', { name: '배송원' });
   await expect(driverRegion).toContainText('Canonical Destination G006');
-  await driverRegion.getByRole('button', { name: '선택 배정', exact: true }).click();
+  await driverRegion.getByRole('button', { name: '선택 이관', exact: true }).click();
 
   await expect.poll(() => dispatchReads).toBe(2);
   await expect(page.locator('[aria-label="배정 진행"]')).toContainText('배정 1');
   expect(assignmentPayload).toMatchObject({
-    items: [{ expectedVersion: 'UNASSIGNED', sellerOrderId: 'seller-order-g006-assignment' }],
+    expectedVersion: 'route-version-g006-current',
     reason: '관리자 배정',
-    targetDriverId: 'driver-g006',
-    targetVehicleId: 'vehicle-g006',
+    targetDriverId: 'driver-g006-target',
+    targetVehicleId: 'vehicle-g006-target',
   });
-  expect(assignmentPayload.items[0].commandId).toEqual(expect.any(String));
+  expect(assignmentPayload.commandId).toEqual(expect.any(String));
+  expectOnlyFixtureCalls(api);
+});
+
+test('dispatch unassigns one selected order through the compatible single-order endpoint', async ({ page }) => {
+  let dispatchReads = 0;
+  let unassignmentPayload;
+  const assignedRow = {
+    assignmentStatus: 'ASSIGNED',
+    customerId: 'customer-g006',
+    destinationAddress: 'Seoul Canonical Address Single',
+    destinationDisplayName: 'Canonical Destination Single',
+    destinationId: 'destination-g006-single-unassign',
+    driverId: 'driver-g006',
+    etaStatus: 'PENDING',
+    latitude: 37.5,
+    longitude: 127,
+    routePlanId: 'route-plan-g006-single-unassign',
+    routeVersionId: 'route-version-g006-single-unassign',
+    sellerOrderId: 'seller-order-g006-single-unassign',
+    sellerOrderKey: 'SELLER-G006-SINGLE-UNASSIGN',
+    vehicleId: 'vehicle-g006',
+  };
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': () => {
+      dispatchReads += 1;
+      return v1Envelope({
+        items: dispatchReads === 1 ? [assignedRow] : [{
+          ...assignedRow,
+          assignmentStatus: 'UNASSIGNED',
+          driverId: undefined,
+          etaStatus: 'NOT_REQUIRED',
+          routePlanId: undefined,
+          routeVersionId: undefined,
+          vehicleId: undefined,
+        }],
+        page: { hasMore: false },
+      }, `g006-dispatch-single-unassign-${dispatchReads}`);
+    },
+    'POST /api/dsv/v1/seller-orders/seller-order-g006-single-unassign/assignment/unassign': async ({ request }) => {
+      unassignmentPayload = await request.postDataJSON();
+      return legacyEnvelope({
+        assignmentResult: {
+          assignmentStatus: 'UNASSIGNED',
+          auditEventId: 'audit-g006-single-unassign',
+          commandId: unassignmentPayload.commandId,
+          etaStatus: 'NOT_REQUIRED',
+          newRouteVersionId: 'route-version-g006-single-unassigned',
+          previousRouteVersionId: 'route-version-g006-single-unassign',
+          receiptId: 'receipt-g006-single-unassign',
+          routePlanId: 'route-plan-g006-single-unassigned',
+          sellerOrderId: assignedRow.sellerOrderId,
+        },
+      });
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await page.getByRole('checkbox', { name: '전체 선택' }).check();
+  await page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배정 해제' }).click();
+
+  await expect.poll(() => dispatchReads).toBe(2);
+  expect(unassignmentPayload).toMatchObject({
+    expectedVersion: assignedRow.routeVersionId,
+    reason: '관리자 배정 해제',
+  });
+  expect(unassignmentPayload.commandId).toEqual(expect.any(String));
   expectOnlyFixtureCalls(api);
 });
 
@@ -597,6 +747,75 @@ test('dispatch blocks permanent deletion above the 100 order API limit', async (
   expectOnlyFixtureCalls(api);
 });
 
+test('dispatch blocks batch assignment and unassignment above the 100 order API limit', async ({ page }) => {
+  let assignmentCalls = 0;
+  let assigned = false;
+  const rows = Array.from({ length: 101 }, (_, index) => ({
+    assignmentStatus: assigned ? 'ASSIGNED' : 'UNASSIGNED',
+    customerId: 'customer-g006',
+    destinationDisplayName: `Canonical Assignment Limit ${index + 1}`,
+    destinationId: `destination-g006-assignment-limit-${index + 1}`,
+    ...(assigned ? {
+      driverId: 'driver-g006',
+      routePlanId: 'route-plan-g006-assignment-limit',
+      routeVersionId: 'route-version-g006-assignment-limit',
+      vehicleId: 'vehicle-g006',
+    } : {}),
+    etaStatus: assigned ? 'PENDING' : 'NOT_REQUIRED',
+    latitude: 37.5 + index / 10000,
+    longitude: 127 + index / 10000,
+    sellerOrderId: `seller-order-g006-assignment-limit-${index + 1}`,
+    sellerOrderKey: `SELLER-G006-ASSIGNMENT-LIMIT-${index + 1}`,
+  }));
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': () => v1Envelope({
+      items: rows.map((row) => ({
+        ...row,
+        assignmentStatus: assigned ? 'ASSIGNED' : 'UNASSIGNED',
+        driverId: assigned ? 'driver-g006' : undefined,
+        etaStatus: assigned ? 'PENDING' : 'NOT_REQUIRED',
+        routePlanId: assigned ? 'route-plan-g006-assignment-limit' : undefined,
+        routeVersionId: assigned ? 'route-version-g006-assignment-limit' : undefined,
+        vehicleId: assigned ? 'vehicle-g006' : undefined,
+      })),
+      page: { hasMore: false },
+    }, 'g006-dispatch-assignment-limit'),
+    'POST /api/dsv/v1/seller-order-assignments/reassign': () => { assignmentCalls += 1; return legacyEnvelope({}); },
+    'POST /api/dsv/v1/seller-order-assignments/unassign': () => { assignmentCalls += 1; return legacyEnvelope({}); },
+  })));
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await page.getByRole('checkbox', { name: '전체 선택' }).check();
+  await page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '선택 배정', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('배송 배정은 한 번에 최대 100건까지 가능합니다.');
+
+  assigned = true;
+  await page.reload();
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await page.getByRole('checkbox', { name: '전체 선택' }).check();
+  await page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배정 해제', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('배정 해제는 한 번에 최대 100건까지 가능합니다.');
+  expect(assignmentCalls).toBe(0);
+  expectOnlyFixtureCalls(api);
+});
+
+test('dispatch keeps the last valid service date when the date input is cleared', async ({ page }) => {
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+  })));
+
+  await page.goto('/dispatch');
+  const dateInput = page.getByLabel('배차일 선택');
+  const initialDate = await dateInput.inputValue();
+  await dateInput.fill('');
+
+  await expect(dateInput).toHaveValue(initialDate);
+  expect(api.calls.filter((call) => call.path === '/api/dsv/v1/dispatches')).toHaveLength(1);
+  expect(api.calls.some((call) => call.key.endsWith('serviceDate='))).toBe(false);
+  expectOnlyFixtureCalls(api);
+});
+
 test('dispatch selects multiple destinations with a map polygon', async ({ page }) => {
   const assignmentPayloads = [];
   const assignmentFixture = async ({ request }) => {
@@ -624,7 +843,7 @@ test('dispatch selects multiple destinations with a map polygon', async ({ page 
           assignmentStatus: 'UNASSIGNED',
           customerId: 'customer-g006',
           destinationDisplayName: 'Canonical Destination North',
-          destinationId: 'destination-g006',
+          destinationId: 'destination-g006-north',
           etaStatus: 'NOT_REQUIRED',
           latitude: 37.51,
           longitude: 126.99,
@@ -635,7 +854,7 @@ test('dispatch selects multiple destinations with a map polygon', async ({ page 
           assignmentStatus: 'UNASSIGNED',
           customerId: 'customer-g006',
           destinationDisplayName: 'Canonical Destination South',
-          destinationId: 'destination-g006',
+          destinationId: 'destination-g006-south',
           etaStatus: 'NOT_REQUIRED',
           latitude: 37.49,
           longitude: 127.01,
@@ -913,6 +1132,12 @@ test('management renders customer, destination, and condition reference lists', 
   await expect(vehicleWorkspace).toHaveClass(/has-selection/u);
   await expect(vehicleWorkspace.getByLabel('차량 상세')).toContainText('60가 6006');
   await expect(vehicleWorkspace.getByLabel('차량 상세')).toContainText('012-6006-6006');
+  await vehicleWorkspace.getByRole('button', { name: '차량 수정', exact: true }).click();
+  await expect(vehicleWorkspace.getByLabel('차량 번호')).toHaveAttribute('maxlength', '40');
+  await expect(vehicleWorkspace.getByLabel('차종')).toHaveAttribute('maxlength', '160');
+  await expect(vehicleWorkspace.getByLabel('TMS 일련번호')).toHaveAttribute('maxlength', '160');
+  await expect(vehicleWorkspace.getByLabel('메모')).toHaveAttribute('maxlength', '1000');
+  await vehicleWorkspace.getByRole('button', { name: '취소', exact: true }).click();
   await vehicleWorkspace.getByRole('button', { name: '선택 취소' }).click();
   await expect(vehicleWorkspace).toHaveClass(/is-idle/u);
 
@@ -934,6 +1159,135 @@ test('management renders customer, destination, and condition reference lists', 
   await expect(page.getByText('냉장 운송', { exact: true }).first()).toBeVisible();
   const conditionRow = page.locator('.master-condition-grid tbody tr').filter({ hasText: '냉장 운송' });
   await expect(conditionRow.locator('td')).toHaveText(['COLD', '냉장 운송', '냉장 상태를 유지하여 운송합니다.']);
+  await conditionRow.click();
+  await page.getByRole('button', { name: '운송조건 수정', exact: true }).click();
+  const conditionForm = page.getByLabel('운송조건 편집');
+  await expect(conditionForm.getByLabel('조건 코드')).toHaveAttribute('maxlength', '80');
+  await expect(conditionForm.getByLabel('명칭')).toHaveAttribute('maxlength', '160');
+  await expect(conditionForm.getByLabel('설명')).toHaveAttribute('maxlength', '1000');
+  await expect(conditionForm.getByLabel('온도 범위')).toHaveCount(0);
+  await expect(conditionForm.getByLabel('적합 차량')).toHaveCount(0);
+  await expect(conditionForm.getByLabel('필수 증빙')).toHaveCount(0);
+  expectOnlyFixtureCalls(api);
+});
+
+test('management writes the editable TMS serial number in the exact vehicle payload', async ({ page }) => {
+  let vehiclePayload;
+  let serialNumber = '012-6006-6006';
+  const api = await installApiFixtures(page, adminFixtures(managementListFixtures({
+    'GET /api/dsv/v1/vehicles?limit=100': () => v1Envelope({
+      items: [{
+        displayName: 'Canonical Vehicle G006',
+        driverAssignments: [],
+        note: '운영 차량 메모',
+        status: 'ACTIVE',
+        telematicsSerialNumber: serialNumber,
+        type: '냉장탑차',
+        vehicleId: 'vehicle-g006',
+        vehiclePlate: '60가 6006',
+        vehicleType: '냉장탑차',
+      }],
+      page: { hasMore: false },
+    }, 'g006-vehicle-write'),
+    'PATCH /api/dsv/vehicles/vehicle-g006': async ({ request }) => {
+      vehiclePayload = await request.postDataJSON();
+      serialNumber = vehiclePayload.telematicsSerialNumber;
+      return legacyEnvelope({ vehicle: { id: 'vehicle-g006', ...vehiclePayload } });
+    },
+  })));
+
+  await page.goto('/master-data');
+  const vehicleWorkspace = page.getByLabel('차량 관리');
+  await vehicleWorkspace.getByRole('row').filter({ hasText: '60가 6006' }).click();
+  await vehicleWorkspace.getByRole('button', { name: '차량 수정', exact: true }).click();
+  const form = vehicleWorkspace.getByLabel('차량 편집');
+  await form.getByLabel('TMS 일련번호').fill('TMS-UPDATED-6006');
+  await form.getByRole('button', { name: '저장', exact: true }).click();
+
+  await expect(vehicleWorkspace.getByRole('row').filter({ hasText: 'TMS-UPDATED-6006' })).toBeVisible();
+  expect(vehiclePayload).toEqual({
+    note: '운영 차량 메모',
+    plate: '60가 6006',
+    telematicsSerialNumber: 'TMS-UPDATED-6006',
+    type: '냉장탑차',
+  });
+  expectOnlyFixtureCalls(api);
+});
+
+test('management creates a driver with the supported unknown-age sentinel', async ({ page }) => {
+  let driverPayload;
+  let drivers = [];
+  const api = await installApiFixtures(page, adminFixtures(managementListFixtures({
+    'GET /api/dsv/v1/drivers?limit=100': () => v1Envelope({
+      items: drivers,
+      page: { hasMore: false },
+    }, 'g006-created-drivers'),
+    'POST /api/dsv/drivers': async ({ request }) => {
+      driverPayload = await request.postDataJSON();
+      drivers = [{
+        age: driverPayload.age,
+        career: driverPayload.career,
+        displayName: driverPayload.name,
+        driverId: 'driver-g006-created',
+        gender: driverPayload.gender,
+        phone: driverPayload.phone,
+        score: driverPayload.score,
+        status: 'ACTIVE',
+        traits: driverPayload.traits,
+        zone: driverPayload.zone,
+      }];
+      return legacyEnvelope({ driver: drivers[0] });
+    },
+  })));
+
+  await page.goto('/master-data');
+  const driverWorkspace = page.getByLabel('배송원 관리');
+  await driverWorkspace.getByLabel('배송원 리스트').getByRole('button', { name: '배송원 등록', exact: true }).click();
+  const form = page.getByLabel('배송원 편집');
+  await form.getByLabel('이름').fill('Created Driver G006');
+  await form.getByLabel('연락처').fill('010-7006-7006');
+  await form.getByRole('button', { name: '저장', exact: true }).click();
+
+  await expect(driverWorkspace.getByRole('row').filter({ hasText: 'Created Driver G006' })).toBeVisible();
+  expect(driverPayload).toMatchObject({
+    age: 0,
+    career: '미제공',
+    gender: '미제공',
+    name: 'Created Driver G006',
+    phone: '010-7006-7006',
+    score: '미제공',
+    traits: [],
+    zone: '미제공',
+  });
+  expectOnlyFixtureCalls(api);
+});
+
+test('management keeps a successful create when the post-write list refresh fails', async ({ page }) => {
+  let driverReads = 0;
+  const api = await installApiFixtures(page, adminFixtures(managementListFixtures({
+    'GET /api/dsv/v1/drivers?limit=100': () => {
+      driverReads += 1;
+      if (driverReads > 1) return v1Error(503, 'drivers refresh failed');
+      return v1Envelope({ items: [], page: { hasMore: false } }, 'g006-driver-before-create');
+    },
+    'POST /api/dsv/drivers': async ({ request }) => {
+      const payload = await request.postDataJSON();
+      return legacyEnvelope({ driver: { id: 'driver-g006-created', ...payload } });
+    },
+  })));
+
+  await page.goto('/master-data');
+  const driverWorkspace = page.getByLabel('배송원 관리');
+  await driverWorkspace.getByLabel('배송원 리스트').getByRole('button', { name: '배송원 등록', exact: true }).click();
+  const form = driverWorkspace.getByLabel('배송원 편집');
+  await expect(form.getByLabel('이름')).toHaveAttribute('maxlength', '80');
+  await expect(form.getByLabel('연락처')).toHaveAttribute('maxlength', '40');
+  await form.getByLabel('이름').fill('Refresh Safe Driver');
+  await form.getByRole('button', { name: '저장', exact: true }).click();
+
+  await expect(driverWorkspace.getByRole('row').filter({ hasText: 'Refresh Safe Driver' })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  expect(driverReads).toBe(2);
   expectOnlyFixtureCalls(api);
 });
 
@@ -1227,6 +1581,37 @@ test('settings sends a Brevo test email only after the explicit confirmation che
     textContent: operationSettings().manualEmailBody,
   });
   expect(sentBody.commandId).toMatch(/^[0-9a-f-]{36}$/u);
+  expectOnlyFixtureCalls(api);
+});
+
+test('settings blocks malformed or oversized manual email recipient lists before the API call', async ({ page }) => {
+  let sendCalls = 0;
+  const api = await installApiFixtures(page, adminFixtures({
+    'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings({ manualEmailSenderEmail: 'noreply@example.com' })),
+    'GET /api/dsv/manual-email': legacyEnvelope({
+      apiConfigured: true,
+      configured: true,
+      defaultRecipients: [],
+      defaultSubject: operationSettings().manualEmailSubject,
+      defaultTextContent: operationSettings().manualEmailBody,
+      senderEmail: 'noreply@example.com',
+      senderName: 'CLEVER DSV',
+    }),
+    'POST /api/dsv/manual-email': () => { sendCalls += 1; return legacyEnvelope({ recipientCount: 1, sentAt: '2026-08-03T08:00:00.000Z' }); },
+  }));
+
+  await page.goto('/settings');
+  const recipients = page.getByLabel('테스트 이메일 수신자');
+  const sendButton = page.getByRole('button', { name: '1회 발송', exact: true });
+  await recipients.fill('not-an-email');
+  await expect(page.getByRole('alert')).toContainText('올바른 이메일 주소');
+  await expect(recipients).toHaveAttribute('aria-invalid', 'true');
+  await expect(sendButton).toBeDisabled();
+
+  await recipients.fill(Array.from({ length: 11 }, (_, index) => `ops${index + 1}@example.com`).join(', '));
+  await expect(page.getByRole('alert')).toContainText('수신자는 최대 10명');
+  await expect(sendButton).toBeDisabled();
+  expect(sendCalls).toBe(0);
   expectOnlyFixtureCalls(api);
 });
 

@@ -307,7 +307,7 @@ function ConditionMaster({ data, onChange }: { data: ManagementData; onChange: (
         <table className="page-table"><thead><tr><th>코드</th><th>명칭</th><th>설명</th></tr></thead><tbody>{data.conditions.map((condition) => <tr className={condition.id === selected?.id ? 'active' : ''} key={condition.id} tabIndex={0} onClick={() => { setSelectedId(condition.id); setEditorId(undefined); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(condition.id); setEditorId(undefined); } }}><td>{condition.code}</td><td>{condition.name}</td><td>{condition.description}</td></tr>)}</tbody></table>
       </AdminTableFrame>
     </section>
-    <section className="page-panel wide management-detail-panel">{editorId !== undefined ? <ConditionForm condition={data.conditions.find((item) => item.id === editorId)} onCancel={() => setEditorId(undefined)} onSave={async (saved) => { if (data.conditions.some((item) => item.id !== saved.id && item.code === saved.code)) { window.alert('같은 조건 코드가 이미 등록되어 있습니다.'); return; } const conditions = editorId ? data.conditions.map((item) => item.id === editorId ? saved : item) : [...data.conditions, saved]; await onChange({ ...data, conditions }); setSelectedId(saved.id); setEditorId(undefined); }} /> : <><AdminSectionHeader title="조건 상세" side={selected ? <span className="management-heading-side"><span className="section-meta">{selected.code}</span><ManagementDetailAction name="운송조건" onEdit={() => setEditorId(selected.id)} /></span> : undefined} />{selected ? <div className="master-detail-grid"><dl><dt>표시 명칭</dt><dd>{selected.name}</dd><dt>설명</dt><dd>{selected.description}</dd></dl><dl><dt>온도 범위</dt><dd>{selected.temperature || '-'}</dd><dt>적합 차량</dt><dd>{selected.vehicle || '-'}</dd><dt>필수 증빙</dt><dd>{selected.proof || '-'}</dd></dl></div> : <EmptyState label="운송조건을 등록하세요." />}</>}</section>
+    <section className="page-panel wide management-detail-panel">{editorId !== undefined ? <ConditionForm condition={data.conditions.find((item) => item.id === editorId)} onCancel={() => setEditorId(undefined)} onSave={async (saved) => { if (data.conditions.some((item) => item.id !== saved.id && item.code === saved.code)) { window.alert('같은 조건 코드가 이미 등록되어 있습니다.'); return; } const conditions = editorId ? data.conditions.map((item) => item.id === editorId ? saved : item) : [...data.conditions, saved]; await onChange({ ...data, conditions }); setSelectedId(saved.id); setEditorId(undefined); }} /> : <><AdminSectionHeader title="조건 상세" side={selected ? <span className="management-heading-side"><span className="section-meta">{selected.code}</span><ManagementDetailAction name="운송조건" onEdit={() => setEditorId(selected.id)} /></span> : undefined} />{selected ? <div className="master-detail-grid"><dl><dt>표시 명칭</dt><dd>{selected.name}</dd><dt>설명</dt><dd>{selected.description}</dd></dl></div> : <EmptyState label="운송조건을 등록하세요." />}</>}</section>
   </div>;
 }
 
@@ -363,13 +363,13 @@ function ConditionForm({ condition, onSave, onCancel }: { condition?: Management
         code: text(form, 'code'),
         name: text(form, 'name'),
         description: text(form, 'description'),
-        temperature: text(form, 'temperature'),
-        vehicle: text(form, 'vehicle'),
-        proof: text(form, 'proof'),
+        temperature: condition?.temperature ?? '',
+        vehicle: condition?.vehicle ?? '',
+        proof: condition?.proof ?? '',
       });
     } catch {}
   };
-  return <form className="management-editor" aria-label="운송조건 편집" onSubmit={submit}><EditorTitle title={condition ? '운송조건 수정' : '운송조건 등록'} /><div className="management-form-grid"><label>조건 코드<input name="code" required defaultValue={condition?.code} /></label><label>명칭<input name="name" required defaultValue={condition?.name} /></label><label className="wide">설명<input name="description" required defaultValue={condition?.description} /></label><label>온도 범위<input name="temperature" defaultValue={condition?.temperature} /></label><label>적합 차량<input name="vehicle" defaultValue={condition?.vehicle} /></label><label className="wide">필수 증빙<input name="proof" defaultValue={condition?.proof} /></label></div><FormActions onCancel={onCancel} /></form>;
+  return <form className="management-editor" aria-label="운송조건 편집" onSubmit={submit}><EditorTitle title={condition ? '운송조건 수정' : '운송조건 등록'} /><div className="management-form-grid"><label>조건 코드<input name="code" required maxLength={80} defaultValue={condition?.code} /></label><label>명칭<input name="name" required maxLength={160} defaultValue={condition?.name} /></label><label className="wide">설명<input name="description" required maxLength={1000} defaultValue={condition?.description} /></label></div><FormActions onCancel={onCancel} /></form>;
 }
 
 function EditorTitle({ title }: { title: string }): ReactElement { return <AdminSectionHeader title={title} />; }

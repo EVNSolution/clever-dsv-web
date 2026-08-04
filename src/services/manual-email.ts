@@ -60,3 +60,13 @@ export async function sendManualEmail(draft: ManualEmailDraft): Promise<{ recipi
 export function recipientsFromInput(value: string): string[] {
   return [...new Set(value.split(',').map((recipient) => recipient.trim().toLowerCase()).filter(Boolean))];
 }
+
+export function manualEmailRecipientError(value: string): string | null {
+  const recipients = recipientsFromInput(value);
+  if (recipients.length === 0) return '수신자 이메일을 입력하세요.';
+  if (recipients.length > 10) return '수신자는 최대 10명까지 입력할 수 있습니다.';
+  if (recipients.some((recipient) => recipient.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(recipient))) {
+    return '올바른 이메일 주소를 쉼표로 구분해 입력하세요.';
+  }
+  return null;
+}

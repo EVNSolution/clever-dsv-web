@@ -140,47 +140,76 @@ export async function persistManagementChange(previous: ManagementData, next: Ma
 
   const operation = resourceOperation(previous, next);
   if (operation === null) throw new ApiError(400, '이 항목은 원격 관리 API에서 아직 변경할 수 없습니다.');
-  await operation();
-  return loadRemoteManagementSnapshot();
+  const mutationSnapshot = await operation();
+  try {
+    return await loadRemoteManagementSnapshot();
+  } catch {
+    return mutationSnapshot;
+  }
 }
 
-function resourceOperation(previous: ManagementData, next: ManagementData): (() => Promise<unknown>) | null {
+function resourceOperation(previous: ManagementData, next: ManagementData): (() => Promise<ManagementData>) | null {
   const removedDriver = previous.drivers.find((driver) => !next.drivers.some((item) => item.id === driver.id));
-  if (removedDriver) return () => requestLegacyJson(`drivers/${removedDriver.id}`, { method: 'DELETE' });
+  if (removedDriver) return async () => { await requestLegacyJson(`drivers/${removedDriver.id}`, { method: 'DELETE' }); return next; };
   const removedVehicle = previous.vehicles.find((vehicle) => !next.vehicles.some((item) => item.id === vehicle.id));
-  if (removedVehicle) return () => requestLegacyJson(`vehicles/${removedVehicle.id}`, { method: 'DELETE' });
+  if (removedVehicle) return async () => { await requestLegacyJson(`vehicles/${removedVehicle.id}`, { method: 'DELETE' }); return next; };
   const removedCondition = previous.conditions.find((condition) => !next.conditions.some((item) => item.id === condition.id));
-  if (removedCondition) return () => requestLegacyJson(`conditions/${removedCondition.id}`, { method: 'DELETE' });
+  if (removedCondition) return async () => { await requestLegacyJson(`conditions/${removedCondition.id}`, { method: 'DELETE' }); return next; };
 
   const addedDriver = next.drivers.find((driver) => !previous.drivers.some((item) => item.id === driver.id));
-  if (addedDriver) return () => requestLegacyJson<{ driver: ManagementDriver }>('drivers', { json: driverPayload(addedDriver), method: 'POST' });
+  if (addedDriver) return async () => {
+    const { driver } = await requestLegacyJson<{ driver: ManagementDriver }>('drivers', { json: driverPayload(addedDriver), method: 'POST' });
+    return { ...next, drivers: replaceManagementItem(next.drivers, addedDriver.id, { ...addedDriver, ...driver }) };
+  };
   const changedDriver = next.drivers.find((driver) => {
     const current = previous.drivers.find((item) => item.id === driver.id);
     return current !== undefined && JSON.stringify(current) !== JSON.stringify(driver);
   });
-  if (changedDriver) return () => requestLegacyJson<{ driver: ManagementDriver }>(`drivers/${changedDriver.id}`, { json: driverPayload(changedDriver), method: 'PATCH' });
+  if (changedDriver) return async () => {
+    const { driver } = await requestLegacyJson<{ driver: ManagementDriver }>(`drivers/${changedDriver.id}`, { json: driverPayload(changedDriver), method: 'PATCH' });
+    return { ...next, drivers: replaceManagementItem(next.drivers, changedDriver.id, { ...changedDriver, ...driver }) };
+  };
 
   const addedVehicle = next.vehicles.find((vehicle) => !previous.vehicles.some((item) => item.id === vehicle.id));
-  if (addedVehicle) return () => requestLegacyJson<{ vehicle: ManagementVehicle }>('vehicles', { json: vehiclePayload(addedVehicle), method: 'POST' });
+  if (addedVehicle) return async () => {
+    const { vehicle } = await requestLegacyJson<{ vehicle: ManagementVehicle }>('vehicles', { json: vehiclePayload(addedVehicle), method: 'POST' });
+    return { ...next, vehicles: replaceManagementItem(next.vehicles, addedVehicle.id, { ...addedVehicle, ...vehicle }) };
+  };
   const changedVehicle = next.vehicles.find((vehicle) => {
     const current = previous.vehicles.find((item) => item.id === vehicle.id);
     return current !== undefined && JSON.stringify(current) !== JSON.stringify(vehicle);
   });
-  if (changedVehicle) return () => requestLegacyJson<{ vehicle: ManagementVehicle }>(`vehicles/${changedVehicle.id}`, { json: vehiclePayload(changedVehicle), method: 'PATCH' });
+  if (changedVehicle) return async () => {
+    const { vehicle } = await requestLegacyJson<{ vehicle: ManagementVehicle }>(`vehicles/${changedVehicle.id}`, { json: vehiclePayload(changedVehicle), method: 'PATCH' });
+    return { ...next, vehicles: replaceManagementItem(next.vehicles, changedVehicle.id, { ...changedVehicle, ...vehicle }) };
+  };
 
   const addedAssignment = next.assignments.find((assignment) => !previous.assignments.some((item) => item.id === assignment.id));
-  if (addedAssignment) return () => requestLegacyJson(`vehicles/${addedAssignment.vehicleId}/drivers`, { json: { driverId: addedAssignment.driverId }, method: 'POST' });
+  if (addedAssignment) return async () => {
+    const { assignment } = await requestLegacyJson<{ assignment: ManagementData['assignments'][number] }>(`vehicles/${addedAssignment.vehicleId}/drivers`, { json: { driverId: addedAssignment.driverId }, method: 'POST' });
+    return { ...next, assignments: replaceManagementItem(next.assignments, addedAssignment.id, assignment) };
+  };
   const removedAssignment = previous.assignments.find((assignment) => !next.assignments.some((item) => item.id === assignment.id));
-  if (removedAssignment) return () => requestLegacyJson(`vehicles/${removedAssignment.vehicleId}/drivers/${removedAssignment.id}`, { method: 'DELETE' });
+  if (removedAssignment) return async () => { await requestLegacyJson(`vehicles/${removedAssignment.vehicleId}/drivers/${removedAssignment.id}`, { method: 'DELETE' }); return next; };
 
   const addedCondition = next.conditions.find((condition) => !previous.conditions.some((item) => item.id === condition.id));
-  if (addedCondition) return () => requestLegacyJson<{ condition: ManagementCondition }>('conditions', { json: conditionWritePayload(addedCondition), method: 'POST' });
+  if (addedCondition) return async () => {
+    const { condition } = await requestLegacyJson<{ condition: ManagementCondition }>('conditions', { json: conditionWritePayload(addedCondition), method: 'POST' });
+    return { ...next, conditions: replaceManagementItem(next.conditions, addedCondition.id, { ...addedCondition, ...condition }) };
+  };
   const changedCondition = next.conditions.find((condition) => {
     const current = previous.conditions.find((item) => item.id === condition.id);
     return current !== undefined && JSON.stringify(current) !== JSON.stringify(condition);
   });
-  if (changedCondition) return () => requestLegacyJson<{ condition: ManagementCondition }>(`conditions/${changedCondition.id}`, { json: conditionWritePayload(changedCondition), method: 'PATCH' });
+  if (changedCondition) return async () => {
+    const { condition } = await requestLegacyJson<{ condition: ManagementCondition }>(`conditions/${changedCondition.id}`, { json: conditionWritePayload(changedCondition), method: 'PATCH' });
+    return { ...next, conditions: replaceManagementItem(next.conditions, changedCondition.id, { ...changedCondition, ...condition }) };
+  };
   return null;
+}
+
+function replaceManagementItem<TItem extends { id: string }>(items: TItem[], currentId: string, replacement: TItem): TItem[] {
+  return items.map((item) => item.id === currentId ? replacement : item);
 }
 
 async function loadRemoteManagementSnapshot(): Promise<ManagementData> {
@@ -295,7 +324,7 @@ function isV1DriverListItem(value: unknown): value is V1DriverListItem {
   return hasOnlyKeys(value, ['age', 'career', 'displayName', 'driverId', 'gender', 'phone', 'score', 'status', 'traits', 'zone'])
     && isNonEmptyString(value.driverId)
     && isNonEmptyString(value.displayName)
-    && (value.age === undefined || (typeof value.age === 'number' && Number.isInteger(value.age) && value.age >= 18 && value.age <= 100))
+    && (value.age === undefined || (typeof value.age === 'number' && Number.isInteger(value.age) && (value.age === 0 || (value.age >= 18 && value.age <= 100))))
     && isOptionalString(value.career)
     && isOptionalString(value.gender)
     && isOptionalString(value.phone)
@@ -398,10 +427,11 @@ function driverPayload(driver: ManagementDriver): Omit<ManagementDriver, 'id'> {
   return payload;
 }
 
-function vehiclePayload(vehicle: ManagementVehicle): Pick<ManagementVehicle, 'note' | 'plate' | 'type'> {
+function vehiclePayload(vehicle: ManagementVehicle): Pick<ManagementVehicle, 'note' | 'plate' | 'telematicsSerialNumber' | 'type'> {
   return {
     note: vehicle.note,
     plate: vehicle.plate,
+    telematicsSerialNumber: vehicle.telematicsSerialNumber ?? '',
     type: vehicle.type,
   };
 }

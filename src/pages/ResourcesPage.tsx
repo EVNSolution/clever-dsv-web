@@ -315,8 +315,8 @@ function DriverForm({
     <form className="management-editor" aria-label="배송원 편집" onSubmit={submit}>
       <AdminSectionHeader title={driver ? '배송원 수정' : '배송원 등록'} />
       <div className="management-form-grid">
-        <label>이름<input name="name" required defaultValue={driver?.name} /></label>
-        <label>연락처<input name="phone" defaultValue={driver?.phone} /></label>
+        <label>이름<input name="name" required maxLength={80} defaultValue={driver?.name} /></label>
+        <label>연락처<input name="phone" maxLength={40} defaultValue={driver?.phone} /></label>
       </div>
       <ManagementFormActions onCancel={onCancel} />
     </form>
@@ -350,10 +350,10 @@ function VehicleForm({
     <form className="management-editor" aria-label="차량 편집" onSubmit={submit}>
       <AdminSectionHeader title={vehicle ? '차량 수정' : '차량 등록'} />
       <div className="management-form-grid">
-        <label>차량 번호<input name="plate" required defaultValue={vehicle?.plate} /></label>
-        <label>차종<input name="type" required defaultValue={vehicle?.type} /></label>
-        <label>TMS 일련번호<input name="telematicsSerialNumber" defaultValue={vehicle?.telematicsSerialNumber} /></label>
-        <label>메모<input name="note" defaultValue={vehicle?.note} /></label>
+        <label>차량 번호<input name="plate" required maxLength={40} defaultValue={vehicle?.plate} /></label>
+        <label>차종<input name="type" required maxLength={160} defaultValue={vehicle?.type} /></label>
+        <label>TMS 일련번호<input name="telematicsSerialNumber" maxLength={160} defaultValue={vehicle?.telematicsSerialNumber} /></label>
+        <label>메모<input name="note" maxLength={1000} defaultValue={vehicle?.note} /></label>
       </div>
       <ManagementFormActions onCancel={onCancel} />
     </form>

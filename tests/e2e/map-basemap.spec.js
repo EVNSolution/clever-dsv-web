@@ -107,7 +107,7 @@ test('cached low-resolution map stays visible until the live style is ready', as
   await expect(placeholder).toBeVisible();
   await expect(placeholder).toHaveCSS('opacity', '1');
   await expect(loadingStatus).toBeVisible();
-  await expect(page.locator('.control-side')).toHaveCount(0);
+  await expect(page.locator('.control-side')).toBeVisible();
 
   await page.waitForFunction(() => window.dsvMap?.isStyleLoaded());
   await expect(loadingStatus).toHaveCount(0);
