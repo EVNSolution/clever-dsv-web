@@ -834,6 +834,11 @@ test('loads the administrator customer map through the customer-scoped contract'
       expect(url.searchParams.get('customerId')).toBe('customer-g006-map');
       expect(url.searchParams.get('serviceDate')).toBe('2026-08-03');
       return v1Envelope({
+        customerDisplayName: 'G006 Healthcare',
+        departureLocation: {
+          latitude: 37.330948,
+          longitude: 126.9372235,
+        },
         items: [
           {
             sellerOrderId: 'order-g006-map',
@@ -868,9 +873,99 @@ test('loads the administrator customer map through the customer-scoped contract'
 
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customers/deliveries');
   await expect(page.getByRole('article', { name: '고객사 배송지 지도' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: '고객사 메뉴' })).toContainText('G006 Healthcare');
+  await expect(page.getByLabel('차량 목록')).toContainText('서울86바3800');
   await expect(page.getByLabel('배송지 리스트')).toBeVisible();
   await expect(page.getByText('G006 Customer Destination', { exact: false }).first()).toBeVisible();
   await expect(page.getByText('서울86바3800', { exact: true }).first()).toBeVisible();
+  await page.locator('.map-canvas.ready').waitFor({ state: 'visible' });
+  await expect(page.locator('.departure-map-marker')).toHaveAttribute('aria-label', '출발 위치: 물류센터');
+  await page.getByLabel('배송지 리스트').locator('.customer-panel-head').click();
+  await expect(page.getByLabel('배송지 리스트').locator('.customer-destination-list')).toHaveCount(0);
+  await page.getByLabel('배송지 리스트').locator('.customer-panel-head').click();
+  await expect(page.getByLabel('배송지 리스트').locator('.customer-destination-list')).toBeVisible();
+  expect(api.unexpected).toEqual([]);
+});
+
+test('shows a depot-start route when assigned vehicle telemetry is unavailable', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(customerSession),
+    'GET /api/dsv/v1/customer/deliveries': v1Envelope({
+      customerDisplayName: 'G006 Depot Customer',
+      departureLocation: {
+        latitude: 37.330948,
+        longitude: 126.9372235,
+      },
+      items: [
+        {
+          sellerOrderId: 'order-g006-depot-route',
+          sellerOrderKey: 'SELLER-G006-DEPOT-ROUTE',
+          destinationDisplayName: 'G006 Depot Route Clinic',
+          destinationAddress: '서울특별시 강남구 테헤란로 152',
+          destinationId: 'destination-g006-depot-route',
+          deliveryStatus: 'PLANNED',
+          etaStatus: 'READY',
+          estimatedArrivalAt: '2026-08-04T01:30:00.000Z',
+          proofStatus: 'NONE',
+          shippedBoxes: 2,
+          eventSummary: [],
+          latitude: 37.500643,
+          longitude: 127.036545,
+          vehicleDisplayName: '서울86바3800',
+          vehicleId: 'vehicle-g006-depot-route',
+        },
+        {
+          sellerOrderId: 'order-g006-other-route',
+          sellerOrderKey: 'SELLER-G006-OTHER-ROUTE',
+          destinationDisplayName: 'G006 Other Route Clinic',
+          destinationAddress: '서울특별시 마포구 양화로 155',
+          destinationId: 'destination-g006-other-route',
+          deliveryStatus: 'PLANNED',
+          etaStatus: 'READY',
+          estimatedArrivalAt: '2026-08-04T02:10:00.000Z',
+          proofStatus: 'NONE',
+          shippedBoxes: 1,
+          eventSummary: [],
+          latitude: 37.5564,
+          longitude: 126.9238,
+          vehicleDisplayName: '경기88바9580',
+          vehicleId: 'vehicle-g006-other-route',
+        },
+      ],
+      page: { hasMore: false },
+      routes: [
+        {
+          vehicleId: 'vehicle-g006-depot-route',
+          coordinates: [[126.9372235, 37.330948], [126.98, 37.42], [127.036545, 37.500643]],
+        },
+        {
+          vehicleId: 'vehicle-g006-other-route',
+          coordinates: [[126.9372235, 37.330948], [126.93, 37.48], [126.9238, 37.5564]],
+        },
+      ],
+    }),
+  });
+
+  await page.goto('/customer/delivery-inquiry');
+
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries');
+  await page.locator('.map-canvas.ready').waitFor({ state: 'visible' });
+  await expect(page.locator('.departure-map-marker')).toHaveCount(1);
+  await expect(page.getByLabel('차량 목록')).toContainText('서울86바3800');
+  await page.getByLabel('차량 목록').getByRole('button', { name: /서울86바3800/ }).click();
+  await expect(page.getByLabel('배송지 리스트')).toContainText('G006 Depot Route Clinic');
+  await expect(page.getByLabel('배송지 리스트')).not.toContainText('G006 Other Route Clinic');
+  await expect.poll(() => page.evaluate(() => {
+    const routeSource = window.dsvMap?.getSource('operational-routes');
+    const routeData = routeSource && 'serialize' in routeSource ? routeSource.serialize().data : undefined;
+    return {
+      coordinates: routeData?.features?.[0]?.geometry?.coordinates,
+      routeCount: routeData?.features?.length,
+    };
+  })).toEqual({
+    coordinates: [[126.9372235, 37.330948], [126.98, 37.42], [127.036545, 37.500643]],
+    routeCount: 1,
+  });
   expect(api.unexpected).toEqual([]);
 });
 
@@ -980,6 +1075,14 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
     destinationLabels: [''],
     routeCoordinates: [[127.02, 37.49], [127.01, 37.51], [126.99, 37.54], [126.9779, 37.5663]],
   });
+  await page.getByRole('navigation', { name: '고객사 메뉴' }).getByRole('button', { name: /이력/ }).click();
+  await expect(page.getByLabel('배송지 리스트')).toContainText('1곳');
+  await expect(page.getByLabel('배송지 리스트')).not.toContainText('G006 Other Clinic');
+  await expect.poll(() => page.evaluate(() => {
+    const routeSource = window.dsvMap?.getSource('operational-routes');
+    const routeData = routeSource && 'serialize' in routeSource ? routeSource.serialize().data : undefined;
+    return routeData?.features?.length ?? 0;
+  })).toBe(0);
   expect(api.unexpected).toEqual([]);
 });
 

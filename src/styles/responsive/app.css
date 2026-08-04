@@ -92,10 +92,13 @@
   .dispatch-map-panel { min-height:560px; }
   .dispatch-drivers-panel { min-height:420px; }
   .dispatch-driver-table-wrap { max-height:430px; }
-  body.customer-delivery-demo .top-cluster { position: relative; left: auto; right: auto; top: auto; margin: 12px; }
-  body.customer-delivery-demo .app-header { max-width: none; }
-  body.customer-delivery-demo .map-card { height: 56vh; min-height: 380px; }
+  .customer-delivery-demo .top-cluster { position: relative; left: auto; right: auto; top: auto; margin: 12px; }
+  .customer-delivery-demo .app-header { max-width: none; }
+  .customer-delivery-demo .map-card { height: 56vh; min-height: 380px; }
   .customer-order-card { position: relative; right: auto; top: auto; width: auto; margin: 14px 12px 20px; }
+  .customer-control-side .customer-order-card {
+    position:relative; right:auto; top:auto; width:100%; height:auto; margin:0;
+  }
 }
 @media (max-width: 768px) {
   body.mobile-navigation-open { overflow:hidden; }
@@ -201,6 +204,29 @@
   .control-side .mobile-panel-expanded .control-destination-list,
   .control-side .mobile-panel-expanded .stops { flex:1 1 auto; min-height:0; max-height:none; overflow:auto; }
   .control-side .mobile-panel-expanded #fleetList { max-height:none; }
+  .customer-delivery-demo.nav-expanded .customer-navigation {
+    inset:12px auto auto 12px; width:206px; height:auto; max-height:calc(100dvh - 24px);
+    padding:12px 15px 12px 7px; gap:8px; overflow:hidden;
+    border:1px solid var(--color-border); border-right-color:#48484a; border-radius:24px;
+    background:rgba(255,255,255,.96);
+  }
+  .customer-delivery-demo.nav-expanded .customer-navigation .sidebar-brand {
+    width:180px; height:40px; padding:0; gap:0; overflow:hidden;
+  }
+  .customer-delivery-demo.nav-expanded .customer-navigation .sidebar-brand-mark { width:60px; height:40px; flex-basis:60px; }
+  .customer-delivery-demo.nav-expanded .customer-navigation .sidebar-brand-title { font-size:18px; }
+  .customer-delivery-demo.nav-expanded .customer-navigation .main-tab {
+    display:grid !important; width:180px; min-height:40px; padding:0; border:0; border-radius:14px;
+  }
+  .customer-delivery-demo.nav-expanded .customer-navigation .main-tab.active { border:0; }
+  .customer-delivery-demo.nav-expanded .customer-navigation .main-tab-copy {
+    grid-template-columns:60px minmax(0, 1fr); gap:0; text-align:left;
+  }
+  .customer-delivery-demo.nav-expanded .customer-navigation .main-tab-copy strong { width:60px; font-size:15px; }
+  .customer-delivery-demo.nav-expanded .customer-navigation .main-tab-copy small { display:block; padding-left:7px; font-size:11px; }
+  .customer-delivery-demo.nav-expanded .grid { pointer-events:auto; }
+  .customer-control-side .customer-panel { border-radius:18px; }
+  .customer-control-side .customer-panel.collapsed { flex-basis:56px; height:56px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
