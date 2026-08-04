@@ -28,11 +28,13 @@ const mobileControlQuery = '(max-width: 768px)';
 export function ControlPage({
   estimatedArrivalByOrderId = new Map(),
   onOrdersChange,
+  onManagementChange,
   onVehicleSelect,
   selectedVehicleId,
   vehicleColors = new Map(),
 }: {
   estimatedArrivalByOrderId?: ReadonlyMap<string, string>;
+  onManagementChange?: (management: ManagementData | undefined) => void;
   onOrdersChange?: (orders: DispatchListItem[], serviceDate?: string) => void;
   onVehicleSelect?: (vehicleId: string) => void;
   selectedVehicleId?: string;
@@ -42,6 +44,7 @@ export function ControlPage({
     return (
       <RemoteControlPage
         estimatedArrivalByOrderId={estimatedArrivalByOrderId}
+        onManagementChange={onManagementChange}
         onOrdersChange={onOrdersChange}
         onVehicleSelect={onVehicleSelect}
         selectedVehicleId={selectedVehicleId}
@@ -75,11 +78,13 @@ export function ControlPreviewPanels(): ReactElement {
 function RemoteControlPage({
   estimatedArrivalByOrderId,
   onOrdersChange,
+  onManagementChange,
   onVehicleSelect,
   selectedVehicleId,
   vehicleColors,
 }: {
   estimatedArrivalByOrderId: ReadonlyMap<string, string>;
+  onManagementChange?: (management: ManagementData | undefined) => void;
   onOrdersChange?: (orders: DispatchListItem[], serviceDate?: string) => void;
   onVehicleSelect?: (vehicleId: string) => void;
   selectedVehicleId?: string;
@@ -94,7 +99,6 @@ function RemoteControlPage({
   useEffect(() => {
     const summaryController = new AbortController();
     const dispatchController = new AbortController();
-    let cachedManagement: ManagementData | undefined;
     let refreshing = false;
     setPanelLoading(true);
     setPanelError('');
@@ -106,12 +110,12 @@ function RemoteControlPage({
         if (summaryController.signal.aborted) return;
         setSummary(nextSummary);
         const [nextManagement, dispatch] = await Promise.all([
-          cachedManagement === undefined ? loadControlManagementSnapshot() : Promise.resolve(cachedManagement),
+          loadControlManagementSnapshot(),
           loadDispatchList(nextSummary.serviceDate, {}, dispatchController.signal),
         ]);
         if (summaryController.signal.aborted || dispatchController.signal.aborted) return;
-        cachedManagement = nextManagement;
         setManagement(nextManagement);
+        onManagementChange?.(nextManagement);
         setOrders(dispatch.rows);
         onOrdersChange?.(dispatch.rows, nextSummary.serviceDate);
         setPanelError('');
@@ -120,9 +124,13 @@ function RemoteControlPage({
         if (initial) {
           setSummary(undefined);
           setManagement(undefined);
+          onManagementChange?.(undefined);
           setOrders([]);
           onOrdersChange?.([]);
           setPanelError(error instanceof Error ? error.message : '관제 정보를 불러오지 못했습니다.');
+        } else {
+          setManagement((current) => markControlTelemetryStale(current));
+          onManagementChange?.(undefined);
         }
       } finally {
         refreshing = false;
@@ -135,9 +143,10 @@ function RemoteControlPage({
       window.clearInterval(refreshTimer);
       summaryController.abort();
       dispatchController.abort();
+      onManagementChange?.(undefined);
       onOrdersChange?.([]);
     };
-  }, [onOrdersChange]);
+  }, [onManagementChange, onOrdersChange]);
 
   return (
     <ControlPanels
@@ -155,6 +164,18 @@ function RemoteControlPage({
       vehicleColors={vehicleColors}
     />
   );
+}
+
+function markControlTelemetryStale(management: ManagementData | undefined): ManagementData | undefined {
+  if (management === undefined) return undefined;
+  return {
+    ...management,
+    vehicles: management.vehicles.map((vehicle) => ({
+      ...vehicle,
+      temperatureStale: true,
+      vehiclePositionStale: true,
+    })),
+  };
 }
 
 function ControlPanels({
@@ -255,7 +276,7 @@ function ControlPanels({
                   type="button"
                 >
                   <i aria-hidden="true" />
-                  <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong><small>{vehicle.type || '차종 미등록'}</small></span>
+                  <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong><small>{vehicle.type || '차종 미등록'} {controlVehicleTemperatureText(vehicle)}</small></span>
                   <em>{assignments.some((assignment) => assignment.vehicleId === vehicle.id) ? '배차 준비' : '배송원 미배정'}</em>
                 </button>
               ))}
@@ -362,6 +383,25 @@ function scheduledControlVehicles(orders: DispatchListItem[], management?: Manag
       .map((order) => order.vehicleId),
   );
   return management.vehicles.filter((vehicle) => scheduledVehicleIds.has(vehicle.id));
+}
+
+function controlVehicleTemperatureText(vehicle: ManagementData['vehicles'][number]): string {
+  if (vehicle.temperatureStale === true) {
+    const pairText = controlTemperaturePairText(vehicle);
+    return pairText === '온도 미수신' ? '온도 지연 미수신' : `온도 지연 ${pairText}`;
+  }
+  return controlTemperaturePairText(vehicle);
+}
+
+function controlTemperaturePairText(vehicle: ManagementData['vehicles'][number]): string {
+  const temperatureA = controlTemperatureText(vehicle.temperatureA);
+  const temperatureB = controlTemperatureText(vehicle.temperatureB);
+  if (temperatureA === '미수신' && temperatureB === '미수신') return '온도 미수신';
+  return `A ${temperatureA} B ${temperatureB}`;
+}
+
+function controlTemperatureText(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}℃` : '미수신';
 }
 
 function customerFirstEta(orders: DispatchListItem[], configuredEtas: ReadonlyMap<string, string>): string {

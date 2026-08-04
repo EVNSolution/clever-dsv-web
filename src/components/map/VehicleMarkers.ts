@@ -50,7 +50,6 @@ function vehicleFeatures(vehicles: MapCanvasVehiclePoint[]): FeatureCollection<P
       type: 'Feature',
       properties: {
         label: vehicle.label,
-        vehicleId: vehicle.id,
       },
       geometry: {
         type: 'Point',

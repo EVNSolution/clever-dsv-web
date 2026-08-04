@@ -16,6 +16,7 @@ import type { AdminSettings } from '../services/settings';
 import type { DispatchListItem } from '../services/dispatch';
 import { loadControlRoutes } from '../services/control-routes';
 import type { ControlRouteResult } from '../services/control-routes';
+import type { ManagementData } from '../demo/management';
 import type { DepartureLocation } from './DepartureMarker';
 import type { MapCanvasPoint, MapCanvasRoute, MapCanvasVehiclePoint } from './MapCanvas';
 
@@ -65,6 +66,7 @@ export function AdminShell({
   const [navigationExpanded, setNavigationExpanded] = useState(false);
   const [departureLocation, setDepartureLocation] = useState<DepartureLocation | null>(null);
   const [controlSettings, setControlSettings] = useState<AdminSettings | null>(null);
+  const [controlManagement, setControlManagement] = useState<ManagementData>();
   const [controlOrders, setControlOrders] = useState<DispatchListItem[]>([]);
   const [controlServiceDate, setControlServiceDate] = useState<string>();
   const [selectedControlVehicleId, setSelectedControlVehicleId] = useState<string>();
@@ -93,8 +95,8 @@ export function AdminShell({
     [controlRouteRequests, controlRouteResults, controlServiceDate, controlSettings],
   );
   const controlVehiclePoints = useMemo(
-    () => scheduledControlVehiclePoints(controlOrders, departureLocation),
-    [controlOrders, departureLocation],
+    () => scheduledControlVehiclePoints(controlOrders, departureLocation, controlManagement),
+    [controlManagement, controlOrders, departureLocation],
   );
   const handleControlOrdersChange = useCallback((orders: DispatchListItem[], serviceDate?: string) => {
     setControlOrders(orders);
@@ -128,6 +130,7 @@ export function AdminShell({
     if (activePath === '/control') return;
     setControlOrders([]);
     setControlServiceDate(undefined);
+    setControlManagement(undefined);
     setSelectedControlVehicleId(undefined);
   }, [activePath, previewOnly]);
 
@@ -277,6 +280,7 @@ export function AdminShell({
               : (
                 <ControlPage
                   estimatedArrivalByOrderId={controlEstimatedArrivalByOrderId}
+                  onManagementChange={setControlManagement}
                   onOrdersChange={handleControlOrdersChange}
                   onVehicleSelect={(vehicleId) => setSelectedControlVehicleId((current) => current === vehicleId ? undefined : vehicleId)}
                   selectedVehicleId={selectedControlVehicleId}
@@ -475,8 +479,8 @@ function controlVehicleColors(orders: DispatchListItem[]): ReadonlyMap<string, s
 function scheduledControlVehiclePoints(
   orders: DispatchListItem[],
   departureLocation: DepartureLocation | null,
+  management?: ManagementData,
 ): MapCanvasVehiclePoint[] {
-  if (departureLocation === null) return [];
   const vehicleIds = new Set(
     orders.flatMap((order) => (
       order.assignmentStatus === 'ASSIGNED' && order.vehicleId !== null
@@ -485,10 +489,37 @@ function scheduledControlVehiclePoints(
     )),
   );
   if (vehicleIds.size === 0) return [];
-  return [{
-    id: 'scheduled-vehicles',
-    label: `${vehicleIds.size}대 예정`,
-    latitude: departureLocation.latitude,
-    longitude: departureLocation.longitude,
-  }];
+  const scheduledVehicles = management?.vehicles.filter((vehicle) => vehicleIds.has(vehicle.id)) ?? [];
+  const positionedVehicles = scheduledVehicles.flatMap((vehicle) => {
+    const { vehicleLatitude: latitude, vehicleLongitude: longitude } = vehicle;
+    if (
+      vehicle.vehiclePositionStale === true
+      || typeof latitude !== 'number'
+      || typeof longitude !== 'number'
+      || !Number.isFinite(latitude)
+      || !Number.isFinite(longitude)
+      || latitude < -90
+      || latitude > 90
+      || longitude < -180
+      || longitude > 180
+    ) return [];
+    return [{
+      id: vehicle.id,
+      label: vehicle.plate || vehicle.type || '차량 위치',
+      latitude,
+      longitude,
+    }];
+  });
+  const positionedVehicleIds = new Set(positionedVehicles.map((vehicle) => vehicle.id));
+  const fallbackCount = [...vehicleIds].filter((vehicleId) => !positionedVehicleIds.has(vehicleId)).length;
+  if (departureLocation === null || fallbackCount === 0) return positionedVehicles;
+  return [
+    ...positionedVehicles,
+    {
+      id: 'scheduled-vehicles',
+      label: `${fallbackCount}대 예정`,
+      latitude: departureLocation.latitude,
+      longitude: departureLocation.longitude,
+    },
+  ];
 }

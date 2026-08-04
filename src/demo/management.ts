@@ -17,8 +17,19 @@ export type ManagementVehicle = {
   plate: string;
   type: string;
   note: string;
+  distanceTodayKm?: number | null;
+  ignitionOn?: boolean | null;
+  speedKph?: number | null;
   telematicsCapabilities?: string[];
   telematicsSerialNumber?: string;
+  temperatureA?: number | null;
+  temperatureB?: number | null;
+  temperatureObservedAt?: string | null;
+  temperatureStale?: boolean | null;
+  vehicleLatitude?: number | null;
+  vehicleLongitude?: number | null;
+  vehiclePositionObservedAt?: string | null;
+  vehiclePositionStale?: boolean | null;
 };
 
 export type ManagementAssignment = ManagementAssignmentRelation;
