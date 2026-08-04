@@ -1315,14 +1315,20 @@ test('management issues a driver signup invite without an existing driver', asyn
   const driverList = page.getByLabel('배송원 리스트');
   await driverList.getByRole('button', { name: '초대 생성', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '배송원 초대' });
-  await expect(dialog).toContainText('배송원 정보는 미리 입력하지 않습니다.');
-  await expect(dialog.getByRole('textbox')).toHaveCount(0);
   const appDownloadUrl = 'https://drive.google.com/file/d/1XRXAqREGtJJRMUsRnKgRAhFsiikE4V1y/view?usp=share_link';
-  await expect(dialog.getByRole('link', { name: 'Android 앱 설치', exact: true })).toHaveAttribute('href', appDownloadUrl);
-  await dialog.getByRole('button', { name: '앱 설치 링크 복사', exact: true }).click();
-  await expect(dialog.getByText('앱 설치 링크를 복사했습니다.', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('tab', { name: '설치', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(dialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true }).locator('path')).toHaveAttribute('d', /M/u);
+  await expect(dialog.getByLabel('배송원 앱 설치 링크', { exact: true })).toHaveValue(appDownloadUrl);
+  await expect(dialog.getByRole('link', { name: '설치 페이지 열기', exact: true })).toHaveAttribute('href', appDownloadUrl);
+  await dialog.getByRole('button', { name: '설치 링크 복사', exact: true }).click();
+  await expect(dialog.getByText('설치 링크를 복사했습니다.', { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(appDownloadUrl);
 
+  await dialog.getByRole('tab', { name: '초대', exact: true }).click();
+  await expect(dialog.getByRole('tab', { name: '초대', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(dialog).toContainText('배송원 정보는 미리 입력하지 않습니다.');
+  await expect(dialog.getByRole('textbox')).toHaveCount(0);
   await dialog.getByRole('button', { name: '초대 링크 생성', exact: true }).click();
 
   await expect(dialog.getByLabel('배송원 가입 링크', { exact: true })).toHaveValue(signupUrl);
@@ -1332,8 +1338,8 @@ test('management issues a driver signup invite without an existing driver', asyn
   expect(requestBody).toBeNull();
   expect(csrfToken).toBe('g006-admin-csrf');
 
-  await dialog.getByRole('button', { name: '링크 복사', exact: true }).click();
-  await expect(dialog.getByText('링크를 복사했습니다.', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: '초대 링크 복사', exact: true }).click();
+  await expect(dialog.getByText('초대 링크를 복사했습니다.', { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(signupUrl);
   const storedValues = await page.evaluate(() => JSON.stringify({
     local: Object.values(window.localStorage),
