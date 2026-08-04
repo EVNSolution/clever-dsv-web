@@ -42,8 +42,11 @@ const controlVehiclePalette = [
 type ControlRouteRequest = {
   color: string;
   id: string;
-  orderIds: string[];
+  stops: ControlRouteStopRequest[];
   vehicleId: string;
+};
+type ControlRouteStopRequest = {
+  orderIds: string[];
 };
 
 export function AdminShell({
@@ -60,7 +63,6 @@ export function AdminShell({
   const activeTab = adminTabs.find((tab) => tab.path === activePath) ?? adminTabs[0];
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [navigationExpanded, setNavigationExpanded] = useState(false);
-  const [basemapReady, setBasemapReady] = useState(false);
   const [departureLocation, setDepartureLocation] = useState<DepartureLocation | null>(null);
   const [controlSettings, setControlSettings] = useState<AdminSettings | null>(null);
   const [controlOrders, setControlOrders] = useState<DispatchListItem[]>([]);
@@ -123,10 +125,7 @@ export function AdminShell({
   }, [navigationExpanded]);
 
   useEffect(() => {
-    if (activePath === '/control') {
-      setBasemapReady(false);
-      return;
-    }
+    if (activePath === '/control') return;
     setControlOrders([]);
     setControlServiceDate(undefined);
     setSelectedControlVehicleId(undefined);
@@ -261,10 +260,9 @@ export function AdminShell({
                   ariaLabel="관리자 관제 지도 - OpenFreeMap"
                   departureLocation={departureLocation}
                   onPointSelect={(pointId) => {
-                    const vehicleId = controlOrders.find((order) => order.sellerOrderId === pointId)?.vehicleId;
+                    const vehicleId = controlOrders.find((order) => order.destinationId === pointId)?.vehicleId;
                     if (vehicleId !== null && vehicleId !== undefined) setSelectedControlVehicleId(vehicleId);
                   }}
-                  onReady={() => setBasemapReady(true)}
                   points={controlMapPoints}
                   routes={controlMapRoutes}
                   selectedPointIds={selectedControlVehicleId === undefined ? [] : controlMapPoints.map((point) => point.id)}
@@ -274,7 +272,7 @@ export function AdminShell({
             )
         ) : null}
         {activePath === '/control'
-          ? (previewOnly || !basemapReady
+          ? (previewOnly
               ? <ControlPreviewPanels />
               : (
                 <ControlPage
@@ -317,32 +315,32 @@ function assignedControlMapPoints(
   vehicleColors: ReadonlyMap<string, string>,
   selectedVehicleId?: string,
 ): MapCanvasPoint[] {
-  return orders.flatMap((order) => (
-    order.assignmentStatus === 'ASSIGNED'
-    && order.vehicleId !== null
-    && (selectedVehicleId === undefined || order.vehicleId === selectedVehicleId)
-    && order.latitude !== null
-    && order.longitude !== null
-    && Number.isFinite(order.latitude)
-    && Number.isFinite(order.longitude)
-      ? [{
-          color: vehicleColors.get(order.vehicleId) ?? controlVehiclePalette[0],
-          id: order.sellerOrderId,
-          label: order.routeStopSequence === null ? undefined : String(order.routeStopSequence),
-          latitude: order.latitude,
-          longitude: order.longitude,
-          sortOrder: order.routeStopSequence ?? Number.MAX_SAFE_INTEGER,
-          tone: 'assigned' as const,
-        }]
-      : []
-  ));
+  return groupAssignedControlDestinations(orders, selectedVehicleId).flatMap((group) => {
+    const anchor = group.find((order) => (
+      order.latitude !== null
+      && order.longitude !== null
+      && Number.isFinite(order.latitude)
+      && Number.isFinite(order.longitude)
+    ));
+    if (anchor === undefined || anchor.latitude === null || anchor.longitude === null || anchor.vehicleId === null) return [];
+    const sequence = firstControlSequence(group);
+    return [{
+      color: vehicleColors.get(anchor.vehicleId) ?? controlVehiclePalette[0],
+      id: anchor.destinationId,
+      label: sequence === null ? undefined : String(sequence),
+      latitude: anchor.latitude,
+      longitude: anchor.longitude,
+      sortOrder: sequence ?? Number.MAX_SAFE_INTEGER,
+      tone: 'assigned' as const,
+    }];
+  });
 }
 
 function assignedControlRouteRequests(
   orders: DispatchListItem[],
   vehicleColors: ReadonlyMap<string, string>,
 ): ControlRouteRequest[] {
-  const routeOrders = new Map<string, DispatchListItem[]>();
+  const routeOrders = new Map<string, Map<string, DispatchListItem[]>>();
   for (const order of orders) {
     if (
       order.assignmentStatus !== 'ASSIGNED'
@@ -353,20 +351,29 @@ function assignedControlRouteRequests(
       || !Number.isFinite(order.longitude)
     ) continue;
     const routeId = order.routePlanId ?? order.vehicleId;
-    routeOrders.set(routeId, [...(routeOrders.get(routeId) ?? []), order]);
+    const destinationOrders = routeOrders.get(routeId) ?? new Map<string, DispatchListItem[]>();
+    destinationOrders.set(order.destinationId, [...(destinationOrders.get(order.destinationId) ?? []), order]);
+    routeOrders.set(routeId, destinationOrders);
   }
-  return [...routeOrders].map(([routeId, groupedOrders]) => {
-    const orderedStops = [...groupedOrders].sort((left, right) => (
-      (left.routeStopSequence ?? Number.MAX_SAFE_INTEGER)
-      - (right.routeStopSequence ?? Number.MAX_SAFE_INTEGER)
-    ));
-    const vehicleId = orderedStops[0]?.vehicleId;
+  return [...routeOrders].map(([routeId, destinationOrders]) => {
+    const orderedStops = [...destinationOrders.entries()]
+      .map(([destinationId, groupedOrders]) => ({
+        destinationId,
+        orders: [...groupedOrders].sort(compareControlRouteStops),
+        sequence: firstControlSequence(groupedOrders),
+      }))
+      .sort((left, right) => {
+        const sequenceOrder = (left.sequence ?? Number.MAX_SAFE_INTEGER) - (right.sequence ?? Number.MAX_SAFE_INTEGER);
+        if (sequenceOrder !== 0) return sequenceOrder;
+        return left.destinationId.localeCompare(right.destinationId, 'ko');
+      });
+    const vehicleId = orderedStops[0]?.orders[0]?.vehicleId;
     return {
       color: vehicleId === null || vehicleId === undefined
         ? controlVehiclePalette[0]
         : vehicleColors.get(vehicleId) ?? controlVehiclePalette[0],
       id: routeId,
-      orderIds: orderedStops.map((order) => order.sellerOrderId),
+      stops: orderedStops.map((stop) => ({ orderIds: stop.orders.map((order) => order.sellerOrderId) })),
       vehicleId: vehicleId ?? '',
     };
   });
@@ -413,15 +420,46 @@ function configuredControlEtas(
   for (const request of requests) {
     const durations = results.get(request.id)?.legDurationsSeconds ?? [];
     let cursorMs = startAt.getTime();
-    for (const [index, orderId] of request.orderIds.entries()) {
+    for (const [index, stop] of request.stops.entries()) {
       const durationSeconds = durations[index];
       if (durationSeconds === undefined || durationSeconds === null) break;
       cursorMs += durationSeconds * 1000;
-      estimates.set(orderId, new Date(cursorMs).toISOString());
+      const estimatedArrivalAt = new Date(cursorMs).toISOString();
+      for (const orderId of stop.orderIds) estimates.set(orderId, estimatedArrivalAt);
       cursorMs += stopMinutes * 60_000;
     }
   }
   return estimates;
+}
+
+function groupAssignedControlDestinations(
+  orders: DispatchListItem[],
+  selectedVehicleId?: string,
+): DispatchListItem[][] {
+  const groups = new Map<string, DispatchListItem[]>();
+  for (const order of orders) {
+    if (
+      order.assignmentStatus !== 'ASSIGNED'
+      || order.vehicleId === null
+      || (selectedVehicleId !== undefined && order.vehicleId !== selectedVehicleId)
+    ) continue;
+    const groupKey = `${order.vehicleId}:${order.destinationId}`;
+    groups.set(groupKey, [...(groups.get(groupKey) ?? []), order]);
+  }
+  return [...groups.values()].map((group) => [...group].sort(compareControlRouteStops));
+}
+
+function firstControlSequence(orders: DispatchListItem[]): number | null {
+  return [...orders]
+    .map((order) => order.routeStopSequence)
+    .filter((sequence): sequence is number => sequence !== null)
+    .sort((left, right) => left - right)[0] ?? null;
+}
+
+function compareControlRouteStops(left: DispatchListItem, right: DispatchListItem): number {
+  const sequenceOrder = (left.routeStopSequence ?? Number.MAX_SAFE_INTEGER) - (right.routeStopSequence ?? Number.MAX_SAFE_INTEGER);
+  if (sequenceOrder !== 0) return sequenceOrder;
+  return left.sellerOrderKey.localeCompare(right.sellerOrderKey, 'ko');
 }
 
 function controlVehicleColors(orders: DispatchListItem[]): ReadonlyMap<string, string> {

@@ -32,6 +32,17 @@ export type DeliverySummary = {
   proofStatus: string;
   proofs: DeliveryProof[];
   eventSummary: DeliveryEventSummary[];
+  rawNote?: string;
+  reviewStatus?: 'CLEARED' | 'CONFIRMED' | 'NOT_APPLICABLE' | 'UNCONFIRMED';
+  routeConstraintStatus?: 'NOT_APPLICABLE' | 'NOT_EVALUATED' | 'PENDING_RECALCULATION' | 'UNCONFIRMED';
+  timeConstraint?: {
+    auditEventId: string;
+    confirmedAt: string;
+    confirmedBy?: string;
+    status: 'CONFIRMED';
+    timeWindowEnd: string;
+    timeWindowStart: string;
+  };
 };
 
 export type RecordsPageInfo = {
@@ -67,6 +78,10 @@ export function deliverySummaryFrom(value: unknown): DeliverySummary {
     'proofStatus',
     'proofs',
     'eventSummary',
+    'rawNote',
+    'reviewStatus',
+    'routeConstraintStatus',
+    'timeConstraint',
   ])) {
     throw new Error('배송 요약 응답 형식이 올바르지 않습니다.');
   }
@@ -81,6 +96,26 @@ export function deliverySummaryFrom(value: unknown): DeliverySummary {
     proofStatus: requiredString(value, 'proofStatus'),
     proofs: requiredArray(value, 'proofs').map(proofFrom),
     eventSummary: requiredArray(value, 'eventSummary').map(eventSummaryFrom),
+    rawNote: optionalString(value, 'rawNote'),
+    reviewStatus: optionalEnum(value, 'reviewStatus', ['CLEARED', 'CONFIRMED', 'NOT_APPLICABLE', 'UNCONFIRMED']),
+    routeConstraintStatus: optionalEnum(value, 'routeConstraintStatus', ['NOT_APPLICABLE', 'NOT_EVALUATED', 'PENDING_RECALCULATION', 'UNCONFIRMED']),
+    timeConstraint: optionalTimeConstraint(value.timeConstraint),
+  };
+}
+
+function optionalTimeConstraint(value: unknown): DeliverySummary['timeConstraint'] {
+  if (value === undefined) return undefined;
+  if (!hasOnlyKeys(value, ['auditEventId', 'confirmedAt', 'confirmedBy', 'status', 'timeWindowEnd', 'timeWindowStart'])
+    || value.status !== 'CONFIRMED') {
+    throw new Error('시간 제약 응답 형식이 올바르지 않습니다.');
+  }
+  return {
+    auditEventId: requiredString(value, 'auditEventId'),
+    confirmedAt: requiredString(value, 'confirmedAt'),
+    confirmedBy: optionalString(value, 'confirmedBy'),
+    status: value.status,
+    timeWindowEnd: requiredString(value, 'timeWindowEnd'),
+    timeWindowStart: requiredString(value, 'timeWindowStart'),
   };
 }
 
@@ -158,6 +193,17 @@ function optionalBoolean(source: Record<string, unknown>, key: string): boolean 
   if (value === undefined) return undefined;
   if (typeof value !== 'boolean') throw new Error(`${key} 필드 형식이 올바르지 않습니다.`);
   return value;
+}
+
+function optionalEnum<const T extends string>(
+  source: Record<string, unknown>,
+  key: string,
+  allowed: readonly T[],
+): T | undefined {
+  const value = source[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !allowed.includes(value as T)) throw new Error(`${key} 필드 형식이 올바르지 않습니다.`);
+  return value as T;
 }
 
 function requiredNumber(source: Record<string, unknown>, key: string): number {

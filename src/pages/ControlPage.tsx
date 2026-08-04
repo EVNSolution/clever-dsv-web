@@ -15,6 +15,11 @@ type ManufacturerOrderGroup = {
   name: string;
   orders: DispatchListItem[];
 };
+type ControlDestinationGroup = {
+  anchor: DispatchListItem;
+  destinationId: string;
+  orders: DispatchListItem[];
+};
 
 const mobileControlQuery = '(max-width: 768px)';
 
@@ -183,6 +188,7 @@ function ControlPanels({
     : orders
       .filter((order) => order.vehicleId === selectedVehicleId)
       .sort(compareControlStops);
+  const selectedVehicleDestinations = groupControlDestinations(selectedVehicleOrders);
 
   useEffect(() => {
     const compactViewport = window.matchMedia(mobileControlQuery);
@@ -260,21 +266,24 @@ function ControlPanels({
           <div className="tab-line section-heading">
             <span className="destination-title desktop-panel-title">배송지 리스트</span>
             <button className="mobile-panel-toggle" type="button" aria-expanded={mobilePanel === 'destinations'} aria-label={`배송지 리스트 ${mobilePanel === 'destinations' ? '닫기' : '펼치기'}`} onClick={() => setMobilePanel((current) => current === 'destinations' ? undefined : 'destinations')}>
-              <span>배송지 리스트</span><span className="chip mini">{selectedVehicleOrders.length}건</span><span className="mobile-panel-action">{mobilePanel === 'destinations' ? '닫기' : '펼치기'}</span>
+              <span>배송지 리스트</span><span className="chip mini">{selectedVehicleDestinations.length}곳</span><span className="mobile-panel-action">{mobilePanel === 'destinations' ? '닫기' : '펼치기'}</span>
             </button>
-            <span className="chip mini desktop-panel-tools">{selectedVehicleOrders.length}건</span>
+            <span className="chip mini desktop-panel-tools">{selectedVehicleDestinations.length}곳</span>
           </div>
           <div className="control-destination-list overlay-scroll">
             <div className="control-destination-columns" aria-hidden="true"><span>배송지</span><span>예상 도착</span><span>실제 완료</span></div>
-            {selectedVehicleOrders.map((order) => (
-              <div className="control-destination-row" key={order.sellerOrderId}>
-                <i className="control-order-sequence" aria-label={`배송 순서 ${order.routeStopSequence ?? '미정'}`}>{order.routeStopSequence ?? '-'}</i>
-                <span><b>{order.destinationDisplayName || '배송지 미등록'}</b><small>{order.destinationAddress || order.sellerOrderKey}</small></span>
-                <time>{formatControlTime(controlEta(order, estimatedArrivalByOrderId))}</time>
-                <time className={order.actualCompletedAt === null ? 'empty' : 'completed'}>{formatControlTime(order.actualCompletedAt)}</time>
+            {selectedVehicleDestinations.map((destination) => (
+              <div className="control-destination-row" key={destination.destinationId}>
+                <i className="control-order-sequence" aria-label={`배송 순서 ${controlSequence(destination.orders)}`}>{controlSequence(destination.orders)}</i>
+                <span>
+                  <b>{destination.anchor.destinationDisplayName || '배송지 미등록'}</b>
+                  <small>{controlDestinationMeta(destination)}</small>
+                </span>
+                <time>{formatControlTime(sharedControlEta(destination.orders, estimatedArrivalByOrderId))}</time>
+                <time className={controlDestinationCompletedAt(destination.orders) === null ? 'empty' : 'completed'}>{formatControlTime(controlDestinationCompletedAt(destination.orders))}</time>
               </div>
             ))}
-            {!selectedVehicleOrders.length ? <div className="panel-state">선택한 차량에 배정된 배송지가 없습니다.</div> : null}
+            {!selectedVehicleDestinations.length ? <div className="panel-state">선택한 차량에 배정된 배송지가 없습니다.</div> : null}
           </div>
         </section> : null}
 
@@ -318,6 +327,19 @@ function groupOrdersByManufacturer(orders: DispatchListItem[], management?: Mana
   return [...groups].map(([id, groupedOrders]) => ({ id, name: names.get(id) ?? '고객사 미등록', orders: groupedOrders }));
 }
 
+function groupControlDestinations(orders: DispatchListItem[]): ControlDestinationGroup[] {
+  const groups = new Map<string, DispatchListItem[]>();
+  for (const order of orders) groups.set(order.destinationId, [...(groups.get(order.destinationId) ?? []), order]);
+  return [...groups.entries()].map(([destinationId, groupedOrders]) => {
+    const sortedOrders = [...groupedOrders].sort(compareControlStops);
+    return {
+      anchor: sortedOrders[0],
+      destinationId,
+      orders: sortedOrders,
+    };
+  });
+}
+
 function scheduledControlVehicles(orders: DispatchListItem[], management?: ManagementData): ManagementData['vehicles'] {
   if (!management || orders.length === 0) return [];
   const scheduledVehicleIds = new Set(
@@ -342,10 +364,43 @@ function manufacturerFirstEta(orders: DispatchListItem[], configuredEtas: Readon
   return formatControlTime(controlEta(first, configuredEtas));
 }
 
+function sharedControlEta(orders: DispatchListItem[], configuredEtas: ReadonlyMap<string, string>): string | null {
+  return [...orders]
+    .map((order) => controlEta(order, configuredEtas))
+    .filter((value): value is string => value !== null)
+    .sort((left, right) => controlTimeValue(left) - controlTimeValue(right))[0] ?? null;
+}
+
+function controlDestinationCompletedAt(orders: DispatchListItem[]): string | null {
+  if (orders.some((order) => order.actualCompletedAt === null)) return null;
+  return [...orders]
+    .map((order) => order.actualCompletedAt)
+    .filter((value): value is string => value !== null)
+    .sort((left, right) => controlTimeValue(right) - controlTimeValue(left))[0] ?? null;
+}
+
+function controlSequence(orders: DispatchListItem[]): string {
+  const first = orders
+    .map((order) => order.routeStopSequence)
+    .filter((value): value is number => value !== null)
+    .sort((left, right) => left - right)[0];
+  return first === undefined ? '-' : String(first);
+}
+
+function controlDestinationMeta(destination: ControlDestinationGroup): string {
+  const address = destination.anchor.destinationAddress || destination.anchor.sellerOrderKey;
+  return destination.orders.length > 1 ? `${address} / ${destination.orders.length}건` : address;
+}
+
 function controlEtaTimestamp(order: DispatchListItem, configuredEtas: ReadonlyMap<string, string>): number {
   const eta = controlEta(order, configuredEtas);
   if (!eta) return Number.MAX_SAFE_INTEGER;
   const timestamp = new Date(eta).getTime();
+  return Number.isNaN(timestamp) ? Number.MAX_SAFE_INTEGER : timestamp;
+}
+
+function controlTimeValue(value: string): number {
+  const timestamp = new Date(value).getTime();
   return Number.isNaN(timestamp) ? Number.MAX_SAFE_INTEGER : timestamp;
 }
 
@@ -366,7 +421,9 @@ function formatControlTime(value: string | null): string {
 }
 
 function compareControlStops(left: DispatchListItem, right: DispatchListItem): number {
-  return (left.routeStopSequence ?? Number.MAX_SAFE_INTEGER) - (right.routeStopSequence ?? Number.MAX_SAFE_INTEGER);
+  const sequenceOrder = (left.routeStopSequence ?? Number.MAX_SAFE_INTEGER) - (right.routeStopSequence ?? Number.MAX_SAFE_INTEGER);
+  if (sequenceOrder !== 0) return sequenceOrder;
+  return left.sellerOrderKey.localeCompare(right.sellerOrderKey, 'ko');
 }
 
 function manufacturerInquiryHref(customerId: string, serviceDate?: string): string {
