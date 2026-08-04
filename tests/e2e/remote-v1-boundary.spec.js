@@ -75,6 +75,10 @@ const operationalSettings = {
   showTemperatureAlerts: true,
   temperatureLimit: 8,
 };
+const g003AdminSession = {
+  ...fullAdminSession,
+  scopes: [...fullAdminSession.scopes, 'dsv:dispatches:write'],
+};
 const demoIdentifierPattern = /DSV-2026-0709-(?:01|02)|DSV-SCHEDULED-03|CR-(?:101|204|207|303|330|410)|(?:11바 1201|12바 2302|13사 3403|14자 4504|15바 5605|21사 6101|22자 6202|23바 6303|24사 6404|31자 7104|32바 7207|33사 7311|34자 7412)|김도윤|역삼 진단센터/iu;
 const forbiddenCustomerAuthorityParams = ['customer', 'customerId', 'accountId'];
 
@@ -87,6 +91,48 @@ function v1Error(status, message) {
     body: { error: { code: `G006_${status}`, message, requestId: `g006-error-${status}` } },
     status,
   };
+}
+
+function emptyV1List() {
+  return v1Envelope({ items: [], page: { hasMore: false } });
+}
+
+function g003DispatchRows() {
+  return [
+    {
+      assignmentStatus: 'UNASSIGNED',
+      customerId: 'customer-g003',
+      deliveryStopId: '11111111-1111-4111-8111-111111111111',
+      destinationAddress: '서울특별시 강남구 테헤란로 152',
+      destinationDisplayName: '같은 주소 배송처 A',
+      destinationId: 'destination-g003-a',
+      etaStatus: 'NOT_REQUIRED',
+      latitude: 37.500643,
+      longitude: 127.036545,
+      rawNote: '오전 11시 배송',
+      reviewStatus: 'UNCONFIRMED',
+      routeConstraintStatus: 'UNCONFIRMED',
+      sellerOrderId: '22222222-2222-4222-8222-222222222222',
+      sellerOrderKey: '2018330248',
+      timeConstraint: null,
+    },
+    {
+      assignmentStatus: 'UNASSIGNED',
+      customerId: 'customer-g003',
+      deliveryStopId: '33333333-3333-4333-8333-333333333333',
+      destinationAddress: '서울특별시 강남구 테헤란로 152',
+      destinationDisplayName: '같은 주소 배송처 B',
+      destinationId: 'destination-g003-b',
+      etaStatus: 'NOT_REQUIRED',
+      latitude: 37.500643,
+      longitude: 127.036545,
+      reviewStatus: 'NOT_APPLICABLE',
+      routeConstraintStatus: 'NOT_APPLICABLE',
+      sellerOrderId: '44444444-4444-4444-8444-444444444444',
+      sellerOrderKey: '2018330247',
+      timeConstraint: null,
+    },
+  ];
 }
 
 async function installApiFixtures(page, fixtures) {
@@ -270,6 +316,49 @@ async function callAssignmentCommand(page, { body, path, status }) {
     }
   }, {
     clientSource: executableClientSource(),
+    requestPath: path,
+    responseBody: body,
+    responseStatus: status,
+  });
+}
+
+async function callTimeConstraintCommand(page, { body, json, path, status }) {
+  await page.goto('/login');
+  return page.evaluate(async ({ clientSource, requestJson, requestPath, responseBody, responseStatus }) => {
+    const calls = [];
+    const originalFetch = window.fetch;
+    const moduleUrl = URL.createObjectURL(new Blob([clientSource], { type: 'text/javascript' }));
+    window.fetch = async (input, init) => {
+      calls.push({
+        body: init?.body === undefined ? null : JSON.parse(String(init.body)),
+        method: init?.method,
+        url: String(input),
+      });
+      return new Response(JSON.stringify(responseBody), {
+        headers: { 'Content-Type': 'application/json' },
+        status: responseStatus,
+      });
+    };
+    try {
+      const client = await import(moduleUrl);
+      try {
+        const data = await client.requestV1TimeConstraintCommandJson(requestPath, { method: 'POST', json: requestJson });
+        return { calls, data, outcome: 'resolved' };
+      } catch (error) {
+        return {
+          calls,
+          message: error instanceof Error ? error.message : String(error),
+          outcome: 'rejected',
+          status: typeof error === 'object' && error !== null && 'status' in error ? error.status : undefined,
+        };
+      }
+    } finally {
+      window.fetch = originalFetch;
+      URL.revokeObjectURL(moduleUrl);
+    }
+  }, {
+    clientSource: executableClientSource(),
+    requestJson: json,
     requestPath: path,
     responseBody: body,
     responseStatus: status,
@@ -685,10 +774,12 @@ test('requests customer deliveries only after a valid customer v1 session', asyn
             sellerOrderId: 'order-g006-authorized',
             sellerOrderKey: 'SELLER-G006-AUTHORIZED',
             destinationDisplayName: 'G006 Authorized Clinic',
+            destinationId: 'destination-g006-authorized',
             deliveryStatus: 'IN_TRANSIT',
             etaStatus: 'ON_TIME',
             estimatedArrivalAt: '2026-07-23T06:30:00.000Z',
             proofStatus: 'NONE',
+            shippedBoxes: 4,
             eventSummary: [{ type: 'DEPARTED', occurredAt: '2026-07-23T05:30:00.000Z' }],
           },
         ],
@@ -719,10 +810,12 @@ test('loads the administrator customer map through the customer-scoped contract'
             sellerOrderKey: 'SELLER-G006-MAP',
             destinationDisplayName: 'G006 Customer Destination',
             destinationAddress: '서울특별시 중구 세종대로 110',
+            destinationId: 'destination-g006-map',
             deliveryStatus: 'IN_TRANSIT',
             etaStatus: 'READY',
             estimatedArrivalAt: '2026-08-03T03:30:00.000Z',
             proofStatus: 'NONE',
+            shippedBoxes: 3,
             eventSummary: [],
             latitude: 37.5663,
             longitude: 126.9779,
@@ -743,6 +836,97 @@ test('loads the administrator customer map through the customer-scoped contract'
   await expect(page.getByRole('article', { name: '제조사 배송지 지도' })).toBeVisible();
   await expect(page.getByText('G006 Customer Destination', { exact: false }).first()).toBeVisible();
   await expect(page.getByText('서울86바3800', { exact: true }).first()).toBeVisible();
+  expect(api.unexpected).toEqual([]);
+});
+
+test('groups customer deliveries by destination id with shared ETA and deduped markers', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(customerSession),
+    'GET /api/dsv/v1/customer/deliveries': v1Envelope({
+      items: [
+        {
+          sellerOrderId: 'order-g006-same-late',
+          sellerOrderKey: 'SELLER-G006-SAME-LATE',
+          destinationDisplayName: 'G006 Shared Hospital',
+          destinationAddress: '서울특별시 강남구 테헤란로 152',
+          destinationId: 'destination-g006-shared',
+          deliveryStatus: 'IN_TRANSIT',
+          etaStatus: 'DELAYED',
+          estimatedArrivalAt: '2026-08-03T05:00:00.000Z',
+          proofStatus: 'NONE',
+          shippedBoxes: 3,
+          eventSummary: [],
+          latitude: 37.500643,
+          longitude: 127.036545,
+          vehicleDisplayName: '서울86바3800',
+          vehicleId: 'vehicle-g006-shared',
+          vehicleLatitude: 37.49,
+          vehicleLongitude: 127.02,
+        },
+        {
+          sellerOrderId: 'order-g006-other',
+          sellerOrderKey: 'SELLER-G006-OTHER',
+          destinationDisplayName: 'G006 Other Clinic',
+          destinationAddress: '서울특별시 중구 세종대로 110',
+          destinationId: 'destination-g006-other',
+          deliveryStatus: 'PLANNED',
+          etaStatus: 'READY',
+          estimatedArrivalAt: '2026-08-03T04:00:00.000Z',
+          proofStatus: 'NONE',
+          shippedBoxes: 2,
+          eventSummary: [],
+          latitude: 37.5663,
+          longitude: 126.9779,
+          vehicleDisplayName: '서울86바3800',
+          vehicleId: 'vehicle-g006-shared',
+          vehicleLatitude: 37.49,
+          vehicleLongitude: 127.02,
+        },
+        {
+          sellerOrderId: 'order-g006-same-early',
+          sellerOrderKey: 'SELLER-G006-SAME-EARLY',
+          destinationDisplayName: 'G006 Shared Hospital',
+          destinationAddress: '서울특별시 강남구 테헤란로 152',
+          destinationId: 'destination-g006-shared',
+          deliveryStatus: 'DELIVERED',
+          etaStatus: 'ON_TIME',
+          estimatedArrivalAt: '2026-08-03T03:30:00.000Z',
+          proofStatus: 'SIGNED',
+          shippedBoxes: 7,
+          eventSummary: [],
+          latitude: 37.500643,
+          longitude: 127.036545,
+          vehicleDisplayName: '서울86바3800',
+          vehicleId: 'vehicle-g006-shared',
+          vehicleLatitude: 37.49,
+          vehicleLongitude: 127.02,
+        },
+      ],
+      page: { hasMore: false },
+    }),
+  });
+
+  await page.goto('/customer/delivery-inquiry');
+
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries');
+  await expect(page.getByLabel('배송조회')).toContainText('2곳');
+  const sharedDestination = page.getByRole('button', { name: /G006 Shared Hospital/ });
+  await expect(sharedDestination).toContainText('12:30');
+  await expect(sharedDestination).toContainText('2건 / 10박스');
+  await expect(page.getByText('SELLER-G006-SAME-EARLY', { exact: true })).toBeVisible();
+  await expect(page.getByText('DELIVERED', { exact: true })).toBeVisible();
+  await expect(page.getByText('7박스', { exact: true })).toBeVisible();
+  await expect(page.getByText('SELLER-G006-SAME-LATE', { exact: true })).toBeVisible();
+  await expect(page.getByText('IN_TRANSIT', { exact: true })).toBeVisible();
+  await expect(page.getByText('3박스', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /G006 Other Clinic/ })).toContainText('1건 / 2박스');
+  await page.locator('.map-canvas.ready').waitFor({ state: 'visible' });
+  await expect.poll(() => page.evaluate(() =>
+    new Set(
+      window.dsvMap?.querySourceFeatures('operational-destinations')
+        .map((feature) => feature.properties?.pointId) ?? [],
+    ).size,
+  )).toBe(2);
   expect(api.unexpected).toEqual([]);
 });
 
@@ -954,6 +1138,14 @@ test('keeps the v1 assignment-command legacy envelope exception bounded to the e
   ]);
 });
 
+test('keeps the strict v1 time-constraint command allowlist exact', () => {
+  const clientSource = readFileSync(new URL('../../src/api/client.ts', import.meta.url), 'utf8');
+  expect(extractAllowlist(clientSource, 'timeConstraintCommandAllowlist')).toEqual([
+    'POST seller-orders/[^/]+/time-constraint/confirm',
+    'POST seller-orders/[^/]+/time-constraint/clear',
+  ]);
+});
+
 test('unwraps a successful legacy assignment-command envelope', async ({ page }) => {
   const result = await callAssignmentCommand(page, {
     body: { data: { assignmentId: 'assignment-g006' }, error: null },
@@ -966,6 +1158,272 @@ test('unwraps a successful legacy assignment-command envelope', async ({ page })
     data: { assignmentId: 'assignment-g006' },
     outcome: 'resolved',
   });
+});
+
+test('sends strict v1 time-constraint command payloads without using legacy envelopes', async ({ page }) => {
+  const result = await callTimeConstraintCommand(page, {
+    body: v1Envelope({
+      auditEventId: 'audit-g003',
+      commandId: 'command-g003',
+      deliveryStopId: '11111111-1111-4111-8111-111111111111',
+      rawNote: '오전 11시 배송',
+      recalculation: {
+        reason: 'SCHEDULER_UNAVAILABLE',
+        retryable: true,
+        routePlanId: 'route-plan-g003',
+        status: 'FAILED_TO_SCHEDULE',
+      },
+      reviewStatus: 'CONFIRMED',
+      routeConstraintStatus: 'PENDING_RECALCULATION',
+      sellerOrderId: '22222222-2222-4222-8222-222222222222',
+      sellerOrderKey: '2018330248',
+      timeConstraint: {
+        auditEventId: 'audit-g003',
+        confirmedAt: '2026-08-03T09:47:08.000Z',
+        status: 'CONFIRMED',
+        timeWindowEnd: '11:00',
+        timeWindowStart: '10:30',
+      },
+    }, 'g003-command'),
+    json: {
+      commandId: 'command-g003',
+      deliveryStopId: '11111111-1111-4111-8111-111111111111',
+      expectedVersion: 'route-version-g003',
+      timeWindowEnd: '11:00',
+      timeWindowStart: '10:30',
+    },
+    path: 'seller-orders/22222222-2222-4222-8222-222222222222/time-constraint/confirm',
+    status: 200,
+  });
+
+  expect(result).toMatchObject({
+    calls: [{
+      body: {
+        commandId: 'command-g003',
+        deliveryStopId: '11111111-1111-4111-8111-111111111111',
+        expectedVersion: 'route-version-g003',
+        timeWindowEnd: '11:00',
+        timeWindowStart: '10:30',
+      },
+      method: 'POST',
+      url: '/api/dsv/v1/seller-orders/22222222-2222-4222-8222-222222222222/time-constraint/confirm',
+    }],
+    data: {
+      rawNote: '오전 11시 배송',
+      recalculation: { retryable: true, status: 'FAILED_TO_SCHEDULE' },
+      reviewStatus: 'CONFIRMED',
+      routeConstraintStatus: 'PENDING_RECALCULATION',
+    },
+    outcome: 'resolved',
+  });
+});
+
+test('preserves strict v1 409 time-constraint errors', async ({ page }) => {
+  const result = await callTimeConstraintCommand(page, {
+    body: {
+      error: {
+        code: 'SELLER_ORDER_ASSIGNMENT_CHANGED',
+        message: 'SELLER_ORDER_ASSIGNMENT_CHANGED',
+        requestId: 'g003-conflict',
+      },
+    },
+    json: {
+      commandId: 'command-g003',
+      deliveryStopId: '11111111-1111-4111-8111-111111111111',
+      expectedVersion: 'UNASSIGNED',
+    },
+    path: 'seller-orders/22222222-2222-4222-8222-222222222222/time-constraint/clear',
+    status: 409,
+  });
+
+  expect(result).toMatchObject({
+    message: 'SELLER_ORDER_ASSIGNMENT_CHANGED',
+    outcome: 'rejected',
+    status: 409,
+  });
+});
+
+test('shows raw special instructions as preview-only 미확인 rows during upload', async ({ page }) => {
+  const csv = [
+    'driver,vehicle,배송처,condition,shippedbox,주소,customer,SellerOrderKey,특이사항,latitude,longitude',
+    '김도윤,21사 6101,같은 주소 배송처 A,Cold,4,서울특별시 강남구 테헤란로 152,DSV-HEALTH,2018330248,오전 11시 배송,37.500643,127.036545',
+    '김도윤,21사 6101,같은 주소 배송처 B,Cold,2,서울특별시 강남구 테헤란로 152,DSV-HEALTH,2018330247,,37.500643,127.036545',
+  ].join('\n');
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(g003AdminSession),
+    'GET /api/dsv/v1/dispatches': v1Envelope({ items: [], page: { hasMore: false } }),
+    'GET /api/dsv/v1/drivers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/vehicles?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/destinations?limit=100': emptyV1List(),
+    'POST /api/dsv/dispatch-imports/preview': ({ request }) => {
+      const payload = JSON.parse(request.postData() ?? '{}');
+      expect(payload.rows[0].notes).toBe('오전 11시 배송');
+      expect(payload.rows[1].notes).toBeNull();
+      return {
+        data: {
+          canCommit: true,
+          conditionCandidates: [],
+          fileName: 'g003-upload.csv',
+          planDate: payload.planDate,
+          rows: payload.rows.map((row) => ({
+            ...row,
+            driverId: null,
+            issues: [],
+            status: 'READY',
+            vehicleId: null,
+          })),
+          summary: { errorRows: 0, readyRows: 2, reviewRows: 0, totalRows: 2 },
+        },
+        error: null,
+      };
+    },
+  });
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '주문 업로드', exact: true }).click();
+  await page.getByLabel('배차 파일').setInputFiles({ buffer: Buffer.from(csv), mimeType: 'text/csv', name: 'g003-upload.csv' });
+
+  const notePreview = page.getByLabel('특이사항 미리보기');
+  await expect(notePreview).toContainText('2018330248');
+  await expect(notePreview).toContainText('오전 11시 배송');
+  await expect(notePreview).toContainText('미확인');
+  await expect(notePreview).not.toContainText('2018330247');
+  await expect(notePreview.getByRole('button')).toHaveCount(0);
+  expect(api.unexpected).toEqual([]);
+});
+
+test('confirms and clears selected dispatch time constraints with exact IDs and expectedVersion', async ({ page }) => {
+  const commandBodies = [];
+  let dispatchItems = g003DispatchRows();
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(g003AdminSession),
+    'GET /api/dsv/v1/dispatches': () => v1Envelope({ items: dispatchItems, page: { hasMore: false } }),
+    'GET /api/dsv/v1/drivers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/vehicles?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({
+      items: [{ customerId: 'customer-g003', displayName: 'DSV-HEALTH', orderCount: 2, status: 'ACTIVE' }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/destinations?limit=100': v1Envelope({
+      items: [
+        { address: '서울특별시 강남구 테헤란로 152', destinationId: 'destination-g003-a', displayName: '같은 주소 배송처 A' },
+        { address: '서울특별시 강남구 테헤란로 152', destinationId: 'destination-g003-b', displayName: '같은 주소 배송처 B' },
+      ],
+      page: { hasMore: false },
+    }),
+    'POST /api/dsv/v1/seller-orders/22222222-2222-4222-8222-222222222222/time-constraint/confirm': ({ request }) => {
+      const body = JSON.parse(request.postData() ?? '{}');
+      commandBodies.push({ action: 'confirm', body });
+      expect(body).toMatchObject({
+        deliveryStopId: '11111111-1111-4111-8111-111111111111',
+        expectedVersion: 'UNASSIGNED',
+        timeWindowEnd: '11:00',
+        timeWindowStart: '10:30',
+      });
+      expect(body.commandId).toMatch(/^[0-9a-f-]{36}$/u);
+      dispatchItems = dispatchItems.map((row) => row.sellerOrderId === '22222222-2222-4222-8222-222222222222'
+        ? {
+            ...row,
+            reviewStatus: 'CONFIRMED',
+            routeConstraintStatus: 'NOT_EVALUATED',
+            timeConstraint: {
+              auditEventId: 'audit-g003-confirm',
+              confirmedAt: '2026-08-03T09:47:08.000Z',
+              status: 'CONFIRMED',
+              timeWindowEnd: '11:00',
+              timeWindowStart: '10:30',
+            },
+          }
+        : row);
+      return v1Envelope({
+        auditEventId: 'audit-g003-confirm',
+        commandId: body.commandId,
+        deliveryStopId: body.deliveryStopId,
+        rawNote: '오전 11시 배송',
+        recalculation: { reason: 'UNASSIGNED_ORDER', retryable: false, routePlanId: null, status: 'NOT_REQUIRED' },
+        reviewStatus: 'CONFIRMED',
+        routeConstraintStatus: 'NOT_EVALUATED',
+        sellerOrderId: '22222222-2222-4222-8222-222222222222',
+        sellerOrderKey: '2018330248',
+        timeConstraint: {
+          auditEventId: 'audit-g003-confirm',
+          confirmedAt: '2026-08-03T09:47:08.000Z',
+          status: 'CONFIRMED',
+          timeWindowEnd: '11:00',
+          timeWindowStart: '10:30',
+        },
+      });
+    },
+    'POST /api/dsv/v1/seller-orders/22222222-2222-4222-8222-222222222222/time-constraint/clear': ({ request }) => {
+      const body = JSON.parse(request.postData() ?? '{}');
+      commandBodies.push({ action: 'clear', body });
+      expect(body).toMatchObject({
+        deliveryStopId: '11111111-1111-4111-8111-111111111111',
+        expectedVersion: 'UNASSIGNED',
+        reason: '관리자 시간 제약 해제',
+      });
+      expect(body.commandId).toMatch(/^[0-9a-f-]{36}$/u);
+      dispatchItems = dispatchItems.map((row) => row.sellerOrderId === '22222222-2222-4222-8222-222222222222'
+        ? {
+            ...row,
+            reviewStatus: 'CLEARED',
+            routeConstraintStatus: 'NOT_APPLICABLE',
+            timeConstraint: null,
+          }
+        : row);
+      return v1Envelope({
+        auditEventId: 'audit-g003-clear',
+        clearedAt: '2026-08-03T09:50:00.000Z',
+        commandId: body.commandId,
+        deliveryStopId: body.deliveryStopId,
+        rawNote: '오전 11시 배송',
+        recalculation: { reason: 'TIME_CONSTRAINT_CLEARED', retryable: false, routePlanId: null, status: 'NOT_REQUIRED' },
+        reviewStatus: 'CLEARED',
+        routeConstraintStatus: 'NOT_APPLICABLE',
+        sellerOrderId: '22222222-2222-4222-8222-222222222222',
+        sellerOrderKey: '2018330248',
+        timeConstraint: null,
+      });
+    },
+  });
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await page.getByText('2018330248', { exact: true }).click();
+
+  const instruction = page.getByLabel('특이사항');
+  await expect(instruction).toContainText('오전 11시 배송');
+  await expect(instruction).toContainText('미확인');
+  const dispatchRows = page.locator('.dispatch-order-table tbody');
+  await expect(dispatchRows).toContainText('2018330247');
+  await expect(dispatchRows.locator('tr').filter({ hasText: '2018330247' })).not.toContainText('미확인');
+
+  const startInput = page.getByLabel('시간 제약 시작');
+  const endInput = page.getByLabel('시간 제약 종료');
+  const confirmButton = page.getByRole('button', { name: '확정', exact: true });
+  const clearButton = page.getByLabel('특이사항').getByRole('button', { name: '해제', exact: true });
+  await expect(startInput).toBeEnabled();
+  await expect(endInput).toBeEnabled();
+  await expect(confirmButton).toBeEnabled();
+  await expect(clearButton).toBeEnabled();
+
+  await startInput.fill('10:30');
+  await endInput.fill('11:00');
+  await confirmButton.click();
+  await expect(dispatchRows.locator('tr').filter({ hasText: '2018330248' })).toContainText('확정');
+  await page.getByText('2018330248', { exact: true }).click();
+  await expect(clearButton).toBeEnabled();
+  await clearButton.click();
+  await expect(dispatchRows.locator('tr').filter({ hasText: '2018330248' })).not.toContainText('확정');
+
+  expect(commandBodies.map((entry) => entry.action)).toEqual(['confirm', 'clear']);
+  expect(commandBodies.map((entry) => entry.body.deliveryStopId)).toEqual([
+    '11111111-1111-4111-8111-111111111111',
+    '11111111-1111-4111-8111-111111111111',
+  ]);
+  expect(commandBodies.every((entry) => entry.body.deliveryStopId !== '22222222-2222-4222-8222-222222222222')).toBe(true);
+  expect(api.unexpected).toEqual([]);
 });
 
 test('preserves HTTP status and error message from a legacy assignment-command error', async ({ page }) => {

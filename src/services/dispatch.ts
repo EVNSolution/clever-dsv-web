@@ -1,7 +1,44 @@
-import { requestV1AssignmentCommandJson, requestV1ReadJson } from '../api/client';
+import {
+  requestV1AssignmentCommandJson,
+  requestV1ReadJson,
+  requestV1TimeConstraintCommandJson,
+} from '../api/client';
 
 export type DispatchAssignmentStatus = 'ASSIGNED' | 'UNASSIGNED';
 export type DispatchEtaStatus = 'FAILED' | 'NOT_REQUIRED' | 'PENDING' | 'READY' | 'STALE';
+export type DispatchSpecialInstructionReviewStatus = 'CLEARED' | 'CONFIRMED' | 'NOT_APPLICABLE' | 'UNCONFIRMED';
+export type DispatchRouteConstraintStatus = 'NOT_APPLICABLE' | 'NOT_EVALUATED' | 'PENDING_RECALCULATION' | 'UNCONFIRMED';
+
+export type DispatchTimeConstraint = {
+  auditEventId: string;
+  confirmedAt: string;
+  confirmedBy?: string;
+  status: 'CONFIRMED';
+  timeWindowEnd: string;
+  timeWindowStart: string;
+};
+
+export type DispatchTimeConstraintRecalculation = {
+  reason: 'ASSIGNED_ROUTE_TIME_CONSTRAINT_CLEARED' | 'ASSIGNED_ROUTE_TIME_CONSTRAINT_CONFIRMED' | 'SCHEDULER_UNAVAILABLE' | 'TIME_CONSTRAINT_CLEARED' | 'UNASSIGNED_ORDER';
+  retryable: boolean;
+  routePlanId: string | null;
+  status: 'FAILED_TO_SCHEDULE' | 'NOT_REQUIRED' | 'SCHEDULED';
+};
+
+export type DispatchTimeConstraintCommandResult = {
+  auditEventId: string;
+  clearedAt?: string;
+  clearedBy?: string;
+  commandId: string;
+  deliveryStopId: string;
+  rawNote: string | null;
+  recalculation: DispatchTimeConstraintRecalculation;
+  reviewStatus: DispatchSpecialInstructionReviewStatus;
+  routeConstraintStatus: DispatchRouteConstraintStatus;
+  sellerOrderId: string;
+  sellerOrderKey: string;
+  timeConstraint: DispatchTimeConstraint | null;
+};
 
 export type DispatchListItem = {
   actualCompletedAt: string | null;
@@ -10,16 +47,21 @@ export type DispatchListItem = {
   destinationAddress: string | null;
   destinationDisplayName: string | null;
   destinationId: string;
+  deliveryStopId: string | null;
   driverId: string | null;
   estimatedArrivalAt: string | null;
   etaStatus: DispatchEtaStatus;
   latitude: number | null;
   longitude: number | null;
+  rawNote: string | null;
+  reviewStatus: DispatchSpecialInstructionReviewStatus | null;
   routePlanId: string | null;
+  routeConstraintStatus: DispatchRouteConstraintStatus | null;
   routeStopSequence: number | null;
   routeVersionId: string | null;
   sellerOrderId: string;
   sellerOrderKey: string;
+  timeConstraint: DispatchTimeConstraint | null;
   vehicleId: string | null;
 };
 
@@ -51,16 +93,21 @@ type RawDispatch = {
   destinationAddress?: string;
   destinationDisplayName?: string;
   destinationId: string;
+  deliveryStopId?: string;
   driverId?: string;
   estimatedArrivalAt?: string;
   etaStatus: DispatchEtaStatus;
   latitude?: number;
   longitude?: number;
+  rawNote?: string;
+  reviewStatus?: DispatchSpecialInstructionReviewStatus;
   routePlanId?: string;
+  routeConstraintStatus?: DispatchRouteConstraintStatus;
   routeStopSequence?: number;
   routeVersionId?: string;
   sellerOrderId: string;
   sellerOrderKey: string;
+  timeConstraint?: DispatchTimeConstraint | null;
   vehicleId?: string;
 };
 
@@ -210,6 +257,45 @@ export async function deleteDispatchOrders(orders: DispatchListItem[], reason?: 
   return batchDeleteResult(data);
 }
 
+export async function confirmDispatchTimeConstraint(
+  order: DispatchListItem,
+  input: { timeWindowEnd: string; timeWindowStart: string },
+): Promise<DispatchTimeConstraintCommandResult> {
+  if (order.deliveryStopId === null) throw new Error('시간 제약을 변경할 배송지 ID가 없습니다.');
+  const data = await requestV1TimeConstraintCommandJson<unknown>(
+    `seller-orders/${encodeURIComponent(order.sellerOrderId)}/time-constraint/confirm`,
+    {
+      json: {
+        commandId: crypto.randomUUID(),
+        deliveryStopId: order.deliveryStopId,
+        expectedVersion: order.routeVersionId ?? 'UNASSIGNED',
+        timeWindowEnd: input.timeWindowEnd,
+        timeWindowStart: input.timeWindowStart,
+      },
+      method: 'POST',
+    },
+  );
+  return timeConstraintCommandResult(data);
+}
+
+export async function clearDispatchTimeConstraint(order: DispatchListItem, reason?: string): Promise<DispatchTimeConstraintCommandResult> {
+  if (order.deliveryStopId === null) throw new Error('시간 제약을 변경할 배송지 ID가 없습니다.');
+  const trimmedReason = reason?.trim();
+  const data = await requestV1TimeConstraintCommandJson<unknown>(
+    `seller-orders/${encodeURIComponent(order.sellerOrderId)}/time-constraint/clear`,
+    {
+      json: {
+        commandId: crypto.randomUUID(),
+        deliveryStopId: order.deliveryStopId,
+        expectedVersion: order.routeVersionId ?? 'UNASSIGNED',
+        ...(trimmedReason ? { reason: trimmedReason } : {}),
+      },
+      method: 'POST',
+    },
+  );
+  return timeConstraintCommandResult(data);
+}
+
 function dispatchResponse(data: unknown): { items: unknown[]; page?: DispatchListPage } {
   if (!hasOnlyKeys(data, ['items', 'page']) || !Array.isArray(data.items)) throw new Error('배차 목록 응답 형식이 올바르지 않습니다.');
   return {
@@ -253,16 +339,21 @@ function toDispatchListItem(raw: unknown): DispatchListItem {
     destinationAddress: dispatch.destinationAddress ?? null,
     destinationDisplayName: dispatch.destinationDisplayName ?? null,
     destinationId: dispatch.destinationId,
+    deliveryStopId: dispatch.deliveryStopId ?? null,
     driverId: dispatch.driverId ?? null,
     estimatedArrivalAt: dispatch.estimatedArrivalAt ?? null,
     etaStatus: dispatch.etaStatus,
     latitude: dispatch.latitude ?? null,
     longitude: dispatch.longitude ?? null,
+    rawNote: dispatch.rawNote ?? null,
+    reviewStatus: dispatch.reviewStatus ?? null,
     routePlanId: dispatch.routePlanId ?? null,
+    routeConstraintStatus: dispatch.routeConstraintStatus ?? null,
     routeStopSequence: dispatch.routeStopSequence ?? null,
     routeVersionId: dispatch.routeVersionId ?? null,
     sellerOrderId: dispatch.sellerOrderId,
     sellerOrderKey: dispatch.sellerOrderKey,
+    timeConstraint: dispatch.timeConstraint ?? null,
     vehicleId: dispatch.vehicleId ?? null,
   };
 }
@@ -274,18 +365,23 @@ function rawDispatch(value: unknown): RawDispatch {
     'sellerOrderKey',
     'customerId',
     'destinationId',
+    'deliveryStopId',
     'destinationDisplayName',
     'destinationAddress',
     'driverId',
     'vehicleId',
     'latitude',
     'longitude',
+    'rawNote',
+    'reviewStatus',
     'assignmentStatus',
     'etaStatus',
     'estimatedArrivalAt',
     'routePlanId',
+    'routeConstraintStatus',
     'routeStopSequence',
     'routeVersionId',
+    'timeConstraint',
   ])) {
     throw new Error('배차 항목 응답 형식이 올바르지 않습니다.');
   }
@@ -294,9 +390,12 @@ function rawDispatch(value: unknown): RawDispatch {
   }
   if (!['ASSIGNED', 'UNASSIGNED'].includes(value.assignmentStatus as string)) throw new Error('배차 항목의 assignmentStatus 필드가 올바르지 않습니다.');
   if (!['FAILED', 'NOT_REQUIRED', 'PENDING', 'READY', 'STALE'].includes(value.etaStatus as string)) throw new Error('배차 항목의 etaStatus 필드가 올바르지 않습니다.');
-  for (const field of ['actualCompletedAt', 'destinationDisplayName', 'destinationAddress', 'driverId', 'vehicleId', 'estimatedArrivalAt', 'routePlanId', 'routeVersionId'] as const) {
+  for (const field of ['actualCompletedAt', 'deliveryStopId', 'destinationDisplayName', 'destinationAddress', 'driverId', 'vehicleId', 'estimatedArrivalAt', 'routePlanId', 'rawNote', 'routeVersionId'] as const) {
     if (value[field] !== undefined && typeof value[field] !== 'string') throw new Error(`배차 항목의 ${field} 필드가 올바르지 않습니다.`);
   }
+  if (value.reviewStatus !== undefined && !isReviewStatus(value.reviewStatus)) throw new Error('배차 항목의 reviewStatus 필드가 올바르지 않습니다.');
+  if (value.routeConstraintStatus !== undefined && !isRouteConstraintStatus(value.routeConstraintStatus)) throw new Error('배차 항목의 routeConstraintStatus 필드가 올바르지 않습니다.');
+  if (value.timeConstraint !== undefined && value.timeConstraint !== null) parseTimeConstraint(value.timeConstraint);
   for (const field of ['latitude', 'longitude'] as const) {
     if (value[field] !== undefined && (typeof value[field] !== 'number' || !Number.isFinite(value[field]))) {
       throw new Error(`배차 항목의 ${field} 필드가 올바르지 않습니다.`);
@@ -307,6 +406,86 @@ function rawDispatch(value: unknown): RawDispatch {
     throw new Error('배차 항목의 routeStopSequence 필드가 올바르지 않습니다.');
   }
   return value as RawDispatch;
+}
+
+function timeConstraintCommandResult(value: unknown): DispatchTimeConstraintCommandResult {
+  if (!hasOnlyKeys(value, [
+    'auditEventId',
+    'clearedAt',
+    'clearedBy',
+    'commandId',
+    'deliveryStopId',
+    'rawNote',
+    'recalculation',
+    'reviewStatus',
+    'routeConstraintStatus',
+    'sellerOrderId',
+    'sellerOrderKey',
+    'timeConstraint',
+  ])
+    || typeof value.auditEventId !== 'string'
+    || typeof value.commandId !== 'string'
+    || typeof value.deliveryStopId !== 'string'
+    || (value.rawNote !== null && typeof value.rawNote !== 'string')
+    || !isReviewStatus(value.reviewStatus)
+    || !isRouteConstraintStatus(value.routeConstraintStatus)
+    || typeof value.sellerOrderId !== 'string'
+    || typeof value.sellerOrderKey !== 'string'
+    || (value.clearedAt !== undefined && typeof value.clearedAt !== 'string')
+    || (value.clearedBy !== undefined && typeof value.clearedBy !== 'string')) {
+    throw new Error('시간 제약 명령 응답 형식이 올바르지 않습니다.');
+  }
+  return {
+    auditEventId: value.auditEventId,
+    ...(value.clearedAt === undefined ? {} : { clearedAt: value.clearedAt }),
+    ...(value.clearedBy === undefined ? {} : { clearedBy: value.clearedBy }),
+    commandId: value.commandId,
+    deliveryStopId: value.deliveryStopId,
+    rawNote: value.rawNote,
+    recalculation: parseRecalculation(value.recalculation),
+    reviewStatus: value.reviewStatus,
+    routeConstraintStatus: value.routeConstraintStatus,
+    sellerOrderId: value.sellerOrderId,
+    sellerOrderKey: value.sellerOrderKey,
+    timeConstraint: value.timeConstraint === null ? null : parseTimeConstraint(value.timeConstraint),
+  };
+}
+
+function parseTimeConstraint(value: unknown): DispatchTimeConstraint {
+  if (!hasOnlyKeys(value, ['auditEventId', 'confirmedAt', 'confirmedBy', 'status', 'timeWindowEnd', 'timeWindowStart'])
+    || typeof value.auditEventId !== 'string'
+    || typeof value.confirmedAt !== 'string'
+    || (value.confirmedBy !== undefined && typeof value.confirmedBy !== 'string')
+    || value.status !== 'CONFIRMED'
+    || !isTimeOnly(value.timeWindowEnd)
+    || !isTimeOnly(value.timeWindowStart)) {
+    throw new Error('시간 제약 응답 형식이 올바르지 않습니다.');
+  }
+  return {
+    auditEventId: value.auditEventId,
+    confirmedAt: value.confirmedAt,
+    ...(value.confirmedBy === undefined ? {} : { confirmedBy: value.confirmedBy }),
+    status: value.status,
+    timeWindowEnd: value.timeWindowEnd,
+    timeWindowStart: value.timeWindowStart,
+  };
+}
+
+function parseRecalculation(value: unknown): DispatchTimeConstraintRecalculation {
+  if (!hasOnlyKeys(value, ['reason', 'retryable', 'routePlanId', 'status'])
+    || ![
+      'ASSIGNED_ROUTE_TIME_CONSTRAINT_CLEARED',
+      'ASSIGNED_ROUTE_TIME_CONSTRAINT_CONFIRMED',
+      'SCHEDULER_UNAVAILABLE',
+      'TIME_CONSTRAINT_CLEARED',
+      'UNASSIGNED_ORDER',
+    ].includes(value.reason as string)
+    || typeof value.retryable !== 'boolean'
+    || (value.routePlanId !== null && typeof value.routePlanId !== 'string')
+    || !['FAILED_TO_SCHEDULE', 'NOT_REQUIRED', 'SCHEDULED'].includes(value.status as string)) {
+    throw new Error('시간 제약 재계산 응답 형식이 올바르지 않습니다.');
+  }
+  return value as DispatchTimeConstraintRecalculation;
 }
 
 function assignmentResult(value: unknown): DispatchAssignmentResult {
@@ -351,6 +530,18 @@ function parseAssignmentResult(value: unknown): DispatchAssignmentResult {
     routePlanId: value.routePlanId,
     sellerOrderId: value.sellerOrderId,
   };
+}
+
+function isReviewStatus(value: unknown): value is DispatchSpecialInstructionReviewStatus {
+  return value === 'CLEARED' || value === 'CONFIRMED' || value === 'NOT_APPLICABLE' || value === 'UNCONFIRMED';
+}
+
+function isRouteConstraintStatus(value: unknown): value is DispatchRouteConstraintStatus {
+  return value === 'NOT_APPLICABLE' || value === 'NOT_EVALUATED' || value === 'PENDING_RECALCULATION' || value === 'UNCONFIRMED';
+}
+
+function isTimeOnly(value: unknown): value is string {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/u.test(value);
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

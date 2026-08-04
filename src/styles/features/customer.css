@@ -80,6 +80,15 @@ body.customer-delivery-demo .grid { grid-template-columns: 1fr; }
 .customer-route-group small span { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .customer-route-head { display:flex; align-items:center; justify-content:space-between; gap:10px; font-weight:1000; }
 .customer-route-head span { color:var(--color-muted); font-size:12px; font-weight:900; white-space:nowrap; }
+.customer-order-row {
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:10px 12px; border:1px solid var(--color-border); border-radius:15px; background:var(--color-white);
+  color:var(--color-ink);
+}
+.customer-order-row div { min-width:0; display:grid; gap:3px; }
+.customer-order-row strong { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:13px; font-weight:1000; }
+.customer-order-row small { color:var(--color-muted); font-size:11px; font-weight:850; }
+.customer-order-row span { color:var(--color-ink); font-size:12px; font-weight:1000; white-space:nowrap; }
 .customer-cargo { display:grid; gap:7px; }
 .customer-cargo-title { color:var(--color-muted); font-size:12px; font-weight:1000; letter-spacing:-.02em; }
 .customer-cargo-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 11px; border:1px solid var(--color-border); border-radius:14px; background:var(--color-white); font-size:13px; font-weight:900; }

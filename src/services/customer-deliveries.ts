@@ -10,6 +10,7 @@ export type CustomerDeliveryItem = {
   deliveryStatus: string;
   destinationAddress?: string;
   destinationDisplayName: string;
+  destinationId: string;
   estimatedArrivalAt?: string;
   etaStatus: string;
   eventSummary: CustomerDeliveryEvent[];
@@ -18,6 +19,7 @@ export type CustomerDeliveryItem = {
   proofStatus: string;
   sellerOrderId: string;
   sellerOrderKey: string;
+  shippedBoxes: number;
   vehicleDisplayName?: string;
   vehicleId?: string;
   vehicleLatitude?: number;
@@ -117,6 +119,7 @@ function customerDeliveryFrom(value: unknown): CustomerDeliveryItem {
     'deliveryStatus',
     'destinationAddress',
     'destinationDisplayName',
+    'destinationId',
     'estimatedArrivalAt',
     'etaStatus',
     'eventSummary',
@@ -125,6 +128,7 @@ function customerDeliveryFrom(value: unknown): CustomerDeliveryItem {
     'proofStatus',
     'sellerOrderId',
     'sellerOrderKey',
+    'shippedBoxes',
     'vehicleDisplayName',
     'vehicleId',
     'vehicleLatitude',
@@ -136,6 +140,7 @@ function customerDeliveryFrom(value: unknown): CustomerDeliveryItem {
     deliveryStatus: requiredString(value, 'deliveryStatus'),
     destinationAddress: optionalString(value, 'destinationAddress'),
     destinationDisplayName: requiredString(value, 'destinationDisplayName'),
+    destinationId: requiredString(value, 'destinationId'),
     estimatedArrivalAt: optionalString(value, 'estimatedArrivalAt'),
     etaStatus: requiredString(value, 'etaStatus'),
     eventSummary: events,
@@ -144,6 +149,7 @@ function customerDeliveryFrom(value: unknown): CustomerDeliveryItem {
     proofStatus: requiredString(value, 'proofStatus'),
     sellerOrderId: requiredString(value, 'sellerOrderId'),
     sellerOrderKey: requiredString(value, 'sellerOrderKey'),
+    shippedBoxes: requiredPositiveInteger(value, 'shippedBoxes'),
     vehicleDisplayName: optionalString(value, 'vehicleDisplayName'),
     vehicleId: optionalString(value, 'vehicleId'),
     vehicleLatitude: optionalNumber(value, 'vehicleLatitude'),
@@ -191,6 +197,12 @@ function optionalNumber(source: Record<string, unknown>, key: string): number | 
   const value = source[key];
   if (value === undefined) return undefined;
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${key} 필드 형식이 올바르지 않습니다.`);
+  return value;
+}
+
+function requiredPositiveInteger(source: Record<string, unknown>, key: string): number {
+  const value = source[key];
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) throw new Error(`${key} 필드 형식이 올바르지 않습니다.`);
   return value;
 }
 

@@ -4,6 +4,8 @@ import { ArrowUpRight, ChevronDown, LoaderCircle } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
 import {
+  clearDispatchTimeConstraint,
+  confirmDispatchTimeConstraint,
   deleteDispatchOrders,
   loadDispatchList,
   MAX_DISPATCH_DELETE_COUNT,
@@ -61,6 +63,8 @@ const DispatchMapCanvas = lazy(async () => {
   const module = await import('../components/MapCanvas');
   return { default: module.MapCanvas };
 });
+
+const TIME_ONLY_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/u;
 
 export function DispatchPage({ title, description }: { title: string; description: string }): ReactElement {
   const uploadFileInputRef = useRef<HTMLInputElement>(null);
@@ -390,6 +394,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
     (row.addressResolutionStatus ?? row.normalized?.addressResolutionStatus) === 'RESOLVED'
     && (row.postalCode ?? row.normalized?.postalCode))?.length ?? 0;
   const uploadIssueRows = uploadPreview?.rows.filter((row) => row.issues.length > 0) ?? [];
+  const uploadNoteRows = uploadPreview?.rows.filter((row) => row.notes !== null) ?? [];
   const uploadIssueEntries = uploadIssues(uploadPreview, uploadSheet);
   const uploadIssueCells = new Set(uploadIssueEntries.flatMap((entry) =>
     entry.columnIndex === null ? [] : [`${entry.rowNumber - 1}:${entry.columnIndex}`]));
@@ -464,6 +469,18 @@ export function DispatchPage({ title, description }: { title: string; descriptio
             ) : null}
             {!uploadFileName && uploadError ? <p className="dispatch-upload-error" role="alert">{uploadError}</p> : null}
             {uploadPreview ? <div className="dispatch-upload-summary" role="status"><span>전체 <b>{uploadPreview.summary.totalRows}</b></span><span>주소 확인 <b>{resolvedAddressRows}</b></span><span>정상 <b>{uploadPreview.summary.readyRows}</b></span>{(uploadPreview.summary.updateCandidateRows ?? 0) > 0 ? <span>변경 <b>{uploadPreview.summary.updateCandidateRows}</b></span> : null}<span>확인 <b>{uploadPreview.summary.reviewRows}</b></span><span>오류 <b>{uploadPreview.summary.errorRows}</b></span></div> : null}
+            {uploadNoteRows.length > 0 ? (
+              <div className="dispatch-upload-notes" aria-label="특이사항 미리보기">
+                {uploadNoteRows.map((row) => (
+                  <div className="dispatch-upload-note-row" key={`${row.rowNumber}:${row.sellerOrderKey}`}>
+                    <span>{row.rowNumber}행</span>
+                    <strong>{row.sellerOrderKey}</strong>
+                    <p>{row.notes}</p>
+                    <b>미확인</b>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {uploadIssueRows.length ? (
               <details className="dispatch-upload-issues">
                 <summary>
@@ -993,6 +1010,11 @@ function DispatchWorkspace({
   const [selectionMode, setSelectionMode] = useState(false);
   const [mutationBusy, setMutationBusy] = useState(false);
   const [mutationError, setMutationError] = useState('');
+  const [constraintBusy, setConstraintBusy] = useState(false);
+  const [constraintError, setConstraintError] = useState('');
+  const [constraintEnd, setConstraintEnd] = useState('');
+  const [constraintStart, setConstraintStart] = useState('');
+  const [constraintStatus, setConstraintStatus] = useState('');
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const readOnly = serviceDate < todayInKorea();
   const hasSearch = search.destinationName !== '' || search.orderNumber !== '';
@@ -1034,10 +1056,21 @@ function DispatchWorkspace({
     : selectedOrders.length === 1
       ? dispatchDestinationName(selectedOrders[0], references)
       : `${dispatchDestinationName(selectedOrders[0], references)} 외 ${selectedOrders.length - 1}곳`;
+  const selectedOrder = selectedOrders.length === 1 ? selectedOrders[0] : null;
+  const selectedOrderMissingStop = selectedOrder?.deliveryStopId === null;
+  const canClearSelectedTimeConstraint = selectedOrder !== null
+    && (selectedOrder.timeConstraint !== null || selectedOrder.rawNote !== null || selectedOrder.reviewStatus === 'CONFIRMED');
 
   useEffect(() => {
     setSearchDraft(search);
   }, [search.destinationName, search.orderNumber]);
+
+  useEffect(() => {
+    setConstraintError('');
+    setConstraintStatus('');
+    setConstraintStart(selectedOrder?.timeConstraint?.timeWindowStart ?? '');
+    setConstraintEnd(selectedOrder?.timeConstraint?.timeWindowEnd ?? '');
+  }, [selectedOrder?.sellerOrderId, selectedOrder?.timeConstraint?.timeWindowEnd, selectedOrder?.timeConstraint?.timeWindowStart]);
 
   useEffect(() => {
     setSelectedOrderIds((current) => {
@@ -1087,6 +1120,8 @@ function DispatchWorkspace({
 
   function clearSelection(): void {
     setMutationError('');
+    setConstraintError('');
+    setConstraintStatus('');
     setSelectedOrderIds([]);
     setSelectionCoordinates([]);
     setSelectionMode(false);
@@ -1202,6 +1237,48 @@ function DispatchWorkspace({
       setMutationError(errorMessage(caught));
     } finally {
       setMutationBusy(false);
+    }
+  }
+
+  async function confirmSelectedTimeConstraint(): Promise<void> {
+    if (selectedOrder === null || readOnly) return;
+    if (!isHardTimeRange(constraintStart, constraintEnd)) {
+      setConstraintStatus('');
+      setConstraintError('시작과 종료를 HH:mm 범위로 입력하세요.');
+      return;
+    }
+    setConstraintBusy(true);
+    setConstraintError('');
+    setConstraintStatus('');
+    try {
+      const result = await confirmDispatchTimeConstraint(selectedOrder, {
+        timeWindowEnd: constraintEnd,
+        timeWindowStart: constraintStart,
+      });
+      setConstraintStatus(timeConstraintCommandMessage(result.recalculation.status));
+      onAssignmentChanged?.();
+    } catch (caught) {
+      setConstraintError(errorMessage(caught));
+    } finally {
+      setConstraintBusy(false);
+    }
+  }
+
+  async function clearSelectedTimeConstraint(): Promise<void> {
+    if (selectedOrder === null || readOnly) return;
+    setConstraintBusy(true);
+    setConstraintError('');
+    setConstraintStatus('');
+    try {
+      const result = await clearDispatchTimeConstraint(selectedOrder, '관리자 시간 제약 해제');
+      setConstraintStart('');
+      setConstraintEnd('');
+      setConstraintStatus(timeConstraintCommandMessage(result.recalculation.status));
+      onAssignmentChanged?.();
+    } catch (caught) {
+      setConstraintError(errorMessage(caught));
+    } finally {
+      setConstraintBusy(false);
     }
   }
 
@@ -1381,7 +1458,12 @@ function DispatchWorkspace({
                         <td title={dispatchCustomerName(row, references)}>{dispatchCustomerName(row, references)}</td>
                         <td title={driverName}>{driverName}</td>
                         <td title={vehiclePlate}>{vehiclePlate}</td>
-                        <td>{row.assignmentStatus === 'ASSIGNED' ? '배정' : '미배정'}</td>
+                        <td>
+                          <span>{row.assignmentStatus === 'ASSIGNED' ? '배정' : '미배정'}</span>
+                          {row.reviewStatus === 'UNCONFIRMED' ? <small className="dispatch-note-state">미확인</small> : null}
+                          {row.reviewStatus === 'CONFIRMED' ? <small className="dispatch-note-state confirmed">확정</small> : null}
+                          {row.routeConstraintStatus === 'PENDING_RECALCULATION' ? <small className="dispatch-note-state pending">재계산</small> : null}
+                        </td>
                       </tr>
                     );
                   })}
@@ -1445,6 +1527,31 @@ function DispatchWorkspace({
             {selectedOrders.length > 0 || selectionCoordinates.length > 0 ? <button className="dispatch-selection-clear" type="button" onClick={clearSelection}>선택 지우기</button> : null}
             {selectedDriver !== null && selectedVehicle === null ? <p role="alert">선택한 배송원에 배정된 차량이 없습니다.</p> : null}
             {mutationError ? <p role="alert">{mutationError}</p> : null}
+            {selectedOrder !== null ? (
+              <div className="dispatch-special-instruction" aria-label="특이사항">
+                <div className="dispatch-special-instruction-summary">
+                  <span>특이사항</span>
+                  <strong>{selectedOrder.rawNote ?? '없음'}</strong>
+                  <small>{reviewStatusLabel(selectedOrder.reviewStatus)} · {routeConstraintStatusLabel(selectedOrder.routeConstraintStatus)}</small>
+                </div>
+                <form
+                  className="dispatch-time-constraint-form"
+                  aria-label="시간 제약"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void confirmSelectedTimeConstraint();
+                  }}
+                >
+                  <label>시작<input aria-label="시간 제약 시작" disabled={readOnly || constraintBusy || selectedOrderMissingStop} maxLength={5} placeholder="10:30" value={constraintStart} onChange={(event) => setConstraintStart(event.target.value)} /></label>
+                  <label>종료<input aria-label="시간 제약 종료" disabled={readOnly || constraintBusy || selectedOrderMissingStop} maxLength={5} placeholder="11:00" value={constraintEnd} onChange={(event) => setConstraintEnd(event.target.value)} /></label>
+                  <button type="submit" disabled={readOnly || constraintBusy || selectedOrderMissingStop}>확정</button>
+                  <button type="button" disabled={readOnly || constraintBusy || selectedOrderMissingStop || !canClearSelectedTimeConstraint} onClick={() => void clearSelectedTimeConstraint()}>해제</button>
+                </form>
+                {selectedOrderMissingStop ? <p role="alert">배송지 ID가 없어 시간 제약을 변경할 수 없습니다.</p> : null}
+                {constraintError ? <p role="alert">{constraintError}</p> : null}
+                {constraintStatus ? <p role="status">{constraintStatus}</p> : null}
+              </div>
+            ) : null}
             <div>
               <button className="btn" type="button" disabled={mutationBusy || readOnly || assignedSelectionCount === 0} onClick={() => void unassignSelected()}>배정 해제</button>
               <button className="btn danger" type="button" disabled={mutationBusy || readOnly || selectedOrders.length === 0} onClick={() => void deleteSelected()}>배송 삭제</button>
@@ -1643,6 +1750,47 @@ function dispatchDestinationName(row: DispatchListItem, references: ManagementDa
 
 function dispatchCustomerName(row: DispatchListItem, references: ManagementData | null): string {
   return references?.customers.find((customer) => customer.id === row.customerId)?.name ?? row.customerId;
+}
+
+function reviewStatusLabel(status: DispatchListItem['reviewStatus']): string {
+  switch (status) {
+    case 'UNCONFIRMED':
+      return '미확인';
+    case 'CONFIRMED':
+      return '확정';
+    case 'CLEARED':
+      return '해제';
+    default:
+      return '해당 없음';
+  }
+}
+
+function routeConstraintStatusLabel(status: DispatchListItem['routeConstraintStatus']): string {
+  switch (status) {
+    case 'UNCONFIRMED':
+      return '미확인';
+    case 'PENDING_RECALCULATION':
+      return '재계산 대기';
+    case 'NOT_EVALUATED':
+      return '평가 전';
+    default:
+      return '해당 없음';
+  }
+}
+
+function timeConstraintCommandMessage(status: 'FAILED_TO_SCHEDULE' | 'NOT_REQUIRED' | 'SCHEDULED'): string {
+  switch (status) {
+    case 'FAILED_TO_SCHEDULE':
+      return '저장은 완료됐고 재계산 예약은 실패했습니다.';
+    case 'SCHEDULED':
+      return '저장 후 재계산을 예약했습니다.';
+    default:
+      return '저장했습니다.';
+  }
+}
+
+function isHardTimeRange(start: string, end: string): boolean {
+  return TIME_ONLY_PATTERN.test(start) && TIME_ONLY_PATTERN.test(end) && start < end;
 }
 
 function referenceName(items: Array<{ id: string; name: string }> | undefined, id: string | null): string {

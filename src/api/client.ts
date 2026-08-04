@@ -89,6 +89,11 @@ const assignmentCommandAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'POST', pattern: /^seller-orders\/[^/]+\/assignment\/reassign$/u },
 ];
 
+const timeConstraintCommandAllowlist: Array<{ method: string; pattern: RegExp }> = [
+  { method: 'POST', pattern: /^seller-orders\/[^/]+\/time-constraint\/confirm$/u },
+  { method: 'POST', pattern: /^seller-orders\/[^/]+\/time-constraint\/clear$/u },
+];
+
 export async function requestV1ReadJson<ResponseBody>(path: string, init: JsonRequestInit = {}): Promise<ResponseBody> {
   const target = requestTarget(path, init.method);
   assertAllowed('v1 read', target, v1ReadAllowlist);
@@ -102,16 +107,17 @@ export async function requestV1ReadJson<ResponseBody>(path: string, init: JsonRe
 export async function requestV1AssignmentCommandJson<ResponseBody>(path: string, init: JsonRequestInit = {}): Promise<ResponseBody> {
   const target = requestTarget(path, init.method);
   assertAllowed('v1 assignment command', target, assignmentCommandAllowlist);
-  let response = await fetchJson(apiConfig.v1BaseUrl, path, { ...init, method: target.method });
-  if (response.status === 401) expireTransportSession();
-  let body = await readAssignmentCommandResponseBody(response);
-  if (isCsrfFailure(response.status, body) && await refreshCsrfToken()) {
-    response = await fetchJson(apiConfig.v1BaseUrl, path, { ...init, method: target.method });
-    if (response.status === 401) expireTransportSession();
-    body = await readAssignmentCommandResponseBody(response);
-  }
+  const { body, response } = await fetchV1CommandResponse(path, init, target, readAssignmentCommandResponseBody);
   if (!response.ok) throw legacyAssignmentCommandError(response.status, body);
   return legacyAssignmentCommandData<ResponseBody>(body);
+}
+
+export async function requestV1TimeConstraintCommandJson<ResponseBody>(path: string, init: JsonRequestInit = {}): Promise<ResponseBody> {
+  const target = requestTarget(path, init.method);
+  assertAllowed('v1 time constraint command', target, timeConstraintCommandAllowlist);
+  const { body, response } = await fetchV1CommandResponse(path, init, target, readV1ResponseBody);
+  if (!response.ok) throw strictV1Error(response.status, body);
+  return strictV1Data<ResponseBody>(body);
 }
 
 export async function requestLegacyJson<ResponseBody>(path: string, init: JsonRequestInit = {}): Promise<ResponseBody> {
@@ -137,6 +143,23 @@ function assertAllowed(boundary: string, target: RequestTarget, allowlist: Array
 
 function disallowedRequest(boundary: string, target: RequestTarget): ApiError {
   return new ApiError(400, `${boundary} allowlist 밖의 API 요청입니다: ${target.method} /${target.path}`);
+}
+
+async function fetchV1CommandResponse(
+  path: string,
+  init: JsonRequestInit,
+  target: RequestTarget,
+  readBody: (response: Response) => Promise<unknown>,
+): Promise<{ body: unknown; response: Response }> {
+  let response = await fetchJson(apiConfig.v1BaseUrl, path, { ...init, method: target.method });
+  if (response.status === 401) expireTransportSession();
+  let body = await readBody(response);
+  if (isCsrfFailure(response.status, body) && await refreshCsrfToken()) {
+    response = await fetchJson(apiConfig.v1BaseUrl, path, { ...init, method: target.method });
+    if (response.status === 401) expireTransportSession();
+    body = await readBody(response);
+  }
+  return { body, response };
 }
 
 async function fetchJson(baseUrl: string, path: string, { json, headers, ...init }: JsonRequestInit): Promise<Response> {
