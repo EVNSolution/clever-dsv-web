@@ -45,4 +45,10 @@
   .page-content.master-data-page .resource-workspace.has-selection {
     grid-template-columns:minmax(0, 1fr) minmax(0, 3fr);
   }
+  .driver-invite-dialog { width:calc(100vw - 20px); max-height:calc(100dvh - 20px); border-radius:18px; }
+  .driver-invite-header { min-height:66px; padding:0 16px; }
+  .driver-invite-body { max-height:calc(100dvh - 178px); padding:20px; }
+  .driver-invite-result { grid-template-columns:1fr; }
+  .driver-invite-qr-card { width:250px; max-width:100%; box-sizing:border-box; justify-self:center; }
+  .driver-invite-footer { min-height:62px; padding:0 12px; }
 }

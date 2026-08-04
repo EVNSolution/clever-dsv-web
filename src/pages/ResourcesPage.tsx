@@ -9,6 +9,7 @@ import {
   ManagementListActions,
   ManagementSelectionClear,
 } from '../components/AdminUi';
+import { DriverInviteDialog } from '../components/DriverInviteDialog';
 import type { ManagementData, ManagementDriver, ManagementVehicle } from '../demo/management';
 import { managementId } from '../demo/management';
 
@@ -71,6 +72,7 @@ function DriverWorkspace({
   onSelect: (id: string) => void;
   selectedId: string;
 }): ReactElement {
+  const [inviteOpen, setInviteOpen] = useState(false);
   const selectedDriver = data.drivers.find((driver) => driver.id === selectedId);
   const removeDriver = () => {
     if (!selectedDriver || !window.confirm(`${selectedDriver.name} 배송원을 영구 삭제합니다.`)) return;
@@ -86,7 +88,7 @@ function DriverWorkspace({
       <section className="page-panel management-list-panel" aria-label="배송원 리스트">
         <AdminSectionHeader
           title="배송원 리스트"
-          side={<span className="management-heading-side"><span className="section-meta">{data.drivers.length}명</span><ManagementListActions name="배송원" canDelete={!!selectedDriver} onCreate={() => onEdit({ kind: 'driver' })} onDelete={removeDriver} /></span>}
+          side={<span className="management-heading-side"><span className="section-meta">{data.drivers.length}명</span><span className="management-actions"><button className="invite" type="button" onClick={() => setInviteOpen(true)}>초대 생성</button></span><ManagementListActions name="배송원" canDelete={!!selectedDriver} onCreate={() => onEdit({ kind: 'driver' })} onDelete={removeDriver} /></span>}
         />
         <AdminTableFrame className="courier-list">
           <table className="courier-list-table page-table">
@@ -139,6 +141,7 @@ function DriverWorkspace({
           </>
         )}
       </section>
+      {inviteOpen ? <DriverInviteDialog onClose={() => setInviteOpen(false)} /> : null}
     </div>
   );
 }

@@ -55,6 +55,7 @@ const legacyAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'GET', pattern: /^manual-email$/u },
   { method: 'POST', pattern: /^manual-email$/u },
   { method: 'POST', pattern: /^drivers$/u },
+  { method: 'POST', pattern: /^drivers\/signup-invite$/u },
   { method: 'PATCH', pattern: /^drivers\/[^/]+$/u },
   { method: 'DELETE', pattern: /^drivers\/[^/]+$/u },
   { method: 'POST', pattern: /^vehicles$/u },

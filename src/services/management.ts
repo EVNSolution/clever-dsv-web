@@ -75,6 +75,26 @@ export const emptyManagementData: ManagementData = {
   vehicles: [],
 };
 
+export type DriverSignupInvite = {
+  expiresAt: string;
+  signupUrl: string;
+};
+
+export async function issueDriverSignupInvite(): Promise<DriverSignupInvite> {
+  const response = await requestLegacyJson<{ invite: unknown }>('drivers/signup-invite', { method: 'POST' });
+  if (!isObject(response.invite)) throw new ApiError(502, '배송원 초대 응답 형식이 올바르지 않습니다.', response);
+  const { expiresAt, signupUrl } = response.invite;
+  if (
+    typeof expiresAt !== 'string'
+    || Number.isNaN(Date.parse(expiresAt))
+    || typeof signupUrl !== 'string'
+    || !/^clever-driver:\/\/signup\?token=[A-Za-z0-9_-]{43}$/u.test(signupUrl)
+  ) {
+    throw new ApiError(502, '배송원 초대 응답 형식이 올바르지 않습니다.', response);
+  }
+  return { expiresAt, signupUrl };
+}
+
 export async function loadManagementSnapshot(): Promise<ManagementData> {
   if (apiConfig.mode === 'mock') return loadManagementData();
   return loadRemoteManagementSnapshot();
