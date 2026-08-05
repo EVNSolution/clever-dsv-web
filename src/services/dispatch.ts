@@ -6,6 +6,11 @@ import {
 
 export type DispatchAssignmentStatus = 'ASSIGNED' | 'UNASSIGNED';
 export type DispatchEtaStatus = 'FAILED' | 'NOT_REQUIRED' | 'PENDING' | 'READY' | 'STALE';
+export type DispatchEventType = 'ROUTE_COMPLETED' | 'ROUTE_STARTED' | 'STOP_ARRIVED' | 'STOP_DELIVERED' | 'STOP_FAILED';
+export type DispatchEventSummary = {
+  occurredAt: string;
+  type: DispatchEventType;
+};
 export type DispatchSpecialInstructionReviewStatus = 'CLEARED' | 'CONFIRMED' | 'NOT_APPLICABLE' | 'UNCONFIRMED';
 export type DispatchRouteConstraintStatus = 'NOT_APPLICABLE' | 'NOT_EVALUATED' | 'PENDING_RECALCULATION' | 'UNCONFIRMED';
 
@@ -52,6 +57,7 @@ export type DispatchListItem = {
   driverId: string | null;
   estimatedArrivalAt: string | null;
   etaStatus: DispatchEtaStatus;
+  eventSummary: DispatchEventSummary[];
   latitude: number | null;
   longitude: number | null;
   rawNote: string | null;
@@ -100,6 +106,7 @@ type RawDispatch = {
   driverId?: string;
   estimatedArrivalAt?: string;
   etaStatus: DispatchEtaStatus;
+  eventSummary?: DispatchEventSummary[];
   latitude?: number;
   longitude?: number;
   rawNote?: string;
@@ -357,6 +364,7 @@ function toDispatchListItem(raw: unknown): DispatchListItem {
     driverId: dispatch.driverId ?? null,
     estimatedArrivalAt: dispatch.estimatedArrivalAt ?? null,
     etaStatus: dispatch.etaStatus,
+    eventSummary: dispatch.eventSummary ?? [],
     latitude: dispatch.latitude ?? null,
     longitude: dispatch.longitude ?? null,
     rawNote: dispatch.rawNote ?? null,
@@ -393,6 +401,7 @@ function rawDispatch(value: unknown): RawDispatch {
     'reviewStatus',
     'assignmentStatus',
     'etaStatus',
+    'eventSummary',
     'estimatedArrivalAt',
     'routePlanId',
     'routeConstraintStatus',
@@ -407,6 +416,7 @@ function rawDispatch(value: unknown): RawDispatch {
   }
   if (!['ASSIGNED', 'UNASSIGNED'].includes(value.assignmentStatus as string)) throw new Error('배차 항목의 assignmentStatus 필드가 올바르지 않습니다.');
   if (!['FAILED', 'NOT_REQUIRED', 'PENDING', 'READY', 'STALE'].includes(value.etaStatus as string)) throw new Error('배차 항목의 etaStatus 필드가 올바르지 않습니다.');
+  if (value.eventSummary !== undefined) parseEventSummary(value.eventSummary);
   for (const field of ['actualCompletedAt', 'deliveryStopId', 'destinationDisplayName', 'destinationAddress', 'driverId', 'vehicleId', 'estimatedArrivalAt', 'routePlanId', 'rawNote', 'routeVersionId'] as const) {
     if (value[field] !== undefined && typeof value[field] !== 'string') throw new Error(`배차 항목의 ${field} 필드가 올바르지 않습니다.`);
   }
@@ -429,6 +439,19 @@ function rawDispatch(value: unknown): RawDispatch {
     throw new Error('배차 항목의 routeStopSequence 필드가 올바르지 않습니다.');
   }
   return value as RawDispatch;
+}
+
+function parseEventSummary(value: unknown): DispatchEventSummary[] {
+  if (!Array.isArray(value)) throw new Error('배차 항목의 eventSummary 필드가 올바르지 않습니다.');
+  return value.map((event) => {
+    if (!hasOnlyKeys(event, ['occurredAt', 'type'])
+      || typeof event.occurredAt !== 'string'
+      || Number.isNaN(new Date(event.occurredAt).getTime())
+      || !['ROUTE_COMPLETED', 'ROUTE_STARTED', 'STOP_ARRIVED', 'STOP_DELIVERED', 'STOP_FAILED'].includes(event.type as string)) {
+      throw new Error('배차 항목의 eventSummary 필드가 올바르지 않습니다.');
+    }
+    return event as DispatchEventSummary;
+  });
 }
 
 function timeConstraintCommandResult(value: unknown): DispatchTimeConstraintCommandResult {

@@ -9,6 +9,7 @@ import type { DispatchListItem } from '../services/dispatch';
 import { loadControlManagementSnapshot } from '../services/management';
 import type { ManagementData } from '../demo/management';
 import { adminCustomerDeliveryPath } from '../app-routes';
+import { assignControlDestinationProgress } from '../features/control/control-progress';
 
 type MobileControlPanel = 'customers' | 'destinations' | 'vehicles';
 type CustomerOrderGroup = {
@@ -29,14 +30,18 @@ export function ControlPage({
   estimatedArrivalByOrderId = new Map(),
   onOrdersChange,
   onManagementChange,
+  onDestinationSelect,
   onVehicleSelect,
+  selectedDestinationId,
   selectedVehicleId,
   vehicleColors = new Map(),
 }: {
   estimatedArrivalByOrderId?: ReadonlyMap<string, string>;
   onManagementChange?: (management: ManagementData | undefined) => void;
   onOrdersChange?: (orders: DispatchListItem[], serviceDate?: string) => void;
+  onDestinationSelect?: (destinationId: string) => void;
   onVehicleSelect?: (vehicleId: string) => void;
+  selectedDestinationId?: string;
   selectedVehicleId?: string;
   vehicleColors?: ReadonlyMap<string, string>;
 } = {}): ReactElement {
@@ -46,7 +51,9 @@ export function ControlPage({
         estimatedArrivalByOrderId={estimatedArrivalByOrderId}
         onManagementChange={onManagementChange}
         onOrdersChange={onOrdersChange}
+        onDestinationSelect={onDestinationSelect}
         onVehicleSelect={onVehicleSelect}
+        selectedDestinationId={selectedDestinationId}
         selectedVehicleId={selectedVehicleId}
         vehicleColors={vehicleColors}
       />
@@ -79,14 +86,18 @@ function RemoteControlPage({
   estimatedArrivalByOrderId,
   onOrdersChange,
   onManagementChange,
+  onDestinationSelect,
   onVehicleSelect,
+  selectedDestinationId,
   selectedVehicleId,
   vehicleColors,
 }: {
   estimatedArrivalByOrderId: ReadonlyMap<string, string>;
   onManagementChange?: (management: ManagementData | undefined) => void;
   onOrdersChange?: (orders: DispatchListItem[], serviceDate?: string) => void;
+  onDestinationSelect?: (destinationId: string) => void;
   onVehicleSelect?: (vehicleId: string) => void;
+  selectedDestinationId?: string;
   selectedVehicleId?: string;
   vehicleColors: ReadonlyMap<string, string>;
 }): ReactElement {
@@ -160,6 +171,8 @@ function RemoteControlPage({
       vehicles={scheduledControlVehicles(orders, management)}
       conditions={management?.conditions ?? []}
       onVehicleSelect={onVehicleSelect}
+      onDestinationSelect={onDestinationSelect}
+      selectedDestinationId={selectedDestinationId}
       selectedVehicleId={selectedVehicleId}
       vehicleColors={vehicleColors}
     />
@@ -189,6 +202,8 @@ function ControlPanels({
   summary,
   vehicles,
   onVehicleSelect,
+  onDestinationSelect,
+  selectedDestinationId,
   selectedVehicleId,
   vehicleColors = new Map(),
 }: {
@@ -202,6 +217,8 @@ function ControlPanels({
   summary?: ControlSummary;
   vehicles: ManagementData['vehicles'];
   onVehicleSelect?: (vehicleId: string) => void;
+  onDestinationSelect?: (destinationId: string) => void;
+  selectedDestinationId?: string;
   selectedVehicleId?: string;
   vehicleColors?: ReadonlyMap<string, string>;
 }): ReactElement {
@@ -215,7 +232,7 @@ function ControlPanels({
     : orders
       .filter((order) => order.vehicleId === selectedVehicleId)
       .sort(compareControlStops);
-  const selectedVehicleDestinations = groupControlDestinations(selectedVehicleOrders);
+  const selectedVehicleDestinations = assignControlDestinationProgress(groupControlDestinations(selectedVehicleOrders));
   const vehicleOrderCounts = assignedOrderCountsByVehicle(orders);
 
   useEffect(() => {
@@ -330,7 +347,20 @@ function ControlPanels({
           <div className="control-destination-list overlay-scroll">
             <div className="control-destination-columns" aria-hidden="true"><span>배송지</span><span>주문</span><span>예상 도착</span><span>실제 완료</span></div>
             {selectedVehicleDestinations.map((destination) => (
-              <div className="control-destination-row" key={destination.destinationId}>
+              <div
+                aria-selected={selectedDestinationId === destination.destinationId}
+                className={`control-destination-row progress-${destination.progressStatus}${selectedDestinationId === destination.destinationId ? ' selected' : ''}`}
+                key={destination.destinationId}
+                onClick={() => onDestinationSelect?.(destination.destinationId)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onDestinationSelect?.(destination.destinationId);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
                 <i className="control-order-sequence" aria-label={`배송지 순서 ${destination.sequence}`}>{destination.sequence}</i>
                 <span>
                   <b>{destination.anchor.destinationDisplayName || '배송지 미등록'}</b>
