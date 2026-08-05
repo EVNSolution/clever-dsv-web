@@ -652,6 +652,8 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
     const routeSource = window.dsvMap?.getSource('operational-routes');
     const vehicleSource = window.dsvMap?.getSource('operational-vehicles');
     if (!destinationSource || !routeSource || !vehicleSource) return null;
+    const vehicleImage = window.dsvMap.getImage('vehicle-marker-default');
+    const vehicleImageBytes = vehicleImage?.data?.data ?? [];
     return {
       destinations: destinationSource.serialize().data.features.map((feature) => ({
         color: feature.properties.color,
@@ -663,6 +665,15 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
         hasTextField: window.dsvMap.getLayoutProperty('operational-destination-markers', 'text-field') !== undefined,
         iconAllowOverlap: window.dsvMap.getLayoutProperty('operational-destination-markers', 'icon-allow-overlap'),
         iconOptional: window.dsvMap.getLayoutProperty('operational-destination-markers', 'icon-optional'),
+      },
+      vehicleSymbol: {
+        hasImage: window.dsvMap.hasImage('vehicle-marker-default'),
+        hasIconOffset: window.dsvMap.getLayoutProperty('operational-vehicle-markers', 'icon-offset') !== undefined,
+        imageHeight: vehicleImage?.data?.height,
+        imageIsVisible: Array.from(vehicleImageBytes).some((value, index) => index % 4 === 3 && value > 0),
+        imageWidth: vehicleImage?.data?.width,
+        iconImage: window.dsvMap.getLayoutProperty('operational-vehicle-markers', 'icon-image'),
+        labelField: window.dsvMap.getLayoutProperty('operational-vehicle-labels', 'text-field'),
       },
       routes: routeSource.serialize().data.features.map((feature) => ({
         color: feature.properties.color,
@@ -683,6 +694,15 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       hasTextField: false,
       iconAllowOverlap: false,
       iconOptional: false,
+    },
+    vehicleSymbol: {
+      hasImage: true,
+      hasIconOffset: false,
+      imageHeight: 128,
+      imageIsVisible: true,
+      imageWidth: 128,
+      iconImage: 'vehicle-marker-default',
+      labelField: ['get', 'label'],
     },
     routes: [
       { routeId: 'route-plan-g006-scheduled' },

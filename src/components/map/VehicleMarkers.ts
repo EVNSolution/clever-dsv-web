@@ -4,16 +4,17 @@ import type { MapCanvasVehiclePoint } from '../MapCanvas';
 
 const sourceId = 'operational-vehicles';
 const markerLayerId = 'operational-vehicle-markers';
+const labelLayerId = 'operational-vehicle-labels';
 const markerImageId = 'vehicle-marker-default';
-const markerAssetUrl = '/map/vehicle-marker-default.svg';
-
-let markerImagePromise: Promise<HTMLImageElement> | undefined;
+const markerColor = '#c3c6bf';
+const markerPixelRatio = 2;
+const vehicleIconPath = 'M20 8H17V4H3C1.9 4 1 4.9 1 6V17H3C3 18.66 4.34 20 6 20C7.66 20 9 18.66 9 17H15C15 18.66 16.34 20 18 20C19.66 20 21 18.66 21 17H23V12L20 8ZM19.5 9.5L21.46 12H17V9.5H19.5ZM6 18C5.45 18 5 17.55 5 17C5 16.45 5.45 16 6 16C6.55 16 7 16.45 7 17C7 17.55 6.55 18 6 18ZM8.22 15C7.67 14.39 6.89 14 6 14C5.11 14 4.33 14.39 3.78 15H3V6H15V15H8.22ZM18 18C17.45 18 17 17.55 17 17C17 16.45 17.45 16 18 16C18.55 16 19 16.45 19 17C19 17.55 18.55 18 18 18Z';
 
 export async function updateVehicleMarkers(
   map: maplibregl.Map,
   vehicles: MapCanvasVehiclePoint[],
 ): Promise<void> {
-  await registerMarkerImage(map);
+  registerMarkerImage(map);
   if (!map.getSource(sourceId)) {
     map.addSource(sourceId, { type: 'geojson', data: vehicleFeatures([]) });
     map.addLayer({
@@ -22,21 +23,29 @@ export async function updateVehicleMarkers(
       source: sourceId,
       layout: {
         'icon-allow-overlap': true,
+        'icon-anchor': 'center',
         'icon-ignore-placement': true,
         'icon-image': markerImageId,
-        'icon-offset': [30, 0],
         'icon-size': 1,
+      },
+    });
+    map.addLayer({
+      id: labelLayerId,
+      type: 'symbol',
+      source: sourceId,
+      layout: {
         'text-allow-overlap': true,
-        'text-anchor': 'left',
+        'text-anchor': 'bottom',
         'text-field': ['get', 'label'],
         'text-ignore-placement': true,
-        'text-offset': [3.1, 0],
-        'text-size': 11,
+        'text-justify': 'center',
+        'text-offset': [0, -1.08],
+        'text-size': 12,
       },
       paint: {
         'text-color': '#1d1d1f',
         'text-halo-color': '#ffffff',
-        'text-halo-width': 2,
+        'text-halo-width': 2.2,
       },
     });
   }
@@ -59,18 +68,38 @@ function vehicleFeatures(vehicles: MapCanvasVehiclePoint[]): FeatureCollection<P
   };
 }
 
-async function registerMarkerImage(map: maplibregl.Map): Promise<void> {
+function registerMarkerImage(map: maplibregl.Map): void {
   if (map.hasImage(markerImageId)) return;
-  const image = await loadMarkerImage();
-  if (!map.hasImage(markerImageId)) map.addImage(markerImageId, image);
+  map.addImage(markerImageId, createVehicleMarkerImage(), { pixelRatio: markerPixelRatio });
 }
 
-function loadMarkerImage(): Promise<HTMLImageElement> {
-  markerImagePromise ??= new Promise((resolve, reject) => {
-    const image = new Image(64, 64);
-    image.addEventListener('load', () => resolve(image), { once: true });
-    image.addEventListener('error', () => reject(new Error('Vehicle marker asset failed to load')), { once: true });
-    image.src = markerAssetUrl;
-  });
-  return markerImagePromise;
+function createVehicleMarkerImage(): ImageData {
+  const size = 64 * markerPixelRatio;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Canvas 2D context unavailable');
+  context.scale(markerPixelRatio, markerPixelRatio);
+
+  context.save();
+  context.shadowBlur = 6;
+  context.shadowColor = 'rgba(0, 0, 0, 0.18)';
+  context.shadowOffsetY = 2;
+  context.fillStyle = markerColor;
+  context.strokeStyle = '#ffffff';
+  context.lineWidth = 2;
+  context.beginPath();
+  context.arc(32, 32, 18, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+  context.restore();
+
+  context.save();
+  context.translate(20, 20);
+  context.fillStyle = '#000000';
+  context.fill(new Path2D(vehicleIconPath));
+  context.restore();
+
+  return context.getImageData(0, 0, size, size);
 }
