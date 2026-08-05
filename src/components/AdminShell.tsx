@@ -319,7 +319,7 @@ function assignedControlMapPoints(
   vehicleColors: ReadonlyMap<string, string>,
   selectedVehicleId?: string,
 ): MapCanvasPoint[] {
-  return groupAssignedControlDestinations(orders, selectedVehicleId).flatMap((group) => {
+  return groupAssignedControlDestinations(orders, selectedVehicleId).flatMap(({ orders: group, sequence }) => {
     const anchor = group.find((order) => (
       order.latitude !== null
       && order.longitude !== null
@@ -327,14 +327,13 @@ function assignedControlMapPoints(
       && Number.isFinite(order.longitude)
     ));
     if (anchor === undefined || anchor.latitude === null || anchor.longitude === null || anchor.vehicleId === null) return [];
-    const sequence = firstControlSequence(group);
     return [{
       color: vehicleColors.get(anchor.vehicleId) ?? controlVehiclePalette[0],
       id: anchor.destinationId,
-      label: sequence === null ? undefined : String(sequence),
+      label: String(sequence),
       latitude: anchor.latitude,
       longitude: anchor.longitude,
-      sortOrder: sequence ?? Number.MAX_SAFE_INTEGER,
+      sortOrder: sequence,
       tone: 'assigned' as const,
     }];
   });
@@ -439,18 +438,24 @@ function configuredControlEtas(
 function groupAssignedControlDestinations(
   orders: DispatchListItem[],
   selectedVehicleId?: string,
-): DispatchListItem[][] {
-  const groups = new Map<string, DispatchListItem[]>();
+): Array<{ orders: DispatchListItem[]; sequence: number }> {
+  const vehicleGroups = new Map<string, Map<string, DispatchListItem[]>>();
   for (const order of orders) {
     if (
       order.assignmentStatus !== 'ASSIGNED'
       || order.vehicleId === null
       || (selectedVehicleId !== undefined && order.vehicleId !== selectedVehicleId)
     ) continue;
-    const groupKey = `${order.vehicleId}:${order.destinationId}`;
-    groups.set(groupKey, [...(groups.get(groupKey) ?? []), order]);
+    const destinationGroups = vehicleGroups.get(order.vehicleId) ?? new Map<string, DispatchListItem[]>();
+    destinationGroups.set(order.destinationId, [...(destinationGroups.get(order.destinationId) ?? []), order]);
+    vehicleGroups.set(order.vehicleId, destinationGroups);
   }
-  return [...groups.values()].map((group) => [...group].sort(compareControlRouteStops));
+  return [...vehicleGroups.values()].flatMap((destinationGroups) => (
+    [...destinationGroups.values()]
+      .map((group) => [...group].sort(compareControlRouteStops))
+      .sort((left, right) => compareControlRouteStops(left[0], right[0]))
+      .map((group, index) => ({ orders: group, sequence: index + 1 }))
+  ));
 }
 
 function firstControlSequence(orders: DispatchListItem[]): number | null {

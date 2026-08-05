@@ -434,6 +434,7 @@ test('accepts a valid admin session only through the strict v1 session envelope'
   await expect(page.getByRole('link', { name: '관제', exact: true })).toBeVisible();
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/control');
   await expect(page.getByLabel('지원되는 관제 요약')).toContainText(controlSummary.serviceDate);
+  await expect(page.getByLabel('지원되는 관제 요약')).toContainText(`주문 수 ${controlSummary.totalDispatchCount}`);
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
   await expect(page.getByRole('img', { name: /출발 위치: 경기도 군포시 번영로 82/ })).toBeVisible();
   const vehicleList = page.getByRole('region', { name: '차량 리스트', exact: true });
@@ -607,6 +608,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
 
   const scheduledFleet = page.getByRole('region', { name: '차량 리스트', exact: true });
   await expect(scheduledFleet).toContainText('99테 6006');
+  await expect(scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' })).toContainText('2건');
   await expect(scheduledFleet).toContainText('이동');
   await expect(scheduledFleet).toContainText('온도 이탈 A 4.2℃ B 미수신');
   await expect(scheduledFleet).toContainText('77테 4004');
@@ -674,7 +676,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
     };
   })).toMatchObject({
     destinations: [
-      { label: '5', pinImage: expect.stringMatching(/-5$/), pointId: 'destination-g006-control' },
+      { label: '1', pinImage: expect.stringMatching(/-1$/), pointId: 'destination-g006-control' },
       { label: '1', pinImage: expect.stringMatching(/-1$/), pointId: 'destination-g006-second' },
     ],
     destinationSymbol: {
@@ -701,7 +703,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
   await expect(selectedVehicle).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#destinationCard .control-destination-row')).toHaveCount(1);
   await expect(page.getByLabel('배송지 순서 1')).toHaveText('1');
-  await expect(page.locator('#destinationCard .control-destination-row')).not.toContainText('/ 2건');
+  await expect(page.locator('#destinationCard .control-destination-row')).toContainText('2건');
   const orderInfo = page.getByLabel('주문 정보 2건');
   await orderInfo.focus();
   await expect(orderInfo.getByRole('tooltip')).toContainText('COLD - 4박스');
@@ -715,7 +717,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
     routeIds: window.dsvMap.getSource('operational-routes').serialize().data.features.map((feature) => feature.properties.routeId),
   }))).toEqual({
     destinations: [
-      { pointId: 'destination-g006-control', sortKey: -5 },
+      { pointId: 'destination-g006-control', sortKey: -1 },
     ],
     iconAllowOverlap: true,
     routeIds: ['route-plan-g006-scheduled'],
