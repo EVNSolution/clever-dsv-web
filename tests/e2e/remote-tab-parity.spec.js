@@ -1026,7 +1026,7 @@ test('records route renders proof metadata and event details for the selected de
   const api = await installApiFixtures(page, adminFixtures({
     'GET /api/dsv/v1/records': v1Envelope({
       items: [{
-        deliveryStatus: 'DELIVERED',
+        deliveryStatus: 'OUT_FOR_DELIVERY',
         destinationAddress: '서울특별시 중구 퇴계로 131 5층',
         destinationDisplayName: '명동 병원',
         estimatedArrivalAt: '2026-07-29T00:30:00.000Z',

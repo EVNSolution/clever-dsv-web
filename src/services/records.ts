@@ -85,22 +85,32 @@ export function deliverySummaryFrom(value: unknown): DeliverySummary {
   ])) {
     throw new Error('배송 요약 응답 형식이 올바르지 않습니다.');
   }
+  const eventSummary = requiredArray(value, 'eventSummary').map(eventSummaryFrom);
   return {
     sellerOrderId: requiredString(value, 'sellerOrderId'),
     sellerOrderKey: requiredString(value, 'sellerOrderKey'),
     destinationAddress: optionalString(value, 'destinationAddress'),
     destinationDisplayName: requiredString(value, 'destinationDisplayName'),
-    deliveryStatus: requiredString(value, 'deliveryStatus'),
+    deliveryStatus: effectiveDeliveryStatus(requiredString(value, 'deliveryStatus'), eventSummary),
     etaStatus: requiredString(value, 'etaStatus'),
     estimatedArrivalAt: optionalString(value, 'estimatedArrivalAt'),
     proofStatus: requiredString(value, 'proofStatus'),
     proofs: requiredArray(value, 'proofs').map(proofFrom),
-    eventSummary: requiredArray(value, 'eventSummary').map(eventSummaryFrom),
+    eventSummary,
     rawNote: optionalString(value, 'rawNote'),
     reviewStatus: optionalEnum(value, 'reviewStatus', ['CLEARED', 'CONFIRMED', 'NOT_APPLICABLE', 'UNCONFIRMED']),
     routeConstraintStatus: optionalEnum(value, 'routeConstraintStatus', ['NOT_APPLICABLE', 'NOT_EVALUATED', 'PENDING_RECALCULATION', 'UNCONFIRMED']),
     timeConstraint: optionalTimeConstraint(value.timeConstraint),
   };
+}
+
+function effectiveDeliveryStatus(current: string, events: DeliveryEventSummary[]): string {
+  const latestTerminalEvent = [...events]
+    .filter(({ type }) => type === 'STOP_DELIVERED' || type === 'STOP_FAILED')
+    .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt))[0];
+  if (latestTerminalEvent?.type === 'STOP_DELIVERED') return 'DELIVERED';
+  if (latestTerminalEvent?.type === 'STOP_FAILED') return 'FAILED';
+  return current;
 }
 
 function optionalTimeConstraint(value: unknown): DeliverySummary['timeConstraint'] {
