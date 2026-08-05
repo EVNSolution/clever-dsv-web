@@ -75,6 +75,7 @@ const v1ReadAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'GET', pattern: /^records$/u },
   { method: 'GET', pattern: /^drivers$/u },
   { method: 'GET', pattern: /^vehicles$/u },
+  { method: 'GET', pattern: /^vehicles\/[^/]+\/temperature-history$/u },
   { method: 'GET', pattern: /^customers$/u },
   { method: 'GET', pattern: /^destinations$/u },
   { method: 'GET', pattern: /^conditions$/u },

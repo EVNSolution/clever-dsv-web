@@ -75,6 +75,9 @@ type V1ConditionListItem = {
   description: string;
   name: string;
   status?: string;
+  temperatureAlertEnabled?: boolean;
+  temperatureMaxC?: number | null;
+  temperatureMinC?: number | null;
 };
 
 export const emptyManagementData: ManagementData = {
@@ -113,13 +116,15 @@ export async function loadManagementSnapshot(): Promise<ManagementData> {
 
 export async function loadControlManagementSnapshot(): Promise<ManagementData> {
   if (apiConfig.mode === 'mock') return loadManagementData();
-  const [vehicles, customers] = await Promise.all([
+  const [vehicles, customers, conditions] = await Promise.all([
     readV1List('vehicles', isV1VehicleListItem),
     readV1List('customers', isV1CustomerListItem),
+    readV1List('conditions', isV1ConditionListItem),
   ]);
   return {
     ...emptyManagementData,
     assignments: vehicles.flatMap(assignmentRelationForVehicle),
+    conditions: conditions.map(conditionViewModel),
     customers: customers.map(customerViewModel),
     vehicles: vehicles.map(vehicleViewModel),
   };
@@ -331,6 +336,9 @@ function conditionViewModel(condition: V1ConditionListItem): ManagementCondition
     id: condition.conditionId,
     name: condition.name,
     proof: '',
+    temperatureAlertEnabled: condition.temperatureAlertEnabled ?? false,
+    temperatureMaxC: condition.temperatureMaxC ?? null,
+    temperatureMinC: condition.temperatureMinC ?? null,
     temperature: '',
     vehicle: '',
   };
@@ -435,12 +443,15 @@ function isV1DestinationListItem(value: unknown): value is V1DestinationListItem
 }
 
 function isV1ConditionListItem(value: unknown): value is V1ConditionListItem {
-  return hasOnlyKeys(value, ['code', 'conditionId', 'description', 'name', 'status'])
+  return hasOnlyKeys(value, ['code', 'conditionId', 'description', 'name', 'status', 'temperatureAlertEnabled', 'temperatureMaxC', 'temperatureMinC'])
     && isNonEmptyString(value.code)
     && isNonEmptyString(value.conditionId)
     && typeof value.description === 'string'
     && isNonEmptyString(value.name)
-    && isOptionalString(value.status);
+    && isOptionalString(value.status)
+    && (value.temperatureAlertEnabled === undefined || typeof value.temperatureAlertEnabled === 'boolean')
+    && isOptionalNullableFiniteNumber(value.temperatureMaxC)
+    && isOptionalNullableFiniteNumber(value.temperatureMinC);
 }
 
 function hasOnlyKeys(value: unknown, keys: string[]): value is Record<string, unknown> {
@@ -507,10 +518,13 @@ function vehiclePayload(vehicle: ManagementVehicle): Pick<ManagementVehicle, 'no
   };
 }
 
-function conditionWritePayload(condition: ManagementCondition): Pick<ManagementCondition, 'code' | 'description' | 'name'> {
+function conditionWritePayload(condition: ManagementCondition): Pick<ManagementCondition, 'code' | 'description' | 'name' | 'temperatureAlertEnabled' | 'temperatureMaxC' | 'temperatureMinC'> {
   return {
     code: condition.code,
     description: condition.description,
     name: condition.name,
+    temperatureAlertEnabled: condition.temperatureAlertEnabled,
+    temperatureMaxC: condition.temperatureMaxC,
+    temperatureMinC: condition.temperatureMinC,
   };
 }

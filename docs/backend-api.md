@@ -59,6 +59,7 @@ GET /api/dsv/v1/dispatches?serviceDate=YYYY-MM-DD&limit=100
 GET /api/dsv/v1/records
 GET /api/dsv/v1/drivers
 GET /api/dsv/v1/vehicles
+GET /api/dsv/v1/vehicles/{vehicleId}/temperature-history
 GET /api/dsv/v1/customers
 GET /api/dsv/v1/destinations
 GET /api/dsv/v1/conditions
@@ -67,6 +68,8 @@ GET /api/dsv/v1/customers/deliveries
 ```
 
 배차 목록은 `orderNumber`, `destinationName`, `cursor`를 지원한다. 관리 목록, 배차 목록과 고객 배송조회는 `hasMore`와 `nextCursor`로 모든 페이지를 순차 조회한다.
+
+차량 온도 이력도 다른 v1 읽기 API와 동일한 strict envelope를 사용한다. `data`는 `{ "vehicleId": "...", "samples": [{ "observedAt": "...", "temperatureA": 4.2, "temperatureB": null }] }` 형식이며 화면은 최근 24시간을 표시한다.
 
 v1 read success responses use the strict envelope below.
 
@@ -127,7 +130,7 @@ bounded legacy calls use the legacy `{ "data": ..., "error": ... }` envelope. �
 | 기본 배정 | `vehicles/{vehicleId}/drivers`, `vehicles/{vehicleId}/drivers/{assignmentId}` |
 | 관제 상세 | `control/delivery-stops/{deliveryStopId}/context` |
 
-관리 읽기는 v1 목록을 사용하고 배송원, 차량, 운송조건과 기본 배정의 쓰기만 legacy endpoint를 사용한다. 고객사와 배송처 쓰기는 현재 프런트 allowlist에 없다.
+관리 읽기는 v1 목록을 사용하고 배송원, 차량, 운송조건과 기본 배정의 쓰기만 legacy endpoint를 사용한다. 운송조건 쓰기 DTO는 `temperatureAlertEnabled`, `temperatureMinC`, `temperatureMaxC`를 포함한다. 고객사와 배송처 쓰기는 현재 프런트 allowlist에 없다.
 
 ## 화면별 소유권
 

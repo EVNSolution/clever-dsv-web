@@ -56,6 +56,9 @@ export type ManagementCondition = {
   code: string;
   name: string;
   description: string;
+  temperatureAlertEnabled: boolean;
+  temperatureMaxC: number | null;
+  temperatureMinC: number | null;
   temperature: string;
   vehicle: string;
   proof: string;
@@ -80,9 +83,9 @@ const seed: ManagementData = {
   customers: [],
   destinations: [],
   conditions: [
-    { id: 'condition-ambient', code: 'AMBIENT', name: '상온 운송', description: '상온 조건으로 운송합니다.', temperature: '실온', vehicle: '윙바디 또는 일반 화물', proof: 'POD' },
-    { id: 'condition-cold', code: 'COLD', name: '냉장 운송', description: '냉장 상태를 유지하여 운송합니다.', temperature: '2–8℃', vehicle: '냉장탑차', proof: '온도기록, 인수증' },
-    { id: 'condition-ts03', code: 'TS03', name: '특수 운송 03', description: '계약서에 정의된 TS03 운송 조건을 적용합니다.', temperature: '', vehicle: '', proof: '' },
+    { id: 'condition-ambient', code: 'AMBIENT', name: '상온 운송', description: '상온 조건으로 운송합니다.', temperatureAlertEnabled: false, temperatureMinC: null, temperatureMaxC: null, temperature: '실온', vehicle: '윙바디 또는 일반 화물', proof: 'POD' },
+    { id: 'condition-cold', code: 'COLD', name: '냉장 운송', description: '냉장 상태를 유지하여 운송합니다.', temperatureAlertEnabled: true, temperatureMinC: 2, temperatureMaxC: 8, temperature: '2-8℃', vehicle: '냉장탑차', proof: '온도기록, 인수증' },
+    { id: 'condition-ts03', code: 'TS03', name: '특수 운송 03', description: '계약서에 정의된 TS03 운송 조건을 적용합니다.', temperatureAlertEnabled: false, temperatureMinC: null, temperatureMaxC: null, temperature: '', vehicle: '', proof: '' },
   ],
 };
 
@@ -109,6 +112,9 @@ export function loadManagementData(): ManagementData {
           ...condition,
           description: typeof condition.description === 'string' ? condition.description : '',
           proof: typeof condition.proof === 'string' ? condition.proof : '',
+          temperatureAlertEnabled: typeof condition.temperatureAlertEnabled === 'boolean' ? condition.temperatureAlertEnabled : false,
+          temperatureMaxC: typeof condition.temperatureMaxC === 'number' && Number.isFinite(condition.temperatureMaxC) ? condition.temperatureMaxC : null,
+          temperatureMinC: typeof condition.temperatureMinC === 'number' && Number.isFinite(condition.temperatureMinC) ? condition.temperatureMinC : null,
           temperature: typeof condition.temperature === 'string' ? condition.temperature : '',
           vehicle: typeof condition.vehicle === 'string' ? condition.vehicle : '',
         })),
@@ -132,7 +138,12 @@ function migrateLegacyManagementData(raw: string | null): ManagementData | null 
       assignments: [],
       customers: [],
       destinations: [],
-      conditions: stored.conditions,
+      conditions: stored.conditions.map((condition) => ({
+        ...condition,
+        temperatureAlertEnabled: typeof condition.temperatureAlertEnabled === 'boolean' ? condition.temperatureAlertEnabled : false,
+        temperatureMaxC: typeof condition.temperatureMaxC === 'number' && Number.isFinite(condition.temperatureMaxC) ? condition.temperatureMaxC : null,
+        temperatureMinC: typeof condition.temperatureMinC === 'number' && Number.isFinite(condition.temperatureMinC) ? condition.temperatureMinC : null,
+      })),
     };
   } catch {
     return null;
