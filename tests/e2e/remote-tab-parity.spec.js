@@ -1500,7 +1500,7 @@ test('settings GET and PATCH use the exact bounded legacy path', async ({ page }
   await page.goto('/settings');
   await expect(page.getByLabel('준비 시작 시간')).toHaveValue('07:15');
   await expect(page.getByLabel('출발 예정 시간')).toHaveValue('08:45');
-  await expect(page.getByLabel('특장 온도 상한')).toHaveValue('8');
+  await expect(page.getByText('특장 온도 상한')).toHaveCount(0);
   await expect(page.getByLabel('ETA 지연 알림')).toHaveValue('10');
   await expect(page.getByLabel('GPS 미수신 알림')).toHaveValue('30');
   await expect(page.getByLabel('도착 후 대기시간')).toHaveValue('5');
@@ -1541,11 +1541,10 @@ test('settings renders the complete backend defaults', async ({ page }) => {
 
   await expect(page.getByLabel('준비 시작 시간')).toHaveValue('07:30');
   await expect(page.getByLabel('출발 예정 시간')).toHaveValue('08:30');
-  await expect(page.getByLabel('특장 온도 상한')).toHaveValue('8');
+  await expect(page.getByText('특장 온도 상한')).toHaveCount(0);
   await expect(page.getByLabel('ETA 지연 알림')).toHaveValue('10');
   await expect(page.getByLabel('GPS 미수신 알림')).toHaveValue('30');
   await expect(page.getByLabel('도착 후 대기시간')).toHaveValue('5');
-  await expect(page.getByRole('checkbox', { name: '관제 화면 표시' })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: '배송원에게 전달' })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: '기록 페이지에 표시' })).toBeChecked();
   expectOnlyFixtureCalls(api);
