@@ -198,10 +198,16 @@ test('dispatch keeps the driver workspace at a fixed desktop width', async ({ pa
     const mapBox = await page.locator('.dispatch-map-panel').boundingBox();
     const driverBox = await page.locator('.dispatch-drivers-panel').boundingBox();
     const workspacePaddingRight = await page.locator('.dispatch-map-workspace').evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingRight));
-    expect(driverBox.width).toBeCloseTo(264, 1);
+    expect(driverBox.width).toBeCloseTo(280, 1);
     expect(driverBox.x + driverBox.width).toBeCloseTo(workspaceBox.x + workspaceBox.width - workspacePaddingRight, 1);
     expect(mapBox.x + mapBox.width).toBeLessThan(driverBox.x);
   }
+
+  const actionButtons = page.locator('.dispatch-assignment-action .btn');
+  await expect(actionButtons).toHaveCount(3);
+  expect(await actionButtons.evaluateAll((buttons) => buttons.every((button) => (
+    getComputedStyle(button).whiteSpace === 'nowrap' && button.scrollWidth <= button.clientWidth
+  )))).toBe(true);
 });
 
 test('dispatch separates the filter bar without sacrificing workspace height', async ({ page }) => {

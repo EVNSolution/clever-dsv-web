@@ -559,6 +559,82 @@ test('dispatch unassigns one selected order through the compatible single-order 
   expectOnlyFixtureCalls(api);
 });
 
+test('dispatch refreshes a stale route version once before unassigning', async ({ page }) => {
+  let dispatchReads = 0;
+  const unassignmentPayloads = [];
+  const assignedRow = {
+    assignmentStatus: 'ASSIGNED',
+    customerId: 'customer-g006',
+    destinationAddress: 'Seoul Canonical Address Retry',
+    destinationDisplayName: 'Canonical Destination Retry',
+    destinationId: 'destination-g006-retry-unassign',
+    driverId: 'driver-g006',
+    etaStatus: 'PENDING',
+    latitude: 37.5,
+    longitude: 127,
+    routePlanId: 'route-plan-g006-retry-unassign',
+    routeVersionId: 'route-version-g006-retry-old',
+    sellerOrderId: 'seller-order-g006-retry-unassign',
+    sellerOrderKey: 'SELLER-G006-RETRY-UNASSIGN',
+    vehicleId: 'vehicle-g006',
+  };
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': () => {
+      dispatchReads += 1;
+      const currentRow = dispatchReads === 1
+        ? assignedRow
+        : dispatchReads === 2
+          ? { ...assignedRow, routeVersionId: 'route-version-g006-retry-current' }
+          : {
+              ...assignedRow,
+              assignmentStatus: 'UNASSIGNED',
+              driverId: undefined,
+              etaStatus: 'NOT_REQUIRED',
+              routePlanId: undefined,
+              routeVersionId: undefined,
+              vehicleId: undefined,
+            };
+      return v1Envelope({ items: [currentRow], page: { hasMore: false } }, `g006-dispatch-retry-unassign-${dispatchReads}`);
+    },
+    'POST /api/dsv/v1/seller-orders/seller-order-g006-retry-unassign/assignment/unassign': async ({ request }) => {
+      const payload = await request.postDataJSON();
+      unassignmentPayloads.push(payload);
+      if (unassignmentPayloads.length === 1) {
+        return {
+          body: { data: null, error: { code: 'SELLER_ORDER_ASSIGNMENT_CHANGED', message: 'SELLER_ORDER_ASSIGNMENT_CHANGED' } },
+          status: 409,
+        };
+      }
+      return legacyEnvelope({
+        assignmentResult: {
+          assignmentStatus: 'UNASSIGNED',
+          auditEventId: 'audit-g006-retry-unassign',
+          commandId: payload.commandId,
+          etaStatus: 'NOT_REQUIRED',
+          newRouteVersionId: 'route-version-g006-retry-unassigned',
+          previousRouteVersionId: 'route-version-g006-retry-current',
+          receiptId: 'receipt-g006-retry-unassign',
+          routePlanId: 'route-plan-g006-retry-unassigned',
+          sellerOrderId: assignedRow.sellerOrderId,
+        },
+      });
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await page.getByRole('checkbox', { name: '전체 선택' }).check();
+  await page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배정 해제' }).click();
+
+  await expect.poll(() => dispatchReads).toBe(3);
+  expect(unassignmentPayloads).toHaveLength(2);
+  expect(unassignmentPayloads.map((payload) => payload.expectedVersion)).toEqual([
+    'route-version-g006-retry-old',
+    'route-version-g006-retry-current',
+  ]);
+  expectOnlyFixtureCalls(api);
+});
+
 test('dispatch unassigns 53 selected orders with one atomic batch request', async ({ page }) => {
   let dispatchReads = 0;
   let unassignmentCalls = 0;

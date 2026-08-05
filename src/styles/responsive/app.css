@@ -1,6 +1,6 @@
 @media (max-width: 1500px) and (min-width: 1121px) {
   .page-content.records-page .page-grid { grid-template-rows:minmax(260px, 1fr) minmax(220px, .92fr); }
-  .dispatch-map-workspace { grid-template-columns:minmax(0, 1fr) 264px; }
+  .dispatch-map-workspace { grid-template-columns:minmax(0, 1fr) 280px; }
 }
 @media (max-width: 1120px) and (min-width: 921px) {
   .page-content.dynamic-page { overflow:auto; }
@@ -14,7 +14,7 @@
   .settings-hero { align-items:flex-start; }
   .settings-header-tools { align-items:flex-end; flex-direction:column-reverse; gap:8px; }
   .dispatch-assignment { flex:0 0 auto; }
-  .dispatch-map-workspace { min-height:680px; grid-template-columns:minmax(0, 1fr) 264px; }
+  .dispatch-map-workspace { min-height:680px; grid-template-columns:minmax(0, 1fr) 280px; }
 }
 
 @media (max-width: 920px) {

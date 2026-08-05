@@ -233,7 +233,7 @@
 .dispatch-assignment-toolbar .work-departure-message { margin-left:auto; color:var(--color-muted); font-size:11px; font-weight:750; }
 .dispatch-assignment-toolbar .work-departure-message.error { color:var(--color-risk); }
 .dispatch-map-workspace {
-  min-height:0; display:grid; grid-template-columns:minmax(0, 1fr) 264px; gap:12px;
+  min-height:0; display:grid; grid-template-columns:minmax(0, 1fr) 280px; gap:12px;
   padding:0;
 }
 .dispatch-workspace-panel {
@@ -446,7 +446,7 @@
 }
 .dispatch-assignment-action > p { margin:0; color:var(--color-risk); font-size:10px; font-weight:750; }
 .dispatch-assignment-action > div:last-child { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:6px; }
-.dispatch-assignment-action .btn { min-height:34px; padding:0 10px; font-size:11px; }
+.dispatch-assignment-action .btn { min-width:0; min-height:34px; padding:0 8px; font-size:11px; white-space:nowrap; }
 .dispatch-action-count { margin-left:4px; font-size:9px; font-weight:850; opacity:.72; }
 
 .work-two-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; align-items:stretch; height:min(720px, calc(100dvh - 264px)); min-height:500px; }

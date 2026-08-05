@@ -1,6 +1,7 @@
 import type { DragEvent, KeyboardEvent, ReactElement } from 'react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpRight, ChevronDown, LoaderCircle } from 'lucide-react';
+import { ApiError } from '../api/client';
 import { apiConfig } from '../api/config';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
 import {
@@ -1266,8 +1267,16 @@ function DispatchWorkspace({
     setMutationBusy(true);
     setMutationError('');
     try {
-      if (assignedOrders.length === 1) await unassignDispatchOrder(assignedOrders[0]);
-      else await unassignDispatchOrders(assignedOrders);
+      try {
+        await submitUnassignment(assignedOrders);
+      } catch (caught) {
+        if (!isAssignmentVersionConflict(caught)) throw caught;
+        const refreshed = await loadDispatchList(serviceDate, search);
+        const refreshedById = new Map(refreshed.rows.map((row) => [row.sellerOrderId, row]));
+        const refreshedOrders = assignedOrders.map((row) => refreshedById.get(row.sellerOrderId));
+        if (refreshedOrders.some((row) => row?.assignmentStatus !== 'ASSIGNED')) throw caught;
+        await submitUnassignment(refreshedOrders as DispatchListItem[]);
+      }
       clearSelection();
       onAssignmentChanged?.();
     } catch (caught) {
@@ -1275,6 +1284,11 @@ function DispatchWorkspace({
     } finally {
       setMutationBusy(false);
     }
+  }
+
+  async function submitUnassignment(orders: DispatchListItem[]): Promise<void> {
+    if (orders.length === 1) await unassignDispatchOrder(orders[0]);
+    else await unassignDispatchOrders(orders);
   }
 
   async function deleteSelected(): Promise<void> {
@@ -1630,6 +1644,16 @@ function DispatchWorkspace({
       </div>
     </section>
   );
+}
+
+function isAssignmentVersionConflict(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 409 || !isRecord(error.body)) return false;
+  const detail = error.body.error;
+  return isRecord(detail) && detail.code === 'SELLER_ORDER_ASSIGNMENT_CHANGED';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 type DispatchDestinationGroup = {
