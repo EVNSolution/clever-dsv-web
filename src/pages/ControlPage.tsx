@@ -1,9 +1,9 @@
 import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useState } from 'react';
-import { ChevronRight, Info } from 'lucide-react';
+import { ChevronRight, Info, X } from 'lucide-react';
 import { apiConfig } from '../api/config';
-import { loadControlSummary } from '../services/control';
-import type { ControlSummary } from '../services/control';
+import { loadControlSummary, loadVehicleTemperatureHistory } from '../services/control';
+import type { ControlSummary, VehicleTemperatureHistory, VehicleTemperatureSample } from '../services/control';
 import { loadDispatchList } from '../services/dispatch';
 import type { DispatchListItem } from '../services/dispatch';
 import { loadControlManagementSnapshot } from '../services/management';
@@ -159,6 +159,7 @@ function RemoteControlPage({
       summary={summary}
       vehicles={scheduledControlVehicles(orders, management)}
       assignments={management?.assignments ?? []}
+      conditions={management?.conditions ?? []}
       onVehicleSelect={onVehicleSelect}
       selectedVehicleId={selectedVehicleId}
       vehicleColors={vehicleColors}
@@ -180,6 +181,7 @@ function markControlTelemetryStale(management: ManagementData | undefined): Mana
 
 function ControlPanels({
   assignments = [],
+  conditions = [],
   error = '',
   estimatedArrivalByOrderId = new Map(),
   loading,
@@ -193,6 +195,7 @@ function ControlPanels({
   vehicleColors = new Map(),
 }: {
   assignments?: ManagementData['assignments'];
+  conditions?: ManagementData['conditions'];
   error?: string;
   estimatedArrivalByOrderId?: ReadonlyMap<string, string>;
   loading: boolean;
@@ -206,6 +209,10 @@ function ControlPanels({
   vehicleColors?: ReadonlyMap<string, string>;
 }): ReactElement {
   const [mobilePanel, setMobilePanel] = useState<MobileControlPanel>();
+  const [temperatureVehicle, setTemperatureVehicle] = useState<ManagementData['vehicles'][number]>();
+  const [temperatureHistory, setTemperatureHistory] = useState<VehicleTemperatureHistory>();
+  const [temperatureLoading, setTemperatureLoading] = useState(false);
+  const [temperatureError, setTemperatureError] = useState('');
   const selectedVehicleOrders = selectedVehicleId === undefined
     ? []
     : orders
@@ -244,6 +251,30 @@ function ControlPanels({
     };
   }, [mobilePanel]);
 
+  useEffect(() => {
+    if (!temperatureVehicle) return undefined;
+    const controller = new AbortController();
+    setTemperatureLoading(true);
+    setTemperatureError('');
+    setTemperatureHistory(undefined);
+    loadVehicleTemperatureHistory(temperatureVehicle.id, controller.signal)
+      .then((history) => {
+        if (controller.signal.aborted) return;
+        setTemperatureHistory({
+          ...history,
+          samples: recentTemperatureSamples(history.samples),
+        });
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setTemperatureError(error instanceof Error ? error.message : '온도 이력을 불러오지 못했습니다.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setTemperatureLoading(false);
+      });
+    return () => controller.abort();
+  }, [temperatureVehicle]);
+
   return (
     <aside className={`side control-side${mobilePanel ? ' mobile-panel-active' : ''}`} aria-label="관제 운영 패널">
       <div className={`panel-view ${selectedVehicleId === undefined ? 'vehicle-idle' : 'vehicle-focused'}${mobilePanel ? ' mobile-panel-open' : ''}`}>
@@ -267,18 +298,23 @@ function ControlPanels({
           {!loading && !error ? (
             <div className="control-vehicle-list fleet overlay-scroll" id="fleetList">
               {vehicles.map((vehicle) => (
-                <button
-                  aria-pressed={selectedVehicleId === vehicle.id}
+                <div
                   className={`control-vehicle-row${selectedVehicleId === vehicle.id ? ' selected' : ''}`}
                   key={vehicle.id}
-                  onClick={() => onVehicleSelect?.(vehicle.id)}
                   style={{ '--control-route-color': vehicleColors.get(vehicle.id) ?? '#0066cc' } as CSSProperties}
-                  type="button"
                 >
                   <i aria-hidden="true" />
-                  <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong><small>{vehicle.type || '차종 미등록'} {controlVehicleMotionText(vehicle)} {controlVehicleTemperatureText(vehicle)}</small></span>
+                  <button
+                    aria-pressed={selectedVehicleId === vehicle.id}
+                    className="control-vehicle-select"
+                    onClick={() => onVehicleSelect?.(vehicle.id)}
+                    type="button"
+                  >
+                    <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong><small>{vehicle.type || '차종 미등록'} {controlVehicleMotionText(vehicle)} {controlVehicleTemperatureText(vehicle, orders, conditions)}</small></span>
+                  </button>
                   <em>{assignments.some((assignment) => assignment.vehicleId === vehicle.id) ? '배차 준비' : '배송원 미배정'}</em>
-                </button>
+                  <button className="control-temperature-button" type="button" onClick={() => setTemperatureVehicle(vehicle)}>온도</button>
+                </div>
               ))}
               {!vehicles.length ? <div className="panel-state">차량이 없습니다.</div> : null}
             </div>
@@ -352,7 +388,113 @@ function ControlPanels({
           </div>
         </section> : null}
       </div>
+      {temperatureVehicle ? (
+        <VehicleTemperatureDialog
+          error={temperatureError}
+          history={temperatureHistory}
+          loading={temperatureLoading}
+          onClose={() => setTemperatureVehicle(undefined)}
+          vehicle={temperatureVehicle}
+        />
+      ) : null}
     </aside>
+  );
+}
+
+function VehicleTemperatureDialog({
+  error,
+  history,
+  loading,
+  onClose,
+  vehicle,
+}: {
+  error: string;
+  history?: VehicleTemperatureHistory;
+  loading: boolean;
+  onClose: () => void;
+  vehicle: ManagementData['vehicles'][number];
+}): ReactElement {
+  return (
+    <div className="temperature-dialog-backdrop" role="presentation">
+      <section className="temperature-dialog" role="dialog" aria-modal="true" aria-labelledby="temperatureDialogTitle">
+        <header>
+          <span>
+            <strong id="temperatureDialogTitle">{vehicle.plate || '차량 번호 미등록'} 온도</strong>
+            <small>최근 24시간, 5분 수집 포인트</small>
+          </span>
+          <button type="button" aria-label="온도 이력 닫기" onClick={onClose}><X aria-hidden="true" /></button>
+        </header>
+        {loading ? <div className="temperature-dialog-state" role="status">온도 이력을 불러오는 중입니다.</div> : null}
+        {error ? <div className="temperature-dialog-state error" role="alert">{error}</div> : null}
+        {!loading && !error && history ? <TemperatureChart samples={history.samples} /> : null}
+      </section>
+    </div>
+  );
+}
+
+function TemperatureChart({ samples }: { samples: VehicleTemperatureSample[] }): ReactElement {
+  const channels = [
+    { key: 'temperatureA' as const, label: 'A 채널', color: 'var(--color-primary)' },
+    { key: 'temperatureB' as const, label: 'B 채널', color: 'var(--color-risk)' },
+  ];
+  const values = samples.flatMap((sample) => [sample.temperatureA, sample.temperatureB]).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  if (!samples.length || !values.length) return <div className="temperature-dialog-state">표시할 온도 데이터가 없습니다.</div>;
+  const width = 560;
+  const height = 260;
+  const padding = { bottom: 34, left: 44, right: 18, top: 20 };
+  const timestamps = samples.map((sample) => new Date(sample.observedAt).getTime()).filter((value) => !Number.isNaN(value));
+  const minTime = Math.min(...timestamps);
+  const maxTime = Math.max(...timestamps);
+  const minValue = Math.floor(Math.min(...values) - 1);
+  const maxValue = Math.ceil(Math.max(...values) + 1);
+  const xFor = (observedAt: string): number => {
+    const timestamp = new Date(observedAt).getTime();
+    if (maxTime === minTime || Number.isNaN(timestamp)) return padding.left;
+    return padding.left + ((timestamp - minTime) / (maxTime - minTime)) * (width - padding.left - padding.right);
+  };
+  const yFor = (value: number): number => {
+    if (maxValue === minValue) return height / 2;
+    return padding.top + ((maxValue - value) / (maxValue - minValue)) * (height - padding.top - padding.bottom);
+  };
+  const yTicks = [minValue, Math.round((minValue + maxValue) / 2), maxValue];
+  const xTicks = [samples[0], samples[Math.floor(samples.length / 2)], samples[samples.length - 1]].filter((sample, index, list) => sample && list.findIndex((item) => item?.observedAt === sample.observedAt) === index);
+  return (
+    <div className="temperature-chart">
+      <div className="temperature-legend" aria-hidden="true">
+        {channels.map((channel) => <span key={channel.key}><i style={{ background: channel.color }} />{channel.label}</span>)}
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="최근 24시간 차량 온도 A 채널과 B 채널 꺾은선 차트">
+        <title>최근 24시간 차량 온도 이력</title>
+        <desc>A 채널과 B 채널을 5분 수집 포인트와 꺾은선으로 표시합니다.</desc>
+        {yTicks.map((tick) => (
+          <g key={tick}>
+            <line className="temperature-grid-line" x1={padding.left} x2={width - padding.right} y1={yFor(tick)} y2={yFor(tick)} />
+            <text className="temperature-axis-label" x={padding.left - 8} y={yFor(tick) + 4} textAnchor="end">{tick}℃</text>
+          </g>
+        ))}
+        <line className="temperature-axis-line" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
+        <line className="temperature-axis-line" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
+        {xTicks.map((sample) => (
+          <text className="temperature-axis-label" key={sample.observedAt} x={xFor(sample.observedAt)} y={height - 10} textAnchor="middle">{formatTemperatureAxisTime(sample.observedAt)}</text>
+        ))}
+        {channels.map((channel) => {
+          const points = samples
+            .filter((sample) => typeof sample[channel.key] === 'number' && Number.isFinite(sample[channel.key]))
+            .map((sample) => ({ sample, value: sample[channel.key] as number, x: xFor(sample.observedAt), y: yFor(sample[channel.key] as number) }));
+          const line = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
+          return (
+            <g key={channel.key}>
+              {points.length > 1 ? <polyline className="temperature-line" fill="none" points={line} stroke={channel.color} /> : null}
+              {points.map((point) => (
+                <circle className="temperature-point" cx={point.x} cy={point.y} fill={channel.color} key={`${channel.key}-${point.sample.observedAt}`} r="3.2">
+                  <title>{`${formatTemperatureTooltipTime(point.sample.observedAt)} ${channel.label} ${point.value.toFixed(1)}℃`}</title>
+                </circle>
+              ))}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 
@@ -385,12 +527,79 @@ function scheduledControlVehicles(orders: DispatchListItem[], management?: Manag
   return management.vehicles.filter((vehicle) => scheduledVehicleIds.has(vehicle.id));
 }
 
-function controlVehicleTemperatureText(vehicle: ManagementData['vehicles'][number]): string {
+function controlVehicleTemperatureText(
+  vehicle: ManagementData['vehicles'][number],
+  orders: DispatchListItem[],
+  conditions: ManagementData['conditions'],
+): string {
   if (vehicle.temperatureStale === true) {
     const pairText = controlTemperaturePairText(vehicle);
     return pairText === '온도 미수신' ? '온도 지연 미수신' : `온도 지연 ${pairText}`;
   }
-  return controlTemperaturePairText(vehicle);
+  const pairText = controlTemperaturePairText(vehicle);
+  const policies = vehicleTemperaturePolicies(vehicle.id, orders, conditions);
+  if (policies.length === 0 || pairText === '온도 미수신') return pairText;
+  const minimums = policies.map((policy) => policy.temperatureMinC).filter((value): value is number => value !== null);
+  const maximums = policies.map((policy) => policy.temperatureMaxC).filter((value): value is number => value !== null);
+  const minimum = minimums.length === 0 ? null : Math.max(...minimums);
+  const maximum = maximums.length === 0 ? null : Math.min(...maximums);
+  if (minimum !== null && maximum !== null && minimum > maximum) return `온도 기준 충돌 ${pairText}`;
+  const readings = [vehicle.temperatureA, vehicle.temperatureB]
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  const outsidePolicy = readings.some((value) => (minimum !== null && value < minimum) || (maximum !== null && value > maximum));
+  return `${outsidePolicy ? '온도 이탈' : '온도 정상'} ${pairText}`;
+}
+
+function vehicleTemperaturePolicies(
+  vehicleId: string,
+  orders: DispatchListItem[],
+  conditions: ManagementData['conditions'],
+): ManagementData['conditions'] {
+  const conditionCodes = new Set(
+    orders
+      .filter((order) => order.assignmentStatus === 'ASSIGNED' && order.vehicleId === vehicleId && order.conditionCode !== null)
+      .map((order) => order.conditionCode!.trim().toUpperCase()),
+  );
+  return conditions.filter((condition) => condition.temperatureAlertEnabled && conditionCodes.has(condition.code.trim().toUpperCase()));
+}
+
+function recentTemperatureSamples(samples: VehicleTemperatureSample[]): VehicleTemperatureSample[] {
+  const latest = samples.reduce((max, sample) => {
+    const timestamp = new Date(sample.observedAt).getTime();
+    return Number.isNaN(timestamp) ? max : Math.max(max, timestamp);
+  }, 0);
+  if (latest === 0) return [];
+  const cutoff = latest - 24 * 60 * 60 * 1000;
+  return samples
+    .filter((sample) => {
+      const timestamp = new Date(sample.observedAt).getTime();
+      return !Number.isNaN(timestamp) && timestamp >= cutoff && timestamp <= latest;
+    })
+    .sort((left, right) => new Date(left.observedAt).getTime() - new Date(right.observedAt).getTime());
+}
+
+function formatTemperatureAxisTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return new Intl.DateTimeFormat('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Seoul',
+  }).format(date);
+}
+
+function formatTemperatureTooltipTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('ko-KR', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Seoul',
+  }).format(date);
 }
 
 function controlVehicleMotionText(vehicle: ManagementData['vehicles'][number]): string {

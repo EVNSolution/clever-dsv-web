@@ -104,7 +104,8 @@ test('operational mock fixtures stay absent until fixed dispatch data is rebuilt
   await page.goto('/settings');
   await expect(page.getByRole('heading', { name: '설정' })).toBeVisible();
   await expect(page.getByText('알림 기준', { exact: true })).toBeVisible();
-  await expect(page.getByText('특장 온도 상한')).toBeVisible();
+  await expect(page.getByText('특장 온도 상한')).toHaveCount(0);
+  await expect(page.getByText('온도 경고')).toHaveCount(0);
   await expect(page.getByText('배송조회', { exact: true })).toHaveCount(0);
 });
 
@@ -112,12 +113,10 @@ test('admin settings persist after reload', async ({ page }) => {
   await page.goto('/settings');
   const loadingStartTime = page.getByLabel('준비 시작 시간');
   const plannedDepartureTime = page.getByLabel('출발 예정 시간');
-  const temperatureLimit = page.locator('tr').filter({ hasText: '특장 온도 상한' }).locator('input');
   const delayAlerts = page.getByRole('checkbox', { name: '배송원에게 전달' });
 
   await loadingStartTime.fill('07:45');
   await plannedDepartureTime.fill('08:20');
-  await temperatureLimit.fill('9.5');
   await delayAlerts.uncheck();
   await page.getByRole('button', { name: '저장', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: '설정을 저장했습니다.' })).toBeVisible();
@@ -125,7 +124,6 @@ test('admin settings persist after reload', async ({ page }) => {
 
   await expect(loadingStartTime).toHaveValue('07:45');
   await expect(plannedDepartureTime).toHaveValue('08:20');
-  await expect(temperatureLimit).toHaveValue('9.5');
   await expect(delayAlerts).not.toBeChecked();
 });
 

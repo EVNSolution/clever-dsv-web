@@ -138,6 +138,7 @@ function g003DispatchRows() {
 async function installApiFixtures(page, fixtures) {
   const resolvedFixtures = {
     'GET /api/dsv/v1/map/profile': v1Envelope(mapProviderProfile, 'g006-map-profile'),
+    'GET /api/dsv/v1/conditions?limit=100': emptyV1List(),
     'GET /api/dsv/settings/operations': { data: operationalSettings, error: null },
     ...fixtures,
   };
@@ -519,8 +520,30 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       ],
       page: { hasMore: false },
     }),
+    'GET /api/dsv/v1/vehicles/vehicle-g006-scheduled/temperature-history': v1Envelope({
+      vehicleId: 'vehicle-g006-scheduled',
+      samples: [
+        { observedAt: '2026-07-22T00:15:00.000Z', temperatureA: 6.4, temperatureB: 6.7 },
+        { observedAt: '2026-07-23T00:00:00.000Z', temperatureA: 4.1, temperatureB: null },
+        { observedAt: '2026-07-23T00:05:00.000Z', temperatureA: 4.2, temperatureB: 4.4 },
+        { observedAt: '2026-07-23T00:10:00.000Z', temperatureA: 4.3, temperatureB: 4.5 },
+      ],
+    }),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({
       items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Customer', orderCount: 3, status: 'ACTIVE' }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/conditions?limit=100': v1Envelope({
+      items: [{
+        code: 'COLD',
+        conditionId: 'condition-g006-cold',
+        description: '냉장 운송',
+        name: '냉장',
+        status: 'ACTIVE',
+        temperatureAlertEnabled: true,
+        temperatureMaxC: 4,
+        temperatureMinC: 2,
+      }],
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/dispatches': v1Envelope({
@@ -585,12 +608,20 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
   const scheduledFleet = page.getByRole('region', { name: '차량 리스트', exact: true });
   await expect(scheduledFleet).toContainText('99테 6006');
   await expect(scheduledFleet).toContainText('이동');
-  await expect(scheduledFleet).toContainText('A 4.2℃ B 미수신');
+  await expect(scheduledFleet).toContainText('온도 이탈 A 4.2℃ B 미수신');
   await expect(scheduledFleet).toContainText('77테 4004');
   await expect(scheduledFleet).toContainText('운행 미확인');
   await expect(scheduledFleet).toContainText('온도 지연 미수신');
   await expect(scheduledFleet).not.toContainText('88테 5005');
   await expect(scheduledFleet).not.toContainText('vehicle-g006');
+  await scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' }).getByRole('button', { name: '온도', exact: true }).click();
+  const temperatureDialog = page.getByRole('dialog', { name: '99테 6006 온도' });
+  await expect(temperatureDialog).toBeVisible();
+  await expect(temperatureDialog.getByRole('img', { name: '최근 24시간 차량 온도 A 채널과 B 채널 꺾은선 차트' })).toBeVisible();
+  await expect(temperatureDialog).toContainText('A 채널');
+  await expect(temperatureDialog).toContainText('B 채널');
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/vehicles/vehicle-g006-scheduled/temperature-history');
+  await temperatureDialog.getByRole('button', { name: '온도 이력 닫기' }).click();
   const customerInquiryLink = page.getByRole('link', { name: 'Canonical Customer 고객사 조회 화면으로 이동' });
   await expect(customerInquiryLink).toBeVisible();
   await expect(customerInquiryLink).toHaveAttribute('href', `/customer/delivery-inquiry/admin?customer=customer-g006-control&serviceDate=${controlSummary.serviceDate}`);
@@ -1457,6 +1488,7 @@ test('pins the exact normalized G005 v1 read allowlist', () => {
     'GET records',
     'GET drivers',
     'GET vehicles',
+    'GET vehicles/[^/]+/temperature-history',
     'GET customers',
     'GET destinations',
     'GET conditions',

@@ -224,9 +224,23 @@ test('condition keeps create and delete on the list and edit on the detail', asy
   await form.getByLabel('조건 코드').fill(`COND-${stamp().slice(-4)}`);
   await form.getByLabel('명칭').fill(name);
   await form.getByLabel('설명').fill('관리자가 등록한 운송 조건');
+  await form.getByLabel('온도 알림 사용').check();
+  await form.getByLabel('최소 ℃').fill('8');
+  await form.getByLabel('최대 ℃').fill('2');
+  page.once('dialog', (dialog) => {
+    expect(dialog.message()).toContain('온도 최소값');
+    dialog.accept();
+  });
+  await form.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(form).toBeVisible();
+  await form.getByLabel('최소 ℃').fill('2');
+  await form.getByLabel('최대 ℃').fill('8');
   await save(form);
   let row = page.locator('.master-condition-grid tr', { hasText: name });
   await row.click();
+  await expect(detailPanel).toContainText('온도 알림');
+  await expect(detailPanel).toContainText('사용');
+  await expect(detailPanel).toContainText('2℃ - 8℃');
   await page.getByRole('button', { name: '운송조건 수정', exact: true }).click();
   form = page.getByLabel('운송조건 편집');
   await form.getByLabel('명칭').fill(`${name} 수정`);

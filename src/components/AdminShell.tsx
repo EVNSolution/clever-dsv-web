@@ -493,8 +493,7 @@ function scheduledControlVehiclePoints(
   const positionedVehicles = scheduledVehicles.flatMap((vehicle) => {
     const { vehicleLatitude: latitude, vehicleLongitude: longitude } = vehicle;
     if (
-      vehicle.vehiclePositionStale === true
-      || typeof latitude !== 'number'
+      typeof latitude !== 'number'
       || typeof longitude !== 'number'
       || !Number.isFinite(latitude)
       || !Number.isFinite(longitude)
