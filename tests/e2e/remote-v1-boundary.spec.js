@@ -285,6 +285,14 @@ async function loadExecutableAuthModule() {
   return import(`data:text/javascript;charset=utf-8,${encodeURIComponent(executableAuthSource())}`);
 }
 
+async function loadControlProgressModule() {
+  const source = readFileSync(new URL('../../src/features/control/control-progress.ts', import.meta.url), 'utf8');
+  const output = transpileModule(source, {
+    compilerOptions: { module: ModuleKind.ES2022, target: ScriptTarget.ES2022 },
+  }).outputText;
+  return import(`data:text/javascript;charset=utf-8,${encodeURIComponent(output)}`);
+}
+
 async function callAssignmentCommand(page, { body, path, status }) {
   await page.goto('/login');
   return page.evaluate(async ({ clientSource, responseBody, responseStatus, requestPath }) => {
@@ -381,6 +389,158 @@ test('maps DSV admin principal id from actorId and preserves displayName', async
     shopId: 'shop-g006',
     displayName: 'G006 Admin Operator',
   });
+});
+
+test('separates control progress state from selection and splits a selected route monotonically', async () => {
+  const progress = await loadControlProgressModule();
+  const order = (eventSummary) => ({ eventSummary });
+  const destinations = progress.assignControlDestinationProgress([
+    { orders: [order([{ occurredAt: '2026-08-05T00:10:00.000Z', type: 'STOP_ARRIVED' }])] },
+    { orders: [order([{ occurredAt: '2026-08-05T00:20:00.000Z', type: 'STOP_FAILED' }])] },
+    { orders: [order([])] },
+    { orders: [order([])] },
+  ]);
+  expect(destinations.map((destination) => destination.progressStatus)).toEqual([
+    'completed',
+    'failed',
+    'current',
+    'planned',
+  ]);
+
+  const segments = progress.splitControlRouteByProgress({
+    coordinates: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]],
+    stops: [
+      { coordinate: [1, 0], progressStatus: 'completed' },
+      { coordinate: [2, 0], progressStatus: 'failed' },
+      { coordinate: [3, 0], progressStatus: 'current' },
+      { coordinate: [4, 0], progressStatus: 'planned' },
+    ],
+    vehiclePosition: [2.5, 0],
+  });
+  expect(segments.map((segment) => segment.status)).toEqual(['completed', 'current', 'planned']);
+  expect(segments[0].coordinates.at(-1)[0]).toBeCloseTo(2.5, 5);
+  expect(segments[1].coordinates[0][0]).toBeCloseTo(2.5, 5);
+  expect(segments[1].coordinates.at(-1)[0]).toBeCloseTo(3, 5);
+  expect(segments[2].coordinates[0][0]).toBeCloseTo(3, 5);
+  expect(progress.CONTROL_PROGRESS_COLORS).toEqual({
+    completed: '#8e8e93',
+    current: '#1f8b4c',
+    failed: '#e87514',
+    planned: '#0066cc',
+  });
+});
+
+test('renders selected control progress without letting a future destination click change its state color', async ({ page }) => {
+  const vehicleId = 'vehicle-progress';
+  const routePlanId = 'route-progress';
+  const routeCoordinates = [
+    [127, 37.5],
+    [127.01, 37.5],
+    [127.02, 37.5],
+    [127.03, 37.5],
+    [127.04, 37.5],
+  ];
+  const events = [
+    [{ occurredAt: '2026-08-05T00:10:00.000Z', type: 'STOP_ARRIVED' }],
+    [{ occurredAt: '2026-08-05T00:20:00.000Z', type: 'STOP_FAILED' }],
+    [],
+    [],
+  ];
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Envelope({ ...controlSummary, assignedCount: 4, totalDispatchCount: 4, unassignedCount: 0 }),
+    'GET /api/dsv/v1/control/routes': v1Envelope({
+      routes: [{
+        coordinates: routeCoordinates,
+        generatedAt: '2026-08-05T00:00:00.000Z',
+        geometryStatus: 'fresh',
+        legDurationsSeconds: [60, 60, 60, 60],
+        routePlanId,
+      }],
+      serviceDate: controlSummary.serviceDate,
+    }),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
+      items: [{
+        displayName: 'Progress Truck',
+        driverAssignments: [],
+        status: 'ACTIVE',
+        telemetryActivity: 'ACTIVE',
+        vehicleId,
+        vehicleLatitude: 37.5,
+        vehicleLongitude: 127.025,
+        vehiclePlate: '진행12가3456',
+        vehiclePositionObservedAt: '2026-08-05T00:30:00.000Z',
+        vehiclePositionStale: false,
+        vehicleStopped: false,
+      }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({ items: [], page: { hasMore: false } }),
+    'GET /api/dsv/v1/dispatches': v1Envelope({
+      items: routeCoordinates.slice(1).map((coordinate, index) => ({
+        assignmentStatus: 'ASSIGNED',
+        customerId: 'customer-progress',
+        destinationDisplayName: `진행 배송지 ${index + 1}`,
+        destinationId: `destination-progress-${index + 1}`,
+        driverId: 'driver-progress',
+        etaStatus: 'PENDING',
+        eventSummary: events[index],
+        latitude: coordinate[1],
+        longitude: coordinate[0],
+        routePlanId,
+        routeStopSequence: index + 1,
+        sellerOrderId: `seller-order-progress-${index + 1}`,
+        sellerOrderKey: `PROGRESS-${index + 1}`,
+        vehicleId,
+      })),
+      page: { hasMore: false },
+    }),
+  });
+
+  await page.goto('/control');
+  const vehicleButton = page.getByRole('button', { name: /진행12가3456/u });
+  await expect(vehicleButton).toBeVisible();
+  await vehicleButton.click();
+  const rows = page.locator('#destinationCard .control-destination-row');
+  await expect(rows).toHaveCount(4);
+  const expectedColors = [
+    'rgb(142, 142, 147)',
+    'rgb(232, 117, 20)',
+    'rgb(31, 139, 76)',
+    'rgb(0, 102, 204)',
+  ];
+  for (const [index, color] of expectedColors.entries()) {
+    await expect(rows.nth(index).locator('.control-order-sequence')).toHaveCSS('background-color', color);
+  }
+  await expect.poll(() => page.evaluate(() => {
+    const destinations = window.dsvMap?.getSource('operational-destinations');
+    const routes = window.dsvMap?.getSource('operational-routes');
+    if (!destinations || !routes) return null;
+    return {
+      destinations: destinations.serialize().data.features.map((feature) => feature.properties.color),
+      routes: routes.serialize().data.features.map((feature) => ({
+        casingColor: feature.properties.casingColor,
+        color: feature.properties.color,
+      })),
+    };
+  })).toEqual({
+    destinations: ['#8e8e93', '#e87514', '#1f8b4c', '#0066cc'],
+    routes: [
+      { casingColor: '#0066cc', color: '#8e8e93' },
+      { casingColor: '#0066cc', color: '#1f8b4c' },
+      { casingColor: '#0066cc', color: '#0066cc' },
+    ],
+  });
+
+  await rows.nth(3).click();
+  await expect(rows.nth(3)).toHaveClass(/selected/u);
+  await expect(rows.nth(3).locator('.control-order-sequence')).toHaveCSS('background-color', 'rgb(0, 102, 204)');
+  await expect.poll(() => page.evaluate(() => {
+    const destinations = window.dsvMap?.getSource('operational-destinations');
+    return destinations?.serialize().data.features
+      .find((feature) => feature.properties.pointId === 'destination-progress-4')?.properties.color;
+  })).toBe('#0066cc');
+  expect(api.unexpected).toEqual([]);
 });
 
 test('rejects a DSV admin session without actorId instead of falling back to shopId', async () => {
@@ -682,6 +842,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       vehicles: vehicleSource.serialize().data.features.map((feature) => ({
         coordinates: feature.geometry.coordinates,
         label: feature.properties.label,
+        markerImageId: feature.properties.markerImageId,
         vehicleId: feature.properties.vehicleId ?? null,
       })),
     };
@@ -701,7 +862,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       imageHeight: 128,
       imageIsVisible: true,
       imageWidth: 128,
-      iconImage: 'vehicle-marker-default',
+      iconImage: ['get', 'markerImageId'],
       labelField: ['get', 'label'],
     },
     routes: [
@@ -709,8 +870,8 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       { routeId: 'route-plan-g006-second' },
     ],
     vehicles: [
-      { coordinates: [127.0412, 37.5021], label: '99테 6006', vehicleId: null },
-      { coordinates: [126.9372235, 37.330948], label: '1대 예정', vehicleId: null },
+      { coordinates: [127.0412, 37.5021], label: '99테 6006', markerImageId: 'vehicle-marker-0066cc', vehicleId: null },
+      { coordinates: [126.9372235, 37.330948], label: '1대 예정', markerImageId: 'vehicle-marker-default', vehicleId: null },
     ],
   });
   const colors = await page.evaluate(() => (
@@ -723,7 +884,11 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
   await expect(selectedVehicle).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#destinationCard .control-destination-row')).toHaveCount(1);
   await expect(page.getByLabel('배송지 순서 1')).toHaveText('1');
+  await expect(page.getByLabel('배송지 순서 1')).toHaveCSS('background-color', 'rgb(31, 139, 76)');
   await expect(page.locator('#destinationCard .control-destination-row')).toContainText('2건');
+  await page.locator('#destinationCard .control-destination-row').click();
+  await expect(page.locator('#destinationCard .control-destination-row')).toHaveClass(/selected/u);
+  await expect(page.getByLabel('배송지 순서 1')).toHaveCSS('background-color', 'rgb(31, 139, 76)');
   const orderInfo = page.getByLabel('주문 정보 2건');
   await orderInfo.focus();
   await expect(orderInfo.getByRole('tooltip')).toContainText('COLD - 4박스');
@@ -740,7 +905,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       { pointId: 'destination-g006-control', sortKey: -1 },
     ],
     iconAllowOverlap: true,
-    routeIds: ['route-plan-g006-scheduled'],
+    routeIds: ['route-plan-g006-scheduled:completed', 'route-plan-g006-scheduled:planned'],
   });
 
   await selectedVehicle.click();

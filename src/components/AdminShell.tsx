@@ -19,6 +19,12 @@ import type { ControlRouteResult } from '../services/control-routes';
 import type { ManagementData } from '../demo/management';
 import type { DepartureLocation } from './DepartureMarker';
 import type { MapCanvasPoint, MapCanvasRoute, MapCanvasVehiclePoint } from './MapCanvas';
+import {
+  assignControlDestinationProgress,
+  CONTROL_PROGRESS_COLORS,
+  splitControlRouteByProgress,
+} from '../features/control/control-progress';
+import type { ControlProgressStatus } from '../features/control/control-progress';
 
 const MapCanvas = lazy(() => import('./MapCanvas').then((module) => ({ default: module.MapCanvas })));
 const compactNavigationQuery = '(max-width: 768px)';
@@ -47,7 +53,9 @@ type ControlRouteRequest = {
   vehicleId: string;
 };
 type ControlRouteStopRequest = {
+  coordinate: [number, number];
   orderIds: string[];
+  progressStatus: ControlProgressStatus;
 };
 
 export function AdminShell({
@@ -70,6 +78,7 @@ export function AdminShell({
   const [controlOrders, setControlOrders] = useState<DispatchListItem[]>([]);
   const [controlServiceDate, setControlServiceDate] = useState<string>();
   const [selectedControlVehicleId, setSelectedControlVehicleId] = useState<string>();
+  const [selectedControlDestinationId, setSelectedControlDestinationId] = useState<string>();
   const [controlRouteResults, setControlRouteResults] = useState<ReadonlyMap<string, ControlRouteResult>>(new Map());
   const vehicleColors = useMemo(() => controlVehicleColors(controlOrders), [controlOrders]);
   const controlMapPoints = useMemo(
@@ -81,8 +90,8 @@ export function AdminShell({
     [controlOrders, vehicleColors],
   );
   const controlMapRoutes = useMemo(
-    () => assignedControlMapRoutes(controlRouteRequests, controlRouteResults, selectedControlVehicleId),
-    [controlRouteRequests, controlRouteResults, selectedControlVehicleId],
+    () => assignedControlMapRoutes(controlRouteRequests, controlRouteResults, controlManagement, selectedControlVehicleId),
+    [controlManagement, controlRouteRequests, controlRouteResults, selectedControlVehicleId],
   );
   const controlEstimatedArrivalByOrderId = useMemo(
     () => configuredControlEtas(
@@ -95,8 +104,8 @@ export function AdminShell({
     [controlRouteRequests, controlRouteResults, controlServiceDate, controlSettings],
   );
   const controlVehiclePoints = useMemo(
-    () => scheduledControlVehiclePoints(controlOrders, departureLocation, controlManagement),
-    [controlManagement, controlOrders, departureLocation],
+    () => scheduledControlVehiclePoints(controlOrders, departureLocation, vehicleColors, controlManagement),
+    [controlManagement, controlOrders, departureLocation, vehicleColors],
   );
   const handleControlOrdersChange = useCallback((orders: DispatchListItem[], serviceDate?: string) => {
     setControlOrders(orders);
@@ -132,6 +141,7 @@ export function AdminShell({
     setControlServiceDate(undefined);
     setControlManagement(undefined);
     setSelectedControlVehicleId(undefined);
+    setSelectedControlDestinationId(undefined);
   }, [activePath, previewOnly]);
 
   useEffect(() => {
@@ -140,6 +150,7 @@ export function AdminShell({
       && !controlOrders.some((order) => order.vehicleId === selectedControlVehicleId)
     ) {
       setSelectedControlVehicleId(undefined);
+      setSelectedControlDestinationId(undefined);
     }
   }, [controlOrders, selectedControlVehicleId]);
 
@@ -264,11 +275,15 @@ export function AdminShell({
                   departureLocation={departureLocation}
                   onPointSelect={(pointId) => {
                     const vehicleId = controlOrders.find((order) => order.destinationId === pointId)?.vehicleId;
-                    if (vehicleId !== null && vehicleId !== undefined) setSelectedControlVehicleId(vehicleId);
+                    if (vehicleId !== null && vehicleId !== undefined) {
+                      setSelectedControlVehicleId(vehicleId);
+                      setSelectedControlDestinationId(pointId);
+                    }
                   }}
                   points={controlMapPoints}
                   routes={controlMapRoutes}
-                  selectedPointIds={selectedControlVehicleId === undefined ? [] : controlMapPoints.map((point) => point.id)}
+                  selectedPointId={selectedControlDestinationId}
+                  showEveryPoint={selectedControlVehicleId !== undefined}
                   vehicles={controlVehiclePoints}
                 />
               </Suspense>
@@ -282,7 +297,12 @@ export function AdminShell({
                   estimatedArrivalByOrderId={controlEstimatedArrivalByOrderId}
                   onManagementChange={setControlManagement}
                   onOrdersChange={handleControlOrdersChange}
-                  onVehicleSelect={(vehicleId) => setSelectedControlVehicleId((current) => current === vehicleId ? undefined : vehicleId)}
+                  onDestinationSelect={setSelectedControlDestinationId}
+                  onVehicleSelect={(vehicleId) => {
+                    setSelectedControlDestinationId(undefined);
+                    setSelectedControlVehicleId((current) => current === vehicleId ? undefined : vehicleId);
+                  }}
+                  selectedDestinationId={selectedControlDestinationId}
                   selectedVehicleId={selectedControlVehicleId}
                   vehicleColors={vehicleColors}
                 />
@@ -319,7 +339,7 @@ function assignedControlMapPoints(
   vehicleColors: ReadonlyMap<string, string>,
   selectedVehicleId?: string,
 ): MapCanvasPoint[] {
-  return groupAssignedControlDestinations(orders, selectedVehicleId).flatMap(({ orders: group, sequence }) => {
+  return groupAssignedControlDestinations(orders, selectedVehicleId).flatMap(({ orders: group, progressStatus, sequence }) => {
     const anchor = group.find((order) => (
       order.latitude !== null
       && order.longitude !== null
@@ -328,7 +348,9 @@ function assignedControlMapPoints(
     ));
     if (anchor === undefined || anchor.latitude === null || anchor.longitude === null || anchor.vehicleId === null) return [];
     return [{
-      color: vehicleColors.get(anchor.vehicleId) ?? controlVehiclePalette[0],
+      color: selectedVehicleId === undefined
+        ? vehicleColors.get(anchor.vehicleId) ?? controlVehiclePalette[0]
+        : CONTROL_PROGRESS_COLORS[progressStatus],
       id: anchor.destinationId,
       label: String(sequence),
       latitude: anchor.latitude,
@@ -370,13 +392,23 @@ function assignedControlRouteRequests(
         if (sequenceOrder !== 0) return sequenceOrder;
         return left.destinationId.localeCompare(right.destinationId, 'ko');
       });
+    const progressStops = assignControlDestinationProgress(orderedStops);
     const vehicleId = orderedStops[0]?.orders[0]?.vehicleId;
     return {
       color: vehicleId === null || vehicleId === undefined
         ? controlVehiclePalette[0]
         : vehicleColors.get(vehicleId) ?? controlVehiclePalette[0],
       id: routeId,
-      stops: orderedStops.map((stop) => ({ orderIds: stop.orders.map((order) => order.sellerOrderId) })),
+      stops: progressStops.flatMap((stop) => {
+        const anchor = stop.orders.find((order) => order.latitude !== null && order.longitude !== null);
+        return anchor?.latitude === null || anchor?.latitude === undefined || anchor.longitude === null
+          ? []
+          : [{
+              coordinate: [anchor.longitude, anchor.latitude] as [number, number],
+              orderIds: stop.orders.map((order) => order.sellerOrderId),
+              progressStatus: stop.progressStatus,
+            }];
+      }),
       vehicleId: vehicleId ?? '',
     };
   });
@@ -385,19 +417,30 @@ function assignedControlRouteRequests(
 function assignedControlMapRoutes(
   requests: ControlRouteRequest[],
   results: ReadonlyMap<string, ControlRouteResult>,
+  management?: ManagementData,
   selectedVehicleId?: string,
 ): MapCanvasRoute[] {
   return requests.flatMap((request) => {
     const coordinates = results.get(request.id)?.coordinates;
-    return coordinates !== undefined
-      && (selectedVehicleId === undefined || request.vehicleId === selectedVehicleId)
-      ? [{
-          color: request.color,
-          coordinates,
-          id: request.id,
-          selected: selectedVehicleId !== undefined,
-        }]
-      : [];
+    if (coordinates === undefined || (selectedVehicleId !== undefined && request.vehicleId !== selectedVehicleId)) return [];
+    if (selectedVehicleId === undefined) return [{ color: request.color, coordinates, id: request.id }];
+    const vehicle = management?.vehicles.find((item) => item.id === request.vehicleId);
+    const vehiclePosition = vehicle !== undefined
+      && vehicle.vehiclePositionStale !== true
+      && typeof vehicle.vehicleLongitude === 'number'
+      && typeof vehicle.vehicleLatitude === 'number'
+      && Number.isFinite(vehicle.vehicleLongitude)
+      && Number.isFinite(vehicle.vehicleLatitude)
+      ? [vehicle.vehicleLongitude, vehicle.vehicleLatitude] as [number, number]
+      : undefined;
+    return splitControlRouteByProgress({ coordinates, stops: request.stops, vehiclePosition }).map((segment, index) => ({
+      casingColor: request.color,
+      color: CONTROL_PROGRESS_COLORS[segment.status],
+      coordinates: segment.coordinates,
+      id: `${request.id}:${segment.status}`,
+      selected: true,
+      sortOrder: index,
+    }));
   });
 }
 
@@ -438,7 +481,7 @@ function configuredControlEtas(
 function groupAssignedControlDestinations(
   orders: DispatchListItem[],
   selectedVehicleId?: string,
-): Array<{ orders: DispatchListItem[]; sequence: number }> {
+): Array<{ orders: DispatchListItem[]; progressStatus: ControlProgressStatus; sequence: number }> {
   const vehicleGroups = new Map<string, Map<string, DispatchListItem[]>>();
   for (const order of orders) {
     if (
@@ -450,12 +493,13 @@ function groupAssignedControlDestinations(
     destinationGroups.set(order.destinationId, [...(destinationGroups.get(order.destinationId) ?? []), order]);
     vehicleGroups.set(order.vehicleId, destinationGroups);
   }
-  return [...vehicleGroups.values()].flatMap((destinationGroups) => (
-    [...destinationGroups.values()]
+  return [...vehicleGroups.values()].flatMap((destinationGroups) => {
+    const groups = [...destinationGroups.values()]
       .map((group) => [...group].sort(compareControlRouteStops))
       .sort((left, right) => compareControlRouteStops(left[0], right[0]))
-      .map((group, index) => ({ orders: group, sequence: index + 1 }))
-  ));
+      .map((group, index) => ({ orders: group, sequence: index + 1 }));
+    return assignControlDestinationProgress(groups);
+  });
 }
 
 function firstControlSequence(orders: DispatchListItem[]): number | null {
@@ -484,6 +528,7 @@ function controlVehicleColors(orders: DispatchListItem[]): ReadonlyMap<string, s
 function scheduledControlVehiclePoints(
   orders: DispatchListItem[],
   departureLocation: DepartureLocation | null,
+  vehicleColors: ReadonlyMap<string, string>,
   management?: ManagementData,
 ): MapCanvasVehiclePoint[] {
   const vehicleIds = new Set(
@@ -508,6 +553,7 @@ function scheduledControlVehiclePoints(
       || longitude > 180
     ) return [];
     return [{
+      color: vehicleColors.get(vehicle.id) ?? controlVehiclePalette[0],
       id: vehicle.id,
       label: vehicle.plate || vehicle.type || '차량 위치',
       latitude,

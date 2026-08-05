@@ -23,7 +23,7 @@ export function updateOperationalRoutes(
         'line-sort-key': ['get', 'sortKey'],
       },
       paint: {
-        'line-color': '#ffffff',
+        'line-color': ['get', 'casingColor'],
         'line-opacity': ['case', ['get', 'selected'], 0.96, 0.82],
         'line-width': ['case', ['get', 'selected'], 4.6, 3.6],
       },
@@ -55,10 +55,11 @@ function routeFeatures(routes: MapCanvasRoute[]): FeatureCollection<LineString> 
       .map((route) => ({
         type: 'Feature',
         properties: {
+          casingColor: route.casingColor ?? '#ffffff',
           color: route.color,
           routeId: route.id,
           selected: route.selected === true,
-          sortKey: route.selected === true ? 1 : 0,
+          sortKey: (route.selected === true ? 100 : 0) + (route.sortOrder ?? 0),
         },
         geometry: {
           type: 'LineString',

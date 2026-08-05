@@ -5,7 +5,6 @@ import type { MapCanvasVehiclePoint } from '../MapCanvas';
 const sourceId = 'operational-vehicles';
 const markerLayerId = 'operational-vehicle-markers';
 const labelLayerId = 'operational-vehicle-labels';
-const markerImageId = 'vehicle-marker-default';
 const markerColor = '#c3c6bf';
 const markerPixelRatio = 2;
 const vehicleIconPath = 'M20 8H17V4H3C1.9 4 1 4.9 1 6V17H3C3 18.66 4.34 20 6 20C7.66 20 9 18.66 9 17H15C15 18.66 16.34 20 18 20C19.66 20 21 18.66 21 17H23V12L20 8ZM19.5 9.5L21.46 12H17V9.5H19.5ZM6 18C5.45 18 5 17.55 5 17C5 16.45 5.45 16 6 16C6.55 16 7 16.45 7 17C7 17.55 6.55 18 6 18ZM8.22 15C7.67 14.39 6.89 14 6 14C5.11 14 4.33 14.39 3.78 15H3V6H15V15H8.22ZM18 18C17.45 18 17 17.55 17 17C17 16.45 17.45 16 18 16C18.55 16 19 16.45 19 17C19 17.55 18.55 18 18 18Z';
@@ -14,6 +13,7 @@ export async function updateVehicleMarkers(
   map: maplibregl.Map,
   vehicles: MapCanvasVehiclePoint[],
 ): Promise<void> {
+  for (const vehicle of vehicles) registerMarkerImage(map, vehicle.color);
   registerMarkerImage(map);
   if (!map.getSource(sourceId)) {
     map.addSource(sourceId, { type: 'geojson', data: vehicleFeatures([]) });
@@ -25,7 +25,7 @@ export async function updateVehicleMarkers(
         'icon-allow-overlap': true,
         'icon-anchor': 'center',
         'icon-ignore-placement': true,
-        'icon-image': markerImageId,
+        'icon-image': ['get', 'markerImageId'],
         'icon-size': 1,
       },
     });
@@ -59,6 +59,7 @@ function vehicleFeatures(vehicles: MapCanvasVehiclePoint[]): FeatureCollection<P
       type: 'Feature',
       properties: {
         label: vehicle.label,
+        markerImageId: markerImageId(vehicle.color),
       },
       geometry: {
         type: 'Point',
@@ -68,12 +69,21 @@ function vehicleFeatures(vehicles: MapCanvasVehiclePoint[]): FeatureCollection<P
   };
 }
 
-function registerMarkerImage(map: maplibregl.Map): void {
-  if (map.hasImage(markerImageId)) return;
-  map.addImage(markerImageId, createVehicleMarkerImage(), { pixelRatio: markerPixelRatio });
+function registerMarkerImage(map: maplibregl.Map, color?: string): void {
+  const imageId = markerImageId(color);
+  if (map.hasImage(imageId)) return;
+  map.addImage(imageId, createVehicleMarkerImage(validMarkerColor(color)), { pixelRatio: markerPixelRatio });
 }
 
-function createVehicleMarkerImage(): ImageData {
+function markerImageId(color?: string): string {
+  return color === undefined ? 'vehicle-marker-default' : `vehicle-marker-${validMarkerColor(color).slice(1).toLowerCase()}`;
+}
+
+function validMarkerColor(color?: string): string {
+  return typeof color === 'string' && /^#[0-9a-f]{6}$/iu.test(color) ? color : markerColor;
+}
+
+function createVehicleMarkerImage(color: string): ImageData {
   const size = 64 * markerPixelRatio;
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -86,7 +96,7 @@ function createVehicleMarkerImage(): ImageData {
   context.shadowBlur = 6;
   context.shadowColor = 'rgba(0, 0, 0, 0.18)';
   context.shadowOffsetY = 2;
-  context.fillStyle = markerColor;
+  context.fillStyle = color;
   context.strokeStyle = '#ffffff';
   context.lineWidth = 2;
   context.beginPath();

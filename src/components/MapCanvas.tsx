@@ -47,13 +47,16 @@ export type MapCanvasPoint = {
 };
 
 export type MapCanvasRoute = {
+  casingColor?: string;
   color: string;
   coordinates: MapCanvasCoordinate[];
   id: string;
   selected?: boolean;
+  sortOrder?: number;
 };
 
 export type MapCanvasVehiclePoint = {
+  color?: string;
   id: string;
   label: string;
   latitude: number;
