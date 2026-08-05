@@ -139,6 +139,7 @@ async function installApiFixtures(page, fixtures) {
   const resolvedFixtures = {
     'GET /api/dsv/v1/map/profile': v1Envelope(mapProviderProfile, 'g006-map-profile'),
     'GET /api/dsv/v1/conditions?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/drivers?limit=100': emptyV1List(),
     'GET /api/dsv/settings/operations': { data: operationalSettings, error: null },
     ...fixtures,
   };
@@ -633,7 +634,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
         {
           distanceTodayKm: 128.4,
           displayName: 'Scheduled Truck',
-          driverAssignments: [],
+          driverAssignments: [{ assignmentId: 'assignment-g006-control', driverId: 'driver-g006-control' }],
           ignitionOn: true,
           speedKph: 42.5,
           status: 'ACTIVE',
@@ -681,6 +682,10 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       ],
       page: { hasMore: false },
     }),
+    'GET /api/dsv/v1/drivers?limit=100': v1Envelope({
+      items: [{ displayName: '김도윤', driverId: 'driver-g006-control', phone: '010-1234-5678', status: 'ACTIVE' }],
+      page: { hasMore: false },
+    }),
     'GET /api/dsv/v1/vehicles/vehicle-g006-scheduled/temperature-history': v1Envelope({
       vehicleId: 'vehicle-g006-scheduled',
       samples: [
@@ -695,16 +700,28 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/conditions?limit=100': v1Envelope({
-      items: [{
-        code: 'COLD',
-        conditionId: 'condition-g006-cold',
-        description: '냉장 운송',
-        name: '냉장',
-        status: 'ACTIVE',
-        temperatureAlertEnabled: true,
-        temperatureMaxC: 4,
-        temperatureMinC: 2,
-      }],
+      items: [
+        {
+          code: 'COLD',
+          conditionId: 'condition-g006-cold',
+          description: '냉장 운송',
+          name: '냉장',
+          status: 'ACTIVE',
+          temperatureAlertEnabled: true,
+          temperatureMaxC: 4,
+          temperatureMinC: 2,
+        },
+        {
+          code: 'AMBIENT',
+          conditionId: 'condition-g006-ambient',
+          description: '상온 운송',
+          name: '상온',
+          status: 'ACTIVE',
+          temperatureAlertEnabled: true,
+          temperatureMaxC: 25,
+          temperatureMinC: 15,
+        },
+      ],
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/dispatches': v1Envelope({
@@ -722,6 +739,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
           longitude: 127.036545,
           routePlanId: 'route-plan-g006-scheduled',
           routeStopSequence: 5,
+          rawNote: '오전 11시 배송 필수',
           sellerOrderId: 'seller-order-g006-control',
           sellerOrderKey: 'SELLER-G006-CONTROL',
           shippedBoxes: 4,
@@ -769,11 +787,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
   const scheduledFleet = page.getByRole('region', { name: '차량 리스트', exact: true });
   await expect(scheduledFleet).toContainText('99테 6006');
   await expect(scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' })).toContainText('2건');
-  await expect(scheduledFleet).toContainText('이동');
-  await expect(scheduledFleet).toContainText('온도 이탈 A 4.2℃ B 미수신');
   await expect(scheduledFleet).toContainText('77테 4004');
-  await expect(scheduledFleet).toContainText('운행 미확인');
-  await expect(scheduledFleet).toContainText('온도 지연 미수신');
   await expect(scheduledFleet).not.toContainText('88테 5005');
   await expect(scheduledFleet).not.toContainText('vehicle-g006');
   await scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' }).getByRole('button', { name: '온도', exact: true }).click();
@@ -782,6 +796,13 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
   await expect(temperatureDialog.getByRole('img', { name: '최근 24시간 차량 온도 A 채널과 B 채널 꺾은선 차트' })).toBeVisible();
   await expect(temperatureDialog).toContainText('A 채널');
   await expect(temperatureDialog).toContainText('B 채널');
+  await expect(temperatureDialog.getByLabel('온도 수집 시간표')).toContainText('5분');
+  await expect(temperatureDialog.getByLabel('운영 상태 온도 기준')).toContainText('COLD 냉장 2℃ ~ 4℃');
+  await expect(temperatureDialog.getByLabel('운영 상태 온도 기준')).toContainText('AMBIENT 상온 15℃ ~ 25℃');
+  await expect(temperatureDialog.locator('.temperature-condition-band')).toHaveCount(2);
+  await expect.poll(() => temperatureDialog.locator('.temperature-condition-band').evaluateAll((bands) => (
+    new Set(bands.map((band) => band.getAttribute('fill'))).size
+  ))).toBe(2);
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/vehicles/vehicle-g006-scheduled/temperature-history');
   await temperatureDialog.getByRole('button', { name: '온도 이력 닫기' }).click();
   const customerInquiryLink = page.getByRole('link', { name: 'Canonical Customer 고객사 조회 화면으로 이동' });
@@ -839,6 +860,10 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
         color: feature.properties.color,
         routeId: feature.properties.routeId,
       })),
+      routePaint: {
+        casingOpacity: window.dsvMap.getPaintProperty('operational-route-casing', 'line-opacity'),
+        lineOpacity: window.dsvMap.getPaintProperty('operational-route-lines', 'line-opacity'),
+      },
       vehicles: vehicleSource.serialize().data.features.map((feature) => ({
         coordinates: feature.geometry.coordinates,
         label: feature.properties.label,
@@ -869,6 +894,10 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       { routeId: 'route-plan-g006-scheduled' },
       { routeId: 'route-plan-g006-second' },
     ],
+    routePaint: {
+      casingOpacity: ['case', ['get', 'selected'], 0.96, 1],
+      lineOpacity: ['case', ['get', 'selected'], 0.96, 1],
+    },
     vehicles: [
       { coordinates: [127.0412, 37.5021], label: '99테 6006', markerImageId: 'vehicle-marker-0066cc', vehicleId: null },
       { coordinates: [126.9372235, 37.330948], label: '1대 예정', markerImageId: 'vehicle-marker-default', vehicleId: null },
@@ -880,19 +909,43 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
   expect(new Set(colors).size).toBe(2);
 
   const selectedVehicle = scheduledFleet.getByRole('button', { name: /99테 6006/ });
+  const selectedVehicleRow = scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' });
+  await expect(selectedVehicle).toHaveAttribute('aria-expanded', 'false');
+  await expect(selectedVehicleRow.locator('.control-vehicle-details')).toHaveCount(0);
   await selectedVehicle.click();
   await expect(selectedVehicle).toHaveAttribute('aria-pressed', 'true');
+  await expect(selectedVehicle).toHaveAttribute('aria-expanded', 'true');
+  const vehicleDetails = selectedVehicleRow.locator('.control-vehicle-details');
+  await expect(vehicleDetails).toBeVisible();
+  await expect(vehicleDetails).toContainText('Scheduled Truck');
+  await expect(vehicleDetails).toContainText('이동');
+  await expect(vehicleDetails).toContainText('김도윤');
+  await expect(vehicleDetails).toContainText('COLD 냉장');
+  await expect(vehicleDetails).toContainText('AMBIENT');
+  await expect(vehicleDetails).toContainText('오전 11시 배송 필수');
+  await expect(vehicleDetails).not.toContainText('온도 이탈');
   await expect(page.locator('#destinationCard .control-destination-row')).toHaveCount(1);
   await expect(page.getByLabel('배송지 순서 1')).toHaveText('1');
   await expect(page.getByLabel('배송지 순서 1')).toHaveCSS('background-color', 'rgb(31, 139, 76)');
   await expect(page.locator('#destinationCard .control-destination-row')).toContainText('2건');
-  await page.locator('#destinationCard .control-destination-row').click();
-  await expect(page.locator('#destinationCard .control-destination-row')).toHaveClass(/selected/u);
+  const destinationRow = page.locator('#destinationCard .control-destination-row');
+  await expect(destinationRow).toHaveAttribute('aria-expanded', 'false');
+  await expect(destinationRow.locator('.control-destination-details')).toHaveCount(0);
+  await destinationRow.click();
+  await expect(destinationRow).toHaveClass(/selected/u);
+  await expect(destinationRow).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByLabel('배송지 순서 1')).toHaveCSS('background-color', 'rgb(31, 139, 76)');
-  const orderInfo = page.getByLabel('주문 정보 2건');
-  await orderInfo.focus();
-  await expect(orderInfo.getByRole('tooltip')).toContainText('COLD - 4박스');
-  await expect(orderInfo.getByRole('tooltip')).toContainText('AMBIENT - 2박스');
+  const destinationDetails = destinationRow.locator('.control-destination-details');
+  await expect(destinationDetails).toBeVisible();
+  await expect(destinationDetails).toContainText('Shared Control Destination');
+  await expect(destinationDetails).toContainText('서울특별시 강남구 테헤란로 152');
+  await expect(destinationDetails).toContainText('SELLER-G006-CONTROL');
+  await expect(destinationDetails).toContainText('운영 상태 COLD');
+  await expect(destinationDetails).toContainText('박스 4박스');
+  await expect(destinationDetails).toContainText('운영 상태 AMBIENT');
+  await expect(destinationDetails).toContainText('박스 2박스');
+  await expect(destinationDetails).not.toContainText('STOP_ARRIVED');
+  await expect(destinationDetails.locator('.control-detail-value').first()).toHaveCSS('white-space', 'normal');
   await expect.poll(() => page.evaluate(() => ({
     destinations: window.dsvMap.getSource('operational-destinations').serialize().data.features.map((feature) => ({
       pointId: feature.properties.pointId,
@@ -979,11 +1032,13 @@ test('marks previously loaded telemetry stale when a background refresh fails', 
   await page.goto('/control');
 
   const scheduledFleet = page.getByRole('region', { name: '차량 리스트', exact: true });
-  await expect(scheduledFleet).toContainText('A 4.2℃ B 미수신');
-  await expect(scheduledFleet).toContainText('정차');
+  const vehicleRow = scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' });
+  await vehicleRow.getByRole('button', { name: /99테 6006/ }).click();
+  const vehicleDetails = vehicleRow.locator('.control-vehicle-details');
+  await expect(vehicleDetails).toContainText('정차');
   await page.clock.fastForward(30_000);
   await expect.poll(() => vehicleReads).toBeGreaterThan(1);
-  await expect(scheduledFleet).toContainText('온도 지연 A 4.2℃ B 미수신');
+  await expect(vehicleDetails).toContainText('위치 지연');
   expect(api.unexpected).toEqual([]);
 });
 

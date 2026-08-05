@@ -24,7 +24,7 @@ export function updateOperationalRoutes(
       },
       paint: {
         'line-color': ['get', 'casingColor'],
-        'line-opacity': ['case', ['get', 'selected'], 0.96, 0.82],
+        'line-opacity': ['case', ['get', 'selected'], 0.96, 1],
         'line-width': ['case', ['get', 'selected'], 4.6, 3.6],
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
@@ -39,7 +39,7 @@ export function updateOperationalRoutes(
       },
       paint: {
         'line-color': ['get', 'color'],
-        'line-opacity': ['case', ['get', 'selected'], 0.96, 0.74],
+        'line-opacity': ['case', ['get', 'selected'], 0.96, 1],
         'line-width': ['case', ['get', 'selected'], 2.6, 1.8],
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);

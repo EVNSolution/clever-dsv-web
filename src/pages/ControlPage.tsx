@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useState } from 'react';
-import { ChevronRight, Info, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { loadControlSummary, loadVehicleTemperatureHistory } from '../services/control';
 import type { ControlSummary, VehicleTemperatureHistory, VehicleTemperatureSample } from '../services/control';
@@ -23,8 +23,21 @@ type ControlDestinationGroup = {
   orders: DispatchListItem[];
   sequence: number;
 };
+type TemperatureConditionBand = {
+  code: string;
+  color: string;
+  label: string;
+  maximum: number;
+  minimum: number;
+};
 
 const mobileControlQuery = '(max-width: 768px)';
+const temperatureConditionPalette = ['#0066cc', '#e87514', '#6f42c1', '#0f8a82', '#c23373', '#8a5a00'];
+const temperatureConditionSignatureColors = new Map([
+  ['AMBIENT', '#e87514'],
+  ['COLD', '#0066cc'],
+  ['TS03', '#6f42c1'],
+]);
 
 export function ControlPage({
   estimatedArrivalByOrderId = new Map(),
@@ -169,7 +182,9 @@ function RemoteControlPage({
       ordersCount={orders.length}
       summary={summary}
       vehicles={scheduledControlVehicles(orders, management)}
+      assignments={management?.assignments ?? []}
       conditions={management?.conditions ?? []}
+      drivers={management?.drivers ?? []}
       onVehicleSelect={onVehicleSelect}
       onDestinationSelect={onDestinationSelect}
       selectedDestinationId={selectedDestinationId}
@@ -192,7 +207,9 @@ function markControlTelemetryStale(management: ManagementData | undefined): Mana
 }
 
 function ControlPanels({
+  assignments = [],
   conditions = [],
+  drivers = [],
   error = '',
   estimatedArrivalByOrderId = new Map(),
   loading,
@@ -207,7 +224,9 @@ function ControlPanels({
   selectedVehicleId,
   vehicleColors = new Map(),
 }: {
+  assignments?: ManagementData['assignments'];
   conditions?: ManagementData['conditions'];
+  drivers?: ManagementData['drivers'];
   error?: string;
   estimatedArrivalByOrderId?: ReadonlyMap<string, string>;
   loading: boolean;
@@ -312,25 +331,48 @@ function ControlPanels({
           ) : null}
           {!loading && !error ? (
             <div className="control-vehicle-list fleet overlay-scroll" id="fleetList">
-              {vehicles.map((vehicle) => (
-                <div
+              {vehicles.map((vehicle) => {
+                const driverNames = controlVehicleDriverNames(vehicle.id, orders, drivers, assignments);
+                const conditionLabels = controlVehicleConditionLabels(vehicle.id, orders, conditions);
+                const specialInstructions = controlVehicleSpecialInstructions(vehicle.id, orders);
+                return <div
                   className={`control-vehicle-row${selectedVehicleId === vehicle.id ? ' selected' : ''}`}
                   key={vehicle.id}
                   style={{ '--control-route-color': vehicleColors.get(vehicle.id) ?? '#0066cc' } as CSSProperties}
                 >
                   <i aria-hidden="true" />
                   <button
+                    aria-expanded={selectedVehicleId === vehicle.id}
                     aria-pressed={selectedVehicleId === vehicle.id}
                     className="control-vehicle-select"
                     onClick={() => onVehicleSelect?.(vehicle.id)}
                     type="button"
                   >
-                    <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong><small>{vehicle.type || '차종 미등록'} {controlVehicleMotionText(vehicle)} {controlVehicleTemperatureText(vehicle, orders, conditions)}</small></span>
+                    <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong></span>
+                    <ChevronDown aria-hidden="true" className="control-row-chevron" />
                   </button>
                   <em>{vehicleOrderCounts.get(vehicle.id) ?? 0}건</em>
                   <button className="control-temperature-button" type="button" onClick={() => setTemperatureVehicle(vehicle)}>온도</button>
+                  {selectedVehicleId === vehicle.id ? (
+                    <div className="control-detail-card control-vehicle-details" id={`control-vehicle-details-${vehicle.id}`}>
+                      <span><small>차종</small><b className="control-detail-value">{vehicle.type || '차종 미등록'}</b></span>
+                      <span><small>운행</small><b className="control-detail-value">{controlVehicleMotionText(vehicle)}</b></span>
+                      <span><small>운전자</small><b className="control-detail-value">{driverNames.join(', ')}</b></span>
+                      <span className="control-vehicle-detail-wide"><small>운송 조건</small><b className="control-detail-value">{conditionLabels.join(', ')}</b></span>
+                      <span className="control-vehicle-detail-wide">
+                        <small>배송 특이사항</small>
+                        {specialInstructions.length ? (
+                          <ul className="control-detail-list">
+                            {specialInstructions.map((instruction) => (
+                              <li key={instruction.id}><strong>{instruction.destination}</strong><span>{instruction.note}</span></li>
+                            ))}
+                          </ul>
+                        ) : <b className="control-detail-value">특이사항 없음</b>}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
-              ))}
+              })}
               {!vehicles.length ? <div className="panel-state">차량이 없습니다.</div> : null}
             </div>
           ) : null}
@@ -348,6 +390,7 @@ function ControlPanels({
             <div className="control-destination-columns" aria-hidden="true"><span>배송지</span><span>주문</span><span>예상 도착</span><span>실제 완료</span></div>
             {selectedVehicleDestinations.map((destination) => (
               <div
+                aria-expanded={selectedDestinationId === destination.destinationId}
                 aria-selected={selectedDestinationId === destination.destinationId}
                 className={`control-destination-row progress-${destination.progressStatus}${selectedDestinationId === destination.destinationId ? ' selected' : ''}`}
                 key={destination.destinationId}
@@ -362,26 +405,41 @@ function ControlPanels({
                 tabIndex={0}
               >
                 <i className="control-order-sequence" aria-label={`배송지 순서 ${destination.sequence}`}>{destination.sequence}</i>
-                <span>
+                <span className="control-destination-summary">
                   <b>{destination.anchor.destinationDisplayName || '배송지 미등록'}</b>
-                  <small>{controlDestinationMeta(destination)}</small>
+                  <ChevronDown aria-hidden="true" className="control-row-chevron" />
                 </span>
                 <span className="control-destination-order-count">
                   <b>{destination.orders.length}건</b>
-                  <span className="control-order-info" tabIndex={0} aria-label={`주문 정보 ${destination.orders.length}건`}>
-                    <Info aria-hidden="true" />
-                    <span className="control-order-tooltip" role="tooltip">
-                      <strong>주문 정보</strong>
-                      <ul>
-                        {destination.orders.map((order) => (
-                          <li key={order.sellerOrderId}>{controlOrderSummary(order)}</li>
-                        ))}
-                      </ul>
-                    </span>
-                  </span>
                 </span>
                 <time>{formatControlTime(sharedControlEta(destination.orders, estimatedArrivalByOrderId))}</time>
                 <time className={controlDestinationCompletedAt(destination.orders) === null ? 'empty' : 'completed'}>{formatControlTime(controlDestinationCompletedAt(destination.orders))}</time>
+                {selectedDestinationId === destination.destinationId ? (
+                  <div className="control-detail-card control-destination-details">
+                    <div>
+                      <small>배송지</small>
+                      <b className="control-detail-value">{destination.anchor.destinationDisplayName || '배송지 미등록'}</b>
+                    </div>
+                    <div className="control-destination-detail-address">
+                      <small>주소</small>
+                      <b className="control-detail-value">{controlDestinationMeta(destination)}</b>
+                    </div>
+                    <div className="control-destination-detail-orders">
+                      <small>주문 정보</small>
+                      <ul>
+                        {destination.orders.map((order) => (
+                          <li key={order.sellerOrderId}>
+                            <strong>{order.sellerOrderKey}</strong>
+                            <div className="control-order-meta">
+                              <span>운영 상태 {order.conditionCode ?? '미등록'}</span>
+                              <span>박스 {order.shippedBoxes === null ? '미등록' : `${order.shippedBoxes}박스`}</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ))}
             {!selectedVehicleDestinations.length ? <div className="panel-state">선택한 차량에 배정된 배송지가 없습니다.</div> : null}
@@ -425,6 +483,7 @@ function ControlPanels({
           history={temperatureHistory}
           loading={temperatureLoading}
           onClose={() => setTemperatureVehicle(undefined)}
+          temperatureBands={controlVehicleTemperatureBands(temperatureVehicle.id, orders, conditions)}
           vehicle={temperatureVehicle}
         />
       ) : null}
@@ -437,12 +496,14 @@ function VehicleTemperatureDialog({
   history,
   loading,
   onClose,
+  temperatureBands,
   vehicle,
 }: {
   error: string;
   history?: VehicleTemperatureHistory;
   loading: boolean;
   onClose: () => void;
+  temperatureBands: TemperatureConditionBand[];
   vehicle: ManagementData['vehicles'][number];
 }): ReactElement {
   return (
@@ -457,27 +518,56 @@ function VehicleTemperatureDialog({
         </header>
         {loading ? <div className="temperature-dialog-state" role="status">온도 이력을 불러오는 중입니다.</div> : null}
         {error ? <div className="temperature-dialog-state error" role="alert">{error}</div> : null}
-        {!loading && !error && history ? <TemperatureChart samples={history.samples} /> : null}
+        {!loading && !error && history ? <TemperatureChart samples={history.samples} temperatureBands={temperatureBands} /> : null}
       </section>
     </div>
   );
 }
 
-function TemperatureChart({ samples }: { samples: VehicleTemperatureSample[] }): ReactElement {
+function TemperatureChart({
+  samples,
+  temperatureBands,
+}: {
+  samples: VehicleTemperatureSample[];
+  temperatureBands: TemperatureConditionBand[];
+}): ReactElement {
   const channels = [
     { key: 'temperatureA' as const, label: 'A 채널', color: 'var(--color-primary)' },
     { key: 'temperatureB' as const, label: 'B 채널', color: 'var(--color-risk)' },
   ];
   const values = samples.flatMap((sample) => [sample.temperatureA, sample.temperatureB]).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-  if (!samples.length || !values.length) return <div className="temperature-dialog-state">표시할 온도 데이터가 없습니다.</div>;
+  const timeframe = samples.length ? `${formatTemperatureTooltipTime(samples[0].observedAt)} ~ ${formatTemperatureTooltipTime(samples[samples.length - 1].observedAt)}` : '수집 기록 없음';
+  const conditionLegend = temperatureBands.length ? (
+    <div className="temperature-condition-legend" aria-label="운영 상태 온도 기준">
+      {temperatureBands.map((band) => (
+        <span key={band.code}>
+          <i aria-hidden="true" style={{ background: band.color }} />
+          {`${band.code} ${band.label} ${formatTemperatureValue(band.minimum)}℃ ~ ${formatTemperatureValue(band.maximum)}℃`}
+        </span>
+      ))}
+    </div>
+  ) : null;
+  if (!samples.length || !values.length) {
+    return (
+      <div className="temperature-chart">
+        <div className="temperature-timeframe" aria-label="온도 수집 시간표">
+          <span>조회 시간 <b>{timeframe}</b></span>
+          <span>수집 주기 <b>5분</b></span>
+        </div>
+        {conditionLegend}
+        <div className="temperature-dialog-state">표시할 온도 데이터가 없습니다.</div>
+      </div>
+    );
+  }
   const width = 560;
   const height = 260;
   const padding = { bottom: 34, left: 44, right: 18, top: 20 };
   const timestamps = samples.map((sample) => new Date(sample.observedAt).getTime()).filter((value) => !Number.isNaN(value));
   const minTime = Math.min(...timestamps);
   const maxTime = Math.max(...timestamps);
-  const minValue = Math.floor(Math.min(...values) - 1);
-  const maxValue = Math.ceil(Math.max(...values) + 1);
+  const scaleValues = [...values, ...temperatureBands.flatMap((band) => [band.minimum, band.maximum])];
+  const minValue = Math.floor(Math.min(...scaleValues) - 1);
+  const maxValue = Math.ceil(Math.max(...scaleValues) + 1);
   const xFor = (observedAt: string): number => {
     const timestamp = new Date(observedAt).getTime();
     if (maxTime === minTime || Number.isNaN(timestamp)) return padding.left;
@@ -491,12 +581,31 @@ function TemperatureChart({ samples }: { samples: VehicleTemperatureSample[] }):
   const xTicks = [samples[0], samples[Math.floor(samples.length / 2)], samples[samples.length - 1]].filter((sample, index, list) => sample && list.findIndex((item) => item?.observedAt === sample.observedAt) === index);
   return (
     <div className="temperature-chart">
+      <div className="temperature-timeframe" aria-label="온도 수집 시간표">
+        <span>조회 시간 <b>{timeframe}</b></span>
+        <span>수집 주기 <b>5분</b></span>
+      </div>
+      {conditionLegend}
       <div className="temperature-legend" aria-hidden="true">
         {channels.map((channel) => <span key={channel.key}><i style={{ background: channel.color }} />{channel.label}</span>)}
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="최근 24시간 차량 온도 A 채널과 B 채널 꺾은선 차트">
         <title>최근 24시간 차량 온도 이력</title>
-        <desc>A 채널과 B 채널을 5분 수집 포인트와 꺾은선으로 표시합니다.</desc>
+        <desc>A 채널과 B 채널을 5분 수집 포인트와 꺾은선으로 표시하고 운영 상태별 온도 범위를 투명 영역으로 구분합니다.</desc>
+        {temperatureBands.map((band) => (
+          <rect
+            className="temperature-condition-band"
+            fill={band.color}
+            fillOpacity="0.12"
+            height={Math.max(1, yFor(band.minimum) - yFor(band.maximum))}
+            key={band.code}
+            width={width - padding.left - padding.right}
+            x={padding.left}
+            y={yFor(band.maximum)}
+          >
+            <title>{`${band.code} ${band.label} ${formatTemperatureValue(band.minimum)}℃ ~ ${formatTemperatureValue(band.maximum)}℃`}</title>
+          </rect>
+        ))}
         {yTicks.map((tick) => (
           <g key={tick}>
             <line className="temperature-grid-line" x1={padding.left} x2={width - padding.right} y1={yFor(tick)} y2={yFor(tick)} />
@@ -567,40 +676,97 @@ function assignedOrderCountsByVehicle(orders: DispatchListItem[]): ReadonlyMap<s
   return counts;
 }
 
-function controlVehicleTemperatureText(
-  vehicle: ManagementData['vehicles'][number],
+function controlVehicleDriverNames(
+  vehicleId: string,
   orders: DispatchListItem[],
-  conditions: ManagementData['conditions'],
-): string {
-  if (vehicle.temperatureStale === true) {
-    const pairText = controlTemperaturePairText(vehicle);
-    return pairText === '온도 미수신' ? '온도 지연 미수신' : `온도 지연 ${pairText}`;
+  drivers: ManagementData['drivers'],
+  assignments: ManagementData['assignments'],
+): string[] {
+  const driverIds = new Set<string>();
+  for (const assignment of assignments) {
+    if (assignment.vehicleId === vehicleId) driverIds.add(assignment.driverId);
   }
-  const pairText = controlTemperaturePairText(vehicle);
-  const policies = vehicleTemperaturePolicies(vehicle.id, orders, conditions);
-  if (policies.length === 0 || pairText === '온도 미수신') return pairText;
-  const minimums = policies.map((policy) => policy.temperatureMinC).filter((value): value is number => value !== null);
-  const maximums = policies.map((policy) => policy.temperatureMaxC).filter((value): value is number => value !== null);
-  const minimum = minimums.length === 0 ? null : Math.max(...minimums);
-  const maximum = maximums.length === 0 ? null : Math.min(...maximums);
-  if (minimum !== null && maximum !== null && minimum > maximum) return `온도 기준 충돌 ${pairText}`;
-  const readings = [vehicle.temperatureA, vehicle.temperatureB]
-    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-  const outsidePolicy = readings.some((value) => (minimum !== null && value < minimum) || (maximum !== null && value > maximum));
-  return `${outsidePolicy ? '온도 이탈' : '온도 정상'} ${pairText}`;
+  for (const order of orders) {
+    if (order.vehicleId === vehicleId && order.driverId !== null) driverIds.add(order.driverId);
+  }
+  const names = [...driverIds]
+    .map((driverId) => drivers.find((driver) => driver.id === driverId)?.name)
+    .filter((name): name is string => Boolean(name));
+  return names.length ? [...new Set(names)] : ['운전자 정보 없음'];
 }
 
-function vehicleTemperaturePolicies(
+function controlVehicleConditionLabels(
   vehicleId: string,
   orders: DispatchListItem[],
   conditions: ManagementData['conditions'],
-): ManagementData['conditions'] {
-  const conditionCodes = new Set(
+): string[] {
+  const conditionByCode = new Map(conditions.map((condition) => [condition.code.trim().toUpperCase(), condition]));
+  const labels = orders
+    .filter((order) => order.vehicleId === vehicleId && order.conditionCode !== null)
+    .map((order) => order.conditionCode!.trim().toUpperCase())
+    .filter(Boolean)
+    .map((code) => {
+      const condition = conditionByCode.get(code);
+      return condition === undefined || condition.name.trim() === '' ? code : `${code} ${condition.name.trim()}`;
+    });
+  return labels.length ? [...new Set(labels)] : ['운송 조건 없음'];
+}
+
+function controlVehicleTemperatureBands(
+  vehicleId: string,
+  orders: DispatchListItem[],
+  conditions: ManagementData['conditions'],
+): TemperatureConditionBand[] {
+  const activeCodes = new Set(
     orders
-      .filter((order) => order.assignmentStatus === 'ASSIGNED' && order.vehicleId === vehicleId && order.conditionCode !== null)
-      .map((order) => order.conditionCode!.trim().toUpperCase()),
+      .filter((order) => order.vehicleId === vehicleId && order.conditionCode !== null)
+      .map((order) => order.conditionCode!.trim().toUpperCase())
+      .filter(Boolean),
   );
-  return conditions.filter((condition) => condition.temperatureAlertEnabled && conditionCodes.has(condition.code.trim().toUpperCase()));
+  const conditionByCode = new Map<string, ManagementData['conditions'][number]>();
+  for (const condition of conditions) {
+    const code = condition.code.trim().toUpperCase();
+    if (!activeCodes.has(code) || conditionByCode.has(code)) continue;
+    if (
+      typeof condition.temperatureMinC === 'number'
+      && Number.isFinite(condition.temperatureMinC)
+      && typeof condition.temperatureMaxC === 'number'
+      && Number.isFinite(condition.temperatureMaxC)
+      && condition.temperatureMinC <= condition.temperatureMaxC
+    ) conditionByCode.set(code, condition);
+  }
+  const usedColors = new Set<string>();
+  return [...conditionByCode.entries()]
+    .sort(([leftCode], [rightCode]) => leftCode.localeCompare(rightCode, 'en'))
+    .map(([code, condition], index) => {
+      const preferredColor = temperatureConditionSignatureColors.get(code);
+      const color = preferredColor && !usedColors.has(preferredColor)
+        ? preferredColor
+        : temperatureConditionPalette.find((candidate) => !usedColors.has(candidate)) ?? `hsl(${(index * 47) % 360} 62% 42%)`;
+      usedColors.add(color);
+      return {
+        code,
+        color,
+        label: condition.name.trim() || '명칭 미등록',
+        maximum: condition.temperatureMaxC!,
+        minimum: condition.temperatureMinC!,
+      };
+    });
+}
+
+function controlVehicleSpecialInstructions(
+  vehicleId: string,
+  orders: DispatchListItem[],
+): Array<{ destination: string; id: string; note: string }> {
+  const instructions = new Map<string, { destination: string; id: string; note: string }>();
+  for (const order of orders) {
+    const note = order.rawNote?.trim();
+    if (order.vehicleId !== vehicleId || !note) continue;
+    const destination = order.destinationDisplayName?.trim() || order.sellerOrderKey;
+    const key = `${order.destinationId}\u0000${note}`;
+    if (!instructions.has(key)) instructions.set(key, { destination, id: key, note });
+  }
+  return [...instructions.values()];
 }
 
 function recentTemperatureSamples(samples: VehicleTemperatureSample[]): VehicleTemperatureSample[] {
@@ -640,6 +806,10 @@ function formatTemperatureTooltipTime(value: string): string {
     hour12: false,
     timeZone: 'Asia/Seoul',
   }).format(date);
+}
+
+function formatTemperatureValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function controlVehicleMotionText(vehicle: ManagementData['vehicles'][number]): string {
@@ -691,12 +861,6 @@ function controlDestinationCompletedAt(orders: DispatchListItem[]): string | nul
 
 function controlDestinationMeta(destination: ControlDestinationGroup): string {
   return destination.anchor.destinationAddress || destination.anchor.sellerOrderKey;
-}
-
-function controlOrderSummary(order: DispatchListItem): string {
-  const condition = order.conditionCode ?? '조건 미등록';
-  const boxes = order.shippedBoxes === null ? '박스 수 미등록' : `${order.shippedBoxes}박스`;
-  return `${condition} - ${boxes}`;
 }
 
 function controlEtaTimestamp(order: DispatchListItem, configuredEtas: ReadonlyMap<string, string>): number {

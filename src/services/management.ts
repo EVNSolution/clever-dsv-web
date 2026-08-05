@@ -116,7 +116,8 @@ export async function loadManagementSnapshot(): Promise<ManagementData> {
 
 export async function loadControlManagementSnapshot(): Promise<ManagementData> {
   if (apiConfig.mode === 'mock') return loadManagementData();
-  const [vehicles, customers, conditions] = await Promise.all([
+  const [drivers, vehicles, customers, conditions] = await Promise.all([
+    readV1List('drivers', isV1DriverListItem),
     readV1List('vehicles', isV1VehicleListItem),
     readV1List('customers', isV1CustomerListItem),
     readV1List('conditions', isV1ConditionListItem),
@@ -126,6 +127,7 @@ export async function loadControlManagementSnapshot(): Promise<ManagementData> {
     assignments: vehicles.flatMap(assignmentRelationForVehicle),
     conditions: conditions.map(conditionViewModel),
     customers: customers.map(customerViewModel),
+    drivers: drivers.map(driverViewModel),
     vehicles: vehicles.map(vehicleViewModel),
   };
 }
