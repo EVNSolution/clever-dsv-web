@@ -158,7 +158,6 @@ function RemoteControlPage({
       ordersCount={orders.length}
       summary={summary}
       vehicles={scheduledControlVehicles(orders, management)}
-      assignments={management?.assignments ?? []}
       conditions={management?.conditions ?? []}
       onVehicleSelect={onVehicleSelect}
       selectedVehicleId={selectedVehicleId}
@@ -180,7 +179,6 @@ function markControlTelemetryStale(management: ManagementData | undefined): Mana
 }
 
 function ControlPanels({
-  assignments = [],
   conditions = [],
   error = '',
   estimatedArrivalByOrderId = new Map(),
@@ -194,7 +192,6 @@ function ControlPanels({
   selectedVehicleId,
   vehicleColors = new Map(),
 }: {
-  assignments?: ManagementData['assignments'];
   conditions?: ManagementData['conditions'];
   error?: string;
   estimatedArrivalByOrderId?: ReadonlyMap<string, string>;
@@ -219,6 +216,7 @@ function ControlPanels({
       .filter((order) => order.vehicleId === selectedVehicleId)
       .sort(compareControlStops);
   const selectedVehicleDestinations = groupControlDestinations(selectedVehicleOrders);
+  const vehicleOrderCounts = assignedOrderCountsByVehicle(orders);
 
   useEffect(() => {
     const compactViewport = window.matchMedia(mobileControlQuery);
@@ -291,7 +289,7 @@ function ControlPanels({
           {summary && !loading && !error ? (
             <div className="control-summary-strip" role="status" aria-label="지원되는 관제 요약">
               <span>기준일 <b>{summary.serviceDate}</b></span>
-              <span>배차 <b>{summary.totalDispatchCount}</b></span>
+              <span>주문 수 <b>{summary.totalDispatchCount}</b></span>
               <span>미배정 <b>{summary.unassignedCount}</b></span>
             </div>
           ) : null}
@@ -312,7 +310,7 @@ function ControlPanels({
                   >
                     <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong><small>{vehicle.type || '차종 미등록'} {controlVehicleMotionText(vehicle)} {controlVehicleTemperatureText(vehicle, orders, conditions)}</small></span>
                   </button>
-                  <em>{assignments.some((assignment) => assignment.vehicleId === vehicle.id) ? '배차 준비' : '배송원 미배정'}</em>
+                  <em>{vehicleOrderCounts.get(vehicle.id) ?? 0}건</em>
                   <button className="control-temperature-button" type="button" onClick={() => setTemperatureVehicle(vehicle)}>온도</button>
                 </div>
               ))}
@@ -330,7 +328,7 @@ function ControlPanels({
             <span className="chip mini desktop-panel-tools">{selectedVehicleDestinations.length}곳</span>
           </div>
           <div className="control-destination-list overlay-scroll">
-            <div className="control-destination-columns" aria-hidden="true"><span>배송지</span><span /><span>예상 도착</span><span>실제 완료</span></div>
+            <div className="control-destination-columns" aria-hidden="true"><span>배송지</span><span>주문</span><span>예상 도착</span><span>실제 완료</span></div>
             {selectedVehicleDestinations.map((destination) => (
               <div className="control-destination-row" key={destination.destinationId}>
                 <i className="control-order-sequence" aria-label={`배송지 순서 ${destination.sequence}`}>{destination.sequence}</i>
@@ -338,15 +336,18 @@ function ControlPanels({
                   <b>{destination.anchor.destinationDisplayName || '배송지 미등록'}</b>
                   <small>{controlDestinationMeta(destination)}</small>
                 </span>
-                <span className="control-order-info" tabIndex={0} aria-label={`주문 정보 ${destination.orders.length}건`}>
-                  <Info aria-hidden="true" />
-                  <span className="control-order-tooltip" role="tooltip">
-                    <strong>주문 정보</strong>
-                    <ul>
-                      {destination.orders.map((order) => (
-                        <li key={order.sellerOrderId}>{controlOrderSummary(order)}</li>
-                      ))}
-                    </ul>
+                <span className="control-destination-order-count">
+                  <b>{destination.orders.length}건</b>
+                  <span className="control-order-info" tabIndex={0} aria-label={`주문 정보 ${destination.orders.length}건`}>
+                    <Info aria-hidden="true" />
+                    <span className="control-order-tooltip" role="tooltip">
+                      <strong>주문 정보</strong>
+                      <ul>
+                        {destination.orders.map((order) => (
+                          <li key={order.sellerOrderId}>{controlOrderSummary(order)}</li>
+                        ))}
+                      </ul>
+                    </span>
                   </span>
                 </span>
                 <time>{formatControlTime(sharedControlEta(destination.orders, estimatedArrivalByOrderId))}</time>
@@ -525,6 +526,15 @@ function scheduledControlVehicles(orders: DispatchListItem[], management?: Manag
       .map((order) => order.vehicleId),
   );
   return management.vehicles.filter((vehicle) => scheduledVehicleIds.has(vehicle.id));
+}
+
+function assignedOrderCountsByVehicle(orders: DispatchListItem[]): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  for (const order of orders) {
+    if (order.assignmentStatus !== 'ASSIGNED' || order.vehicleId === null) continue;
+    counts.set(order.vehicleId, (counts.get(order.vehicleId) ?? 0) + 1);
+  }
+  return counts;
 }
 
 function controlVehicleTemperatureText(

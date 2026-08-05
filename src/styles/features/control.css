@@ -105,13 +105,13 @@
 .control-order-sequence { width:24px; height:24px; display:grid; place-items:center; border-radius:50%; background:var(--color-primary); color:var(--color-white); font-size:11px; font-style:normal; font-weight:850; line-height:1; }
 .control-destination-list { display:grid; align-content:start; }
 .control-destination-columns {
-  position:sticky; top:0; z-index:1; display:grid; grid-template-columns:minmax(0, 1fr) 24px 58px 58px;
+  position:sticky; top:0; z-index:1; display:grid; grid-template-columns:minmax(0, 1fr) 48px 58px 58px;
   gap:8px; padding:5px 6px 7px 42px; border-bottom:1px solid var(--color-border); background:var(--color-white);
   color:var(--color-muted); font-size:9px; font-weight:850; text-align:center;
 }
 .control-destination-columns span:first-child { text-align:left; }
 .control-destination-row {
-  min-height:48px; display:grid; grid-template-columns:24px minmax(0, 1fr) 24px 58px 58px;
+  min-height:48px; display:grid; grid-template-columns:24px minmax(0, 1fr) 48px 58px 58px;
   gap:8px; align-items:center; padding:7px 6px; border-bottom:1px solid var(--color-border);
 }
 .control-destination-row:last-child { border-bottom:0; }
@@ -121,11 +121,13 @@
 .control-destination-row time { color:var(--color-ink); font-size:10px; font-weight:850; text-align:center; white-space:nowrap; }
 .control-destination-row time.completed { color:var(--color-success); }
 .control-destination-row time.empty { color:var(--color-muted); }
+.control-destination-order-count { display:flex; align-items:center; justify-content:center; gap:4px; white-space:nowrap; }
+.control-destination-order-count > b { flex:0 0 auto; color:var(--color-muted); font-size:10px; font-weight:850; }
 .control-order-info {
-  position:relative; width:24px; height:24px; display:grid; place-items:center; border:1px solid var(--color-border);
+  position:relative; width:20px; height:20px; flex:0 0 auto; display:grid; place-items:center; border:1px solid var(--color-border);
   border-radius:50%; color:var(--color-muted); cursor:help;
 }
-.control-order-info > svg { width:13px; height:13px; stroke-width:2.25; }
+.control-order-info > svg { width:11px; height:11px; stroke-width:2.25; }
 .control-order-info:focus-visible { outline:2px solid var(--color-primary); outline-offset:2px; }
 .control-order-tooltip {
   position:absolute; right:calc(100% + 8px); top:50%; z-index:5; width:170px; display:none; padding:9px 10px;
