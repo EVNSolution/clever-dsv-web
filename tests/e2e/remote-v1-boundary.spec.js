@@ -526,9 +526,9 @@ test('renders selected control progress without letting a future destination cli
   })).toEqual({
     destinations: ['#8e8e93', '#e87514', '#1f8b4c', '#0066cc'],
     routes: [
-      { casingColor: '#0066cc', color: '#8e8e93' },
-      { casingColor: '#0066cc', color: '#1f8b4c' },
-      { casingColor: '#0066cc', color: '#0066cc' },
+      { casingColor: '#ffffff', color: '#8e8e93' },
+      { casingColor: '#ffffff', color: '#1f8b4c' },
+      { casingColor: '#ffffff', color: '#0066cc' },
     ],
   });
 

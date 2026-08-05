@@ -434,7 +434,6 @@ function assignedControlMapRoutes(
       ? [vehicle.vehicleLongitude, vehicle.vehicleLatitude] as [number, number]
       : undefined;
     return splitControlRouteByProgress({ coordinates, stops: request.stops, vehiclePosition }).map((segment, index) => ({
-      casingColor: request.color,
       color: CONTROL_PROGRESS_COLORS[segment.status],
       coordinates: segment.coordinates,
       id: `${request.id}:${segment.status}`,
