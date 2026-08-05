@@ -211,10 +211,13 @@ function EmptyState({ title, description }: { title: string; description: string
 function deliveryStatusLabel(value: string): string {
   const labels: Record<string, string> = {
     ASSIGNED: '배정',
+    CANCELLED: '취소',
     DELIVERED: '완료',
     FAILED: '실패',
     IN_TRANSIT: '이동 중',
+    OUT_FOR_DELIVERY: '배송 중',
     PENDING: '대기',
+    READY: '준비',
   };
   return labels[value] ?? value;
 }
