@@ -5,18 +5,20 @@ import { ApiError } from '../api/client';
 import { apiConfig } from '../api/config';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
 import {
+  cancelDispatchChangeRequest,
   clearDispatchTimeConstraint,
   confirmDispatchTimeConstraint,
-  deleteDispatchOrders,
   loadDispatchList,
   MAX_DISPATCH_ASSIGNMENT_COUNT,
-  MAX_DISPATCH_DELETE_COUNT,
+  removeDispatchActiveRoute,
   reassignDispatchOrder,
   reassignDispatchOrders,
   unassignDispatchOrder,
   unassignDispatchOrders,
+  updateDispatchCustomerMemo,
+  updateDispatchDriverMemo,
 } from '../services/dispatch';
-import type { DispatchListItem, DispatchListView, DispatchSearch } from '../services/dispatch';
+import type { DispatchChangeRequest, DispatchListItem, DispatchListView, DispatchOperationStatus, DispatchSearch } from '../services/dispatch';
 import {
   commitDispatchImport,
   parseDispatchFile,
@@ -979,7 +981,9 @@ function RemoteDispatchBoard({
   );
 }
 
-type DispatchFilter = 'ALL' | 'ASSIGNED' | 'UNASSIGNED';
+type DispatchFilter = 'ALL' | DispatchOperationStatus;
+type DispatchSortKey = 'customer' | 'destination' | 'driver' | 'order' | 'status' | 'vehicle';
+type DispatchSortDirection = 'asc' | 'desc';
 type DispatchWorkspaceView = 'LIST' | 'MAP';
 
 function DispatchWorkspace({
@@ -1016,6 +1020,9 @@ function DispatchWorkspace({
   const [filter, setFilter] = useState<DispatchFilter>('ALL');
   const [workspaceView, setWorkspaceView] = useState<DispatchWorkspaceView>('MAP');
   const [searchDraft, setSearchDraft] = useState<DispatchSearch>(search);
+  const [focusedOrderId, setFocusedOrderId] = useState<string | null>(null);
+  const [openActionOrderId, setOpenActionOrderId] = useState<string | null>(null);
+  const [sort, setSort] = useState<{ direction: DispatchSortDirection; key: DispatchSortKey } | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const [selectionCoordinates, setSelectionCoordinates] = useState<Array<[number, number]>>([]);
@@ -1030,28 +1037,35 @@ function DispatchWorkspace({
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
   const readOnly = serviceDate < todayInKorea();
   const hasSearch = search.destinationName !== '' || search.orderNumber !== '';
-  const visibleRows = useMemo(
-    () => filter === 'ALL' ? rows : rows.filter((row) => row.assignmentStatus === filter),
-    [filter, rows],
-  );
+  const rowOrder = useMemo(() => new Map(rows.map((row, index) => [row.sellerOrderId, index])), [rows]);
+  const visibleRows = useMemo(() => {
+    const filteredRows = filter === 'ALL' ? rows : rows.filter((row) => row.operationStatus === filter);
+    return sortDispatchRows(filteredRows, sort, rowOrder, references);
+  }, [filter, references, rowOrder, rows, sort]);
   const visibleDestinationGroups = useMemo(() => groupDispatchDestinations(visibleRows), [visibleRows]);
   const visibleIds = useMemo(() => new Set(visibleRows.map((row) => row.sellerOrderId)), [visibleRows]);
+  const selectableVisibleRows = useMemo(() => visibleRows.filter(isDispatchMutationSelectable), [visibleRows]);
+  const selectableVisibleIds = useMemo(() => new Set(selectableVisibleRows.map((row) => row.sellerOrderId)), [selectableVisibleRows]);
   const selectedIdSet = useMemo(() => new Set(selectedOrderIds), [selectedOrderIds]);
   const selectedOrders = useMemo(
-    () => rows.filter((row) => selectedIdSet.has(row.sellerOrderId)),
+    () => rows.filter((row) => selectedIdSet.has(row.sellerOrderId) && isDispatchMutationSelectable(row)),
     [rows, selectedIdSet],
   );
   const selectedDestinationGroups = useMemo(() => groupDispatchDestinations(selectedOrders), [selectedOrders]);
-  const selectedDestinationIds = useMemo(
-    () => selectedDestinationGroups.map((group) => group.destinationId),
-    [selectedDestinationGroups],
-  );
-  const allVisibleSelected = visibleRows.length > 0 && visibleRows.every((row) => selectedIdSet.has(row.sellerOrderId));
-  const someVisibleSelected = !allVisibleSelected && visibleRows.some((row) => selectedIdSet.has(row.sellerOrderId));
+  const focusedOrder = rows.find((row) => row.sellerOrderId === focusedOrderId) ?? null;
+  const selectedDestinationIds = useMemo(() => {
+    const ids = new Set(selectedDestinationGroups.map((group) => group.destinationId));
+    if (focusedOrder !== null) ids.add(focusedOrder.destinationId);
+    return [...ids];
+  }, [focusedOrder, selectedDestinationGroups]);
+  const allVisibleSelected = selectableVisibleRows.length > 0 && selectableVisibleRows.every((row) => selectedIdSet.has(row.sellerOrderId));
+  const someVisibleSelected = !allVisibleSelected && selectableVisibleRows.some((row) => selectedIdSet.has(row.sellerOrderId));
   const points = useMemo(() => visibleDestinationGroups.flatMap((group) => {
     const anchor = dispatchDestinationCoordinateAnchor(group.orders);
     if (anchor === null || anchor.latitude === null || anchor.longitude === null) return [];
+    const locked = group.orders.every((row) => !isDispatchMutationSelectable(row));
     return [{
+      color: locked ? '#b8b8bf' : undefined,
       id: group.destinationId,
       latitude: anchor.latitude,
       longitude: anchor.longitude,
@@ -1075,10 +1089,9 @@ function DispatchWorkspace({
     : selectedDestinationGroups.length === 1
       ? dispatchDestinationName(selectedDestinationGroups[0].orders[0], references)
       : `${dispatchDestinationName(selectedDestinationGroups[0].orders[0], references)} 외 ${selectedDestinationGroups.length - 1}곳`;
-  const selectedOrder = selectedOrders.length === 1 ? selectedOrders[0] : null;
-  const selectedOrderMissingStop = selectedOrder?.deliveryStopId === null;
-  const canClearSelectedTimeConstraint = selectedOrder !== null
-    && (selectedOrder.timeConstraint !== null || selectedOrder.rawNote !== null || selectedOrder.reviewStatus === 'CONFIRMED');
+  const actionOrder = rows.find((row) => row.sellerOrderId === openActionOrderId) ?? null;
+  const actionOrderMissingStop = actionOrder?.deliveryStopId === null;
+  const canClearActionTimeConstraint = actionOrder !== null && canEditDispatchTimeConstraint(actionOrder);
 
   useEffect(() => {
     setSearchDraft(search);
@@ -1091,16 +1104,21 @@ function DispatchWorkspace({
   useEffect(() => {
     setConstraintError('');
     setConstraintStatus('');
-    setConstraintStart(selectedOrder?.timeConstraint?.timeWindowStart ?? '');
-    setConstraintEnd(selectedOrder?.timeConstraint?.timeWindowEnd ?? '');
-  }, [selectedOrder?.sellerOrderId, selectedOrder?.timeConstraint?.timeWindowEnd, selectedOrder?.timeConstraint?.timeWindowStart]);
+    setConstraintStart(actionOrder?.timeConstraint?.timeWindowStart ?? '');
+    setConstraintEnd(actionOrder?.timeConstraint?.timeWindowEnd ?? '');
+  }, [actionOrder?.sellerOrderId, actionOrder?.timeConstraint?.timeWindowEnd, actionOrder?.timeConstraint?.timeWindowStart]);
 
   useEffect(() => {
     setSelectedOrderIds((current) => {
-      const next = current.filter((id) => visibleIds.has(id));
+      const next = current.filter((id) => selectableVisibleIds.has(id));
       return next.length === current.length ? current : next;
     });
-  }, [visibleIds]);
+  }, [selectableVisibleIds]);
+
+  useEffect(() => {
+    if (focusedOrderId !== null && !visibleIds.has(focusedOrderId)) setFocusedOrderId(null);
+    if (openActionOrderId !== null && !visibleIds.has(openActionOrderId)) setOpenActionOrderId(null);
+  }, [focusedOrderId, openActionOrderId, visibleIds]);
 
   useEffect(() => {
     if (selectAllCheckboxRef.current !== null) selectAllCheckboxRef.current.indeterminate = someVisibleSelected;
@@ -1114,29 +1132,23 @@ function DispatchWorkspace({
     if (!drivers.some((driver) => driver.id === selectedDriverId)) setSelectedDriverId(drivers[0].id);
   }, [drivers, selectedDriverId]);
 
-  const selectOrder = useCallback((orderId: string) => {
+  const toggleOrderSelection = useCallback((order: DispatchListItem) => {
+    if (!isDispatchMutationSelectable(order)) return;
     setMutationError('');
     setSelectionCoordinates([]);
     setSelectionMode(false);
-    setSelectedOrderIds((current) => current.includes(orderId)
-      ? current.filter((id) => id !== orderId)
-      : [...current, orderId]);
+    setSelectedOrderIds((current) => current.includes(order.sellerOrderId)
+      ? current.filter((id) => id !== order.sellerOrderId)
+      : [...current, order.sellerOrderId]);
   }, []);
 
   const selectDestination = useCallback((destinationId: string) => {
-    const destinationOrderIds = visibleRows
-      .filter((row) => row.destinationId === destinationId)
-      .map((row) => row.sellerOrderId);
-    if (destinationOrderIds.length === 0) return;
+    const destinationOrder = visibleRows.find((row) => row.destinationId === destinationId);
+    if (destinationOrder === undefined) return;
     setMutationError('');
     setSelectionCoordinates([]);
     setSelectionMode(false);
-    setSelectedOrderIds((current) => {
-      const currentIds = new Set(current);
-      const removeDestination = destinationOrderIds.every((id) => currentIds.has(id));
-      if (removeDestination) return current.filter((id) => !destinationOrderIds.includes(id));
-      return [...new Set([...current, ...destinationOrderIds])];
-    });
+    setFocusedOrderId(destinationOrder.sellerOrderId);
   }, [visibleRows]);
 
   const addSelectionPoint = useCallback((coordinate: [number, number]) => {
@@ -1162,6 +1174,8 @@ function DispatchWorkspace({
     setConstraintError('');
     setConstraintStatus('');
     setSelectedOrderIds([]);
+    setFocusedOrderId(null);
+    setOpenActionOrderId(null);
     setSelectionCoordinates([]);
     setSelectionMode(false);
   }
@@ -1170,7 +1184,15 @@ function DispatchWorkspace({
     setMutationError('');
     setSelectionCoordinates([]);
     setSelectionMode(false);
-    setSelectedOrderIds(allVisibleSelected ? [] : visibleRows.map((row) => row.sellerOrderId));
+    setSelectedOrderIds(allVisibleSelected ? [] : selectableVisibleRows.map((row) => row.sellerOrderId));
+  }
+
+  function cycleSort(key: DispatchSortKey): void {
+    setSort((current) => {
+      if (current?.key !== key) return { direction: 'desc', key };
+      if (current.direction === 'desc') return { direction: 'asc', key };
+      return null;
+    });
   }
 
   function changeWorkspaceView(nextView: DispatchWorkspaceView): void {
@@ -1206,7 +1228,7 @@ function DispatchWorkspace({
       const anchor = dispatchDestinationCoordinateAnchor(group.orders);
       if (anchor === null || anchor.latitude === null || anchor.longitude === null) return [];
       return pointInPolygon([anchor.longitude, anchor.latitude], coordinates)
-        ? group.orders.map((row) => row.sellerOrderId)
+        ? group.orders.filter(isDispatchMutationSelectable).map((row) => row.sellerOrderId)
         : [];
     });
     setSelectedOrderIds(matchedIds);
@@ -1222,7 +1244,7 @@ function DispatchWorkspace({
       const anchor = dispatchDestinationCoordinateAnchor(group.orders);
       if (anchor === null || anchor.latitude === null || anchor.longitude === null) return [];
       return pointInPolygon([anchor.longitude, anchor.latitude], coordinates)
-        ? group.orders.map((row) => row.sellerOrderId)
+        ? group.orders.filter(isDispatchMutationSelectable).map((row) => row.sellerOrderId)
         : [];
     });
     setSelectedOrderIds(matchedIds);
@@ -1291,28 +1313,8 @@ function DispatchWorkspace({
     else await unassignDispatchOrders(orders);
   }
 
-  async function deleteSelected(): Promise<void> {
-    if (selectedOrders.length === 0 || readOnly) return;
-    if (selectedOrders.length > MAX_DISPATCH_DELETE_COUNT) {
-      setMutationError(`배송 삭제는 한 번에 최대 ${MAX_DISPATCH_DELETE_COUNT}건까지 가능합니다.`);
-      return;
-    }
-    if (!window.confirm(`선택한 배송 ${selectedOrders.length}건을 영구 삭제합니다. 삭제 후에는 되돌릴 수 없습니다.`)) return;
-    setMutationBusy(true);
-    setMutationError('');
-    try {
-      await deleteDispatchOrders(selectedOrders, '관리자 배송 삭제');
-      clearSelection();
-      onAssignmentChanged?.();
-    } catch (caught) {
-      setMutationError(errorMessage(caught));
-    } finally {
-      setMutationBusy(false);
-    }
-  }
-
   async function confirmSelectedTimeConstraint(): Promise<void> {
-    if (selectedOrder === null || readOnly) return;
+    if (actionOrder === null || readOnly || !canEditDispatchTimeConstraint(actionOrder)) return;
     if (!isHardTimeRange(constraintStart, constraintEnd)) {
       setConstraintStatus('');
       setConstraintError('시간을 HH:mm 형식으로 입력하고 시작 시간을 종료 시간보다 빠르게 설정하세요.');
@@ -1322,11 +1324,14 @@ function DispatchWorkspace({
     setConstraintError('');
     setConstraintStatus('');
     try {
-      const result = await confirmDispatchTimeConstraint(selectedOrder, {
+      const result = await confirmDispatchTimeConstraint(actionOrder, {
         timeWindowEnd: constraintEnd,
         timeWindowStart: constraintStart,
       });
-      setConstraintStatus(timeConstraintCommandMessage(result.recalculation.status));
+      setConstraintStatus(actionOrder.operationStatus === 'IN_PROGRESS'
+        ? '진행 중 경로의 시간 제약 변경 요청을 대기열에 반영했습니다.'
+        : timeConstraintCommandMessage(result.recalculation.status));
+      setConstraintBusy(false);
       onAssignmentChanged?.();
     } catch (caught) {
       setConstraintError(errorMessage(caught));
@@ -1336,20 +1341,81 @@ function DispatchWorkspace({
   }
 
   async function clearSelectedTimeConstraint(): Promise<void> {
-    if (selectedOrder === null || readOnly) return;
+    if (actionOrder === null || readOnly || !canEditDispatchTimeConstraint(actionOrder)) return;
     setConstraintBusy(true);
     setConstraintError('');
     setConstraintStatus('');
     try {
-      const result = await clearDispatchTimeConstraint(selectedOrder, '관리자 시간 제약 해제');
+      const result = await clearDispatchTimeConstraint(actionOrder, '관리자 시간 제약 해제');
       setConstraintStart('');
       setConstraintEnd('');
-      setConstraintStatus(timeConstraintCommandMessage(result.recalculation.status));
+      setConstraintStatus(actionOrder.operationStatus === 'IN_PROGRESS'
+        ? '진행 중 경로의 시간 제약 해제 요청을 대기열에 반영했습니다.'
+        : timeConstraintCommandMessage(result.recalculation.status));
+      setConstraintBusy(false);
       onAssignmentChanged?.();
     } catch (caught) {
       setConstraintError(errorMessage(caught));
     } finally {
       setConstraintBusy(false);
+    }
+  }
+
+  async function removeActiveRoute(order: DispatchListItem): Promise<void> {
+    if (readOnly || mutationBusy || order.operationStatus !== 'IN_PROGRESS') return;
+    setMutationBusy(true);
+    setMutationError('');
+    try {
+      await removeDispatchActiveRoute(order);
+      setOpenActionOrderId(null);
+      onAssignmentChanged?.();
+    } catch (caught) {
+      setMutationError(errorMessage(caught));
+    } finally {
+      setMutationBusy(false);
+    }
+  }
+
+  async function cancelPendingChange(order: DispatchListItem): Promise<void> {
+    if (readOnly || mutationBusy || order.changeRequest === null) return;
+    setMutationBusy(true);
+    setMutationError('');
+    try {
+      await cancelDispatchChangeRequest(order);
+      setOpenActionOrderId(null);
+      onAssignmentChanged?.();
+    } catch (caught) {
+      setMutationError(errorMessage(caught));
+    } finally {
+      setMutationBusy(false);
+    }
+  }
+
+  async function saveDriverMemo(order: DispatchListItem, memo: string): Promise<void> {
+    if (readOnly || mutationBusy || !canEditDispatchMemo(order)) return;
+    setMutationBusy(true);
+    setMutationError('');
+    try {
+      await updateDispatchDriverMemo(order, memo.trim());
+      onAssignmentChanged?.();
+    } catch (caught) {
+      setMutationError(errorMessage(caught));
+    } finally {
+      setMutationBusy(false);
+    }
+  }
+
+  async function saveCustomerMemo(order: DispatchListItem, memo: string): Promise<void> {
+    if (readOnly || mutationBusy || !canEditDispatchMemo(order)) return;
+    setMutationBusy(true);
+    setMutationError('');
+    try {
+      await updateDispatchCustomerMemo(order, memo.trim());
+      onAssignmentChanged?.();
+    } catch (caught) {
+      setMutationError(errorMessage(caught));
+    } finally {
+      setMutationBusy(false);
     }
   }
 
@@ -1391,8 +1457,15 @@ function DispatchWorkspace({
                   </button>
                 ))}
               </div>
-              <div className="dispatch-filter" aria-label="배정 상태 필터">
-                {([['ALL', '전체'], ['UNASSIGNED', '미배정'], ['ASSIGNED', '배정']] as const).map(([value, label]) => (
+              <div className="dispatch-filter" aria-label="배차 상태 필터">
+                {([
+                  ['ALL', '전체'],
+                  ['UNASSIGNED', '미배정'],
+                  ['READY', '배정'],
+                  ['IN_PROGRESS', '활성'],
+                  ['CANCELLED', '취소'],
+                  ['COMPLETED', '완료'],
+                ] as const).map(([value, label]) => (
                   <button className={filter === value ? 'active' : ''} key={value} type="button" onClick={() => setFilter(value)}>{label}</button>
                 ))}
               </div>
@@ -1486,6 +1559,7 @@ function DispatchWorkspace({
                   <col className="driver-column" />
                   <col className="vehicle-column" />
                   <col className="status-column" />
+                  <col className="action-column" />
                 </colgroup>
                 <thead>
                   <tr>
@@ -1494,19 +1568,20 @@ function DispatchWorkspace({
                         ref={selectAllCheckboxRef}
                         aria-label="전체 선택"
                         checked={allVisibleSelected}
-                        disabled={visibleRows.length === 0}
+                        disabled={selectableVisibleRows.length === 0}
                         title="현재 목록 전체 선택"
                         type="checkbox"
                         onChange={toggleAllVisibleRows}
                       />
                     </th>
-                    <th scope="col">주문</th>
-                    <th scope="col">배송처</th>
+                    <SortableDispatchHeader label="주문" onSort={cycleSort} sort={sort} sortKey="order" />
+                    <SortableDispatchHeader label="배송처" onSort={cycleSort} sort={sort} sortKey="destination" />
                     <th scope="col">주소</th>
-                    <th scope="col">고객사</th>
-                    <th scope="col">배송원</th>
-                    <th scope="col">차량</th>
-                    <th scope="col">상태</th>
+                    <SortableDispatchHeader label="고객사" onSort={cycleSort} sort={sort} sortKey="customer" />
+                    <SortableDispatchHeader label="배송원" onSort={cycleSort} sort={sort} sortKey="driver" />
+                    <SortableDispatchHeader label="차량" onSort={cycleSort} sort={sort} sortKey="vehicle" />
+                    <SortableDispatchHeader label="상태" onSort={cycleSort} sort={sort} sortKey="status" />
+                    <th scope="col">작업</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1514,19 +1589,30 @@ function DispatchWorkspace({
                     const destinationName = dispatchDestinationName(row, references);
                     const driverName = row.driverId === null ? '-' : referenceName(drivers, row.driverId);
                     const vehiclePlate = row.vehicleId === null ? '-' : vehicles.find((vehicle) => vehicle.id === row.vehicleId)?.plate ?? '정보 확인';
+                    const disabledReason = dispatchMutationDisabledReason(row);
+                    const rowFocused = focusedOrderId === row.sellerOrderId;
+                    const actionOpen = openActionOrderId === row.sellerOrderId;
                     return (
                       <tr
-                        aria-selected={selectedIdSet.has(row.sellerOrderId)}
-                        className={selectedIdSet.has(row.sellerOrderId) ? 'selected' : ''}
+                        aria-selected={rowFocused}
+                        className={`${selectedIdSet.has(row.sellerOrderId) ? 'selected' : ''}${rowFocused ? ' focused' : ''}${disabledReason ? ' locked' : ''}`}
                         key={row.sellerOrderId}
-                        onClick={() => selectOrder(row.sellerOrderId)}
+                        tabIndex={0}
+                        onClick={() => setFocusedOrderId(row.sellerOrderId)}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Enter' && event.key !== ' ') return;
+                          event.preventDefault();
+                          setFocusedOrderId(row.sellerOrderId);
+                        }}
                       >
                         <td onClick={(event) => event.stopPropagation()}>
                           <input
                             aria-label={`${destinationName} 선택`}
                             checked={selectedIdSet.has(row.sellerOrderId)}
+                            disabled={disabledReason !== null}
+                            title={disabledReason ?? undefined}
                             type="checkbox"
-                            onChange={() => selectOrder(row.sellerOrderId)}
+                            onChange={() => toggleOrderSelection(row)}
                           />
                         </td>
                         <td title={row.sellerOrderKey}><strong>{row.sellerOrderKey}</strong></td>
@@ -1536,17 +1622,60 @@ function DispatchWorkspace({
                         <td title={driverName}>{driverName}</td>
                         <td title={vehiclePlate}>{vehiclePlate}</td>
                         <td>
-                          <span>{row.assignmentStatus === 'ASSIGNED' ? '배정' : '미배정'}</span>
+                          <span>{dispatchOperationStatusLabel(row.operationStatus)}</span>
+                          {row.changeRequest ? <small className="dispatch-note-state pending">{dispatchChangeRequestLabel(row.changeRequest)}</small> : null}
                           {row.reviewStatus === 'UNCONFIRMED' ? <small className="dispatch-note-state">미확인</small> : null}
                           {row.reviewStatus === 'CONFIRMED' ? <small className="dispatch-note-state confirmed">확정</small> : null}
                           {row.routeConstraintStatus === 'PENDING_RECALCULATION' ? <small className="dispatch-note-state pending">재계산</small> : null}
+                        </td>
+                        <td className="dispatch-row-action-cell" onClick={(event) => event.stopPropagation()}>
+                          <button
+                            aria-expanded={actionOpen}
+                            aria-haspopup="menu"
+                            aria-label={`${destinationName} 작업`}
+                            className="dispatch-row-action"
+                            type="button"
+                            onClick={() => {
+                              setFocusedOrderId(row.sellerOrderId);
+                              setOpenActionOrderId(actionOpen ? null : row.sellerOrderId);
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key !== 'Escape') return;
+                              setOpenActionOrderId(null);
+                              event.stopPropagation();
+                            }}
+                          >
+                            작업
+                          </button>
+                          {actionOpen ? (
+                            <DispatchRowActionMenu
+                              busy={mutationBusy || constraintBusy}
+                              canClearTimeConstraint={canClearActionTimeConstraint}
+                              constraintEnd={constraintEnd}
+                              constraintError={constraintError}
+                              constraintStart={constraintStart}
+                              constraintStatus={constraintStatus}
+                              disabledReason={readOnly ? '지난 배차는 수정할 수 없습니다.' : null}
+                              missingStop={actionOrderMissingStop}
+                              onCustomerMemoSave={(memo) => void saveCustomerMemo(row, memo)}
+                              onDriverMemoSave={(memo) => void saveDriverMemo(row, memo)}
+                              onCancelChangeRequest={() => void cancelPendingChange(row)}
+                              onClearTimeConstraint={() => void clearSelectedTimeConstraint()}
+                              onClose={() => setOpenActionOrderId(null)}
+                              onConfirmTimeConstraint={() => void confirmSelectedTimeConstraint()}
+                              onConstraintEndChange={setConstraintEnd}
+                              onConstraintStartChange={setConstraintStart}
+                              onRemoveActiveRoute={() => void removeActiveRoute(row)}
+                              order={row}
+                            />
+                          ) : null}
                         </td>
                       </tr>
                     );
                   })}
                   {!loading && !error && visibleRows.length === 0 ? (
                     <tr className="dispatch-order-empty-row">
-                      <td colSpan={8}>
+                      <td colSpan={9}>
                         <div className="dispatch-order-empty" role="status">
                           <strong>배차 없음</strong>
                           <span>{rows.length === 0 ? hasSearch ? '검색 조건에 맞는 주문이 없습니다.' : '등록된 주문이 없습니다.' : '선택한 상태의 주문이 없습니다.'}</span>
@@ -1606,34 +1735,8 @@ function DispatchWorkspace({
             {selectedOrders.length > 0 || selectionCoordinates.length > 0 ? <button className="dispatch-selection-clear" type="button" onClick={clearSelection}>선택 지우기</button> : null}
             {selectedDriver !== null && selectedVehicle === null ? <p role="alert">선택한 배송원에 배정된 차량이 없습니다.</p> : null}
             {mutationError ? <p role="alert">{mutationError}</p> : null}
-            {selectedOrder !== null ? (
-              <div className="dispatch-special-instruction" aria-label="특이사항">
-                <div className="dispatch-special-instruction-summary">
-                  <span>특이사항</span>
-                  <strong>{selectedOrder.rawNote ?? '없음'}</strong>
-                  <small>{reviewStatusLabel(selectedOrder.reviewStatus)} · {routeConstraintStatusLabel(selectedOrder.routeConstraintStatus)}</small>
-                </div>
-                <form
-                  className="dispatch-time-constraint-form"
-                  aria-label="시간 제약"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void confirmSelectedTimeConstraint();
-                  }}
-                >
-                  <label>시작<input aria-label="시간 제약 시작" disabled={readOnly || constraintBusy || selectedOrderMissingStop} maxLength={5} placeholder="10:30" value={constraintStart} onChange={(event) => setConstraintStart(event.target.value)} /></label>
-                  <label>종료<input aria-label="시간 제약 종료" disabled={readOnly || constraintBusy || selectedOrderMissingStop} maxLength={5} placeholder="11:00" value={constraintEnd} onChange={(event) => setConstraintEnd(event.target.value)} /></label>
-                  <button type="submit" disabled={readOnly || constraintBusy || selectedOrderMissingStop}>확정</button>
-                  <button type="button" disabled={readOnly || constraintBusy || selectedOrderMissingStop || !canClearSelectedTimeConstraint} onClick={() => void clearSelectedTimeConstraint()}>해제</button>
-                </form>
-                {selectedOrderMissingStop ? <p role="alert">배송지 ID가 없어 시간 제약을 변경할 수 없습니다.</p> : null}
-                {constraintError ? <p role="alert">{constraintError}</p> : null}
-                {constraintStatus ? <p role="status">{constraintStatus}</p> : null}
-              </div>
-            ) : null}
             <div>
               <button aria-label="배정 해제" className="btn" type="button" disabled={mutationBusy || readOnly || assignedSelectionCount === 0} onClick={() => void unassignSelected()}>배정 해제<span className="dispatch-action-count">{assignedSelectionCount}건</span></button>
-              <button className="btn danger" type="button" disabled={mutationBusy || readOnly || selectedOrders.length === 0} onClick={() => void deleteSelected()}>배송 삭제</button>
               <button aria-label={assignedSelectionCount > 0 ? '선택 이관' : '선택 배정'} className="btn primary" type="button" disabled={mutationBusy || readOnly || assignmentCandidates.length === 0 || selectedDriver === null || selectedVehicle === null} onClick={() => void assignSelected()}>
                 {mutationBusy ? '처리 중' : assignedSelectionCount > 0 ? '선택 이관' : '선택 배정'}
                 {!mutationBusy ? <span className="dispatch-action-count">{assignmentCandidates.length}건</span> : null}
@@ -1643,6 +1746,154 @@ function DispatchWorkspace({
         </section>
       </div>
     </section>
+  );
+}
+
+function SortableDispatchHeader({
+  label,
+  onSort,
+  sort,
+  sortKey,
+}: {
+  label: string;
+  onSort: (key: DispatchSortKey) => void;
+  sort: { direction: DispatchSortDirection; key: DispatchSortKey } | null;
+  sortKey: DispatchSortKey;
+}): ReactElement {
+  const active = sort?.key === sortKey;
+  const directionLabel = active ? (sort.direction === 'desc' ? '내림차순' : '오름차순') : '기본순';
+  return (
+    <th scope="col">
+      <button
+        aria-label={`${label} 정렬 ${directionLabel}`}
+        className={`dispatch-sort-header${active ? ' active' : ''}`}
+        type="button"
+        onClick={() => onSort(sortKey)}
+      >
+        <span>{label}</span>
+        <b aria-hidden="true">{active ? (sort.direction === 'desc' ? '↓' : '↑') : ''}</b>
+      </button>
+    </th>
+  );
+}
+
+function DispatchRowActionMenu({
+  busy,
+  canClearTimeConstraint,
+  constraintEnd,
+  constraintError,
+  constraintStart,
+  constraintStatus,
+  disabledReason,
+  missingStop,
+  onClearTimeConstraint,
+  onCancelChangeRequest,
+  onClose,
+  onConfirmTimeConstraint,
+  onConstraintEndChange,
+  onConstraintStartChange,
+  onCustomerMemoSave,
+  onDriverMemoSave,
+  onRemoveActiveRoute,
+  order,
+}: {
+  busy: boolean;
+  canClearTimeConstraint: boolean;
+  constraintEnd: string;
+  constraintError: string;
+  constraintStart: string;
+  constraintStatus: string;
+  disabledReason: string | null;
+  missingStop: boolean;
+  onClearTimeConstraint: () => void;
+  onCancelChangeRequest: () => void;
+  onClose: () => void;
+  onConfirmTimeConstraint: () => void;
+  onConstraintEndChange: (value: string) => void;
+  onConstraintStartChange: (value: string) => void;
+  onCustomerMemoSave: (memo: string) => void;
+  onDriverMemoSave: (memo: string) => void;
+  onRemoveActiveRoute: () => void;
+  order: DispatchListItem;
+}): ReactElement {
+  const memoDisabledReason = disabledReason ?? dispatchMemoDisabledReason(order);
+  const timeDisabledReason = disabledReason ?? dispatchTimeConstraintDisabledReason(order);
+  const activeRemovalDisabledReason = disabledReason ?? dispatchActiveRemovalDisabledReason(order);
+  const memoLocked = memoDisabledReason !== null;
+  const timeLocked = timeDisabledReason !== null;
+  const activeRemovalLocked = activeRemovalDisabledReason !== null;
+  return (
+    <div
+      className="dispatch-row-menu"
+      role="menu"
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return;
+        onClose();
+        event.stopPropagation();
+      }}
+    >
+      <button className="dispatch-row-menu-close" type="button" aria-label="작업 메뉴 닫기" onClick={onClose}>닫기</button>
+      <div className="dispatch-row-menu-section">
+        <span>특이사항</span>
+        <strong>{order.rawNote ?? '없음'}</strong>
+        <small>{reviewStatusLabel(order.reviewStatus)} · {routeConstraintStatusLabel(order.routeConstraintStatus)}</small>
+      </div>
+      <div className="dispatch-row-menu-section">
+        <span>배송원 메모</span>
+        <form className="dispatch-row-memo-form" aria-label="배송원 메모" onSubmit={(event) => {
+          event.preventDefault();
+          onDriverMemoSave(String(new FormData(event.currentTarget).get('memo') ?? ''));
+        }}>
+          <input name="memo" maxLength={500} defaultValue={order.latestDriverMessage?.body ?? ''} disabled={memoLocked || busy} placeholder="배송원 메모" />
+          <button type="submit" disabled={memoLocked || busy}>저장</button>
+        </form>
+      </div>
+      <div className="dispatch-row-menu-section">
+        <span>고객 메모</span>
+        <form className="dispatch-row-memo-form" aria-label="고객 메모" onSubmit={(event) => {
+          event.preventDefault();
+          onCustomerMemoSave(String(new FormData(event.currentTarget).get('memo') ?? ''));
+        }}>
+          <input name="memo" maxLength={500} defaultValue={order.latestCustomerMessage?.body ?? ''} disabled={memoLocked || busy} placeholder="고객 메모" />
+          <button type="submit" disabled={memoLocked || busy}>저장</button>
+        </form>
+      </div>
+      <form
+        className="dispatch-time-constraint-form"
+        aria-label="시간 제약"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onConfirmTimeConstraint();
+        }}
+      >
+        <label>시작<input aria-label="시간 제약 시작" disabled={timeLocked || busy || missingStop} maxLength={5} placeholder="10:30" value={constraintStart} onChange={(event) => onConstraintStartChange(event.target.value)} /></label>
+        <label>종료<input aria-label="시간 제약 종료" disabled={timeLocked || busy || missingStop} maxLength={5} placeholder="11:00" value={constraintEnd} onChange={(event) => onConstraintEndChange(event.target.value)} /></label>
+        <button type="submit" disabled={timeLocked || busy || missingStop}>확정</button>
+        <button type="button" disabled={timeLocked || busy || missingStop || !canClearTimeConstraint} onClick={onClearTimeConstraint}>해제</button>
+      </form>
+      <button
+        className="dispatch-row-menu-remove"
+        role="menuitem"
+        type="button"
+        disabled={activeRemovalLocked || busy}
+        onClick={onRemoveActiveRoute}
+      >
+        활성 경로 제거
+      </button>
+      {order.changeRequest ? (
+        <button className="dispatch-row-menu-remove" role="menuitem" type="button" disabled={busy} onClick={onCancelChangeRequest}>
+          변경 요청 취소
+        </button>
+      ) : null}
+      {disabledReason ? <p role="status">{disabledReason}</p> : null}
+      {!disabledReason && memoDisabledReason ? <p role="status">{memoDisabledReason}</p> : null}
+      {!disabledReason && timeDisabledReason ? <p role="status">{timeDisabledReason}</p> : null}
+      {!disabledReason && activeRemovalDisabledReason ? <p role="status">{activeRemovalDisabledReason}</p> : null}
+      {missingStop ? <p role="alert">배송지 ID가 없어 시간 제약을 변경할 수 없습니다.</p> : null}
+      {constraintError ? <p role="alert">{constraintError}</p> : null}
+      {constraintStatus ? <p role="status">{constraintStatus}</p> : null}
+    </div>
   );
 }
 
@@ -1860,6 +2111,124 @@ function dispatchDestinationName(row: DispatchListItem, references: ManagementDa
 
 function dispatchCustomerName(row: DispatchListItem, references: ManagementData | null): string {
   return references?.customers.find((customer) => customer.id === row.customerId)?.name ?? row.customerId;
+}
+
+function isDispatchMutationSelectable(row: DispatchListItem): boolean {
+  return row.operationStatus === 'UNASSIGNED' || row.operationStatus === 'READY';
+}
+
+function canEditDispatchMemo(row: DispatchListItem): boolean {
+  return row.operationStatus === 'UNASSIGNED' || row.operationStatus === 'READY' || row.operationStatus === 'IN_PROGRESS';
+}
+
+function canEditDispatchTimeConstraint(row: DispatchListItem): boolean {
+  return row.operationStatus === 'UNASSIGNED' || row.operationStatus === 'READY' || row.operationStatus === 'IN_PROGRESS';
+}
+
+function dispatchMutationDisabledReason(row: DispatchListItem): string | null {
+  switch (row.operationStatus) {
+    case 'IN_PROGRESS':
+      return '운행 중인 경로는 배차 변경할 수 없습니다.';
+    case 'CANCELLED':
+      return '취소된 경로는 배차 변경할 수 없습니다.';
+    case 'COMPLETED':
+      return '완료된 경로는 배차 변경할 수 없습니다.';
+    default:
+      return null;
+  }
+}
+
+function dispatchMemoDisabledReason(row: DispatchListItem): string | null {
+  if (canEditDispatchMemo(row)) return null;
+  if (row.operationStatus === 'CANCELLED') return '취소된 경로는 메모를 변경할 수 없습니다.';
+  return '완료된 경로는 메모를 변경할 수 없습니다.';
+}
+
+function dispatchTimeConstraintDisabledReason(row: DispatchListItem): string | null {
+  if (canEditDispatchTimeConstraint(row)) return null;
+  if (row.operationStatus === 'CANCELLED') return '취소된 경로는 시간 제약을 변경할 수 없습니다.';
+  return '완료된 경로는 시간 제약을 변경할 수 없습니다.';
+}
+
+function dispatchActiveRemovalDisabledReason(row: DispatchListItem): string | null {
+  if (row.operationStatus === 'IN_PROGRESS') return null;
+  if (row.operationStatus === 'READY') return '준비 상태 경로는 배정 해제를 사용하세요.';
+  if (row.operationStatus === 'UNASSIGNED') return '미배정 주문에는 활성 경로가 없습니다.';
+  if (row.operationStatus === 'CANCELLED') return '취소된 경로는 활성 경로 제거를 사용할 수 없습니다.';
+  return '완료된 경로는 활성 경로 제거를 사용할 수 없습니다.';
+}
+
+function dispatchOperationStatusLabel(status: DispatchOperationStatus): string {
+  switch (status) {
+    case 'UNASSIGNED':
+      return '미배정';
+    case 'READY':
+      return '배정';
+    case 'IN_PROGRESS':
+      return '활성';
+    case 'CANCELLED':
+      return '취소';
+    case 'COMPLETED':
+      return '완료';
+  }
+}
+
+function dispatchChangeRequestLabel(changeRequest: DispatchChangeRequest): string {
+  if (changeRequest.timeWindowStart !== undefined && changeRequest.timeWindowEnd !== undefined) {
+    return `변경 대기 ${changeRequest.timeWindowStart}-${changeRequest.timeWindowEnd}`;
+  }
+  return `${changeRequest.type} 대기`;
+}
+
+function sortDispatchRows(
+  rows: DispatchListItem[],
+  sort: { direction: DispatchSortDirection; key: DispatchSortKey } | null,
+  rowOrder: Map<string, number>,
+  references: ManagementData | null,
+): DispatchListItem[] {
+  const direction = sort?.direction === 'asc' ? 1 : -1;
+  return [...rows].sort((left, right) => {
+    const groupDelta = lifecycleOrder(left.operationStatus) - lifecycleOrder(right.operationStatus);
+    if (groupDelta !== 0) return groupDelta;
+    if (sort !== null) {
+      const valueDelta = dispatchSortValue(left, sort.key, references)
+        .localeCompare(dispatchSortValue(right, sort.key, references), 'ko', { numeric: true, sensitivity: 'base' });
+      if (valueDelta !== 0) return valueDelta * direction;
+    }
+    return (rowOrder.get(left.sellerOrderId) ?? 0) - (rowOrder.get(right.sellerOrderId) ?? 0);
+  });
+}
+
+function dispatchSortValue(row: DispatchListItem, key: DispatchSortKey, references: ManagementData | null): string {
+  switch (key) {
+    case 'customer':
+      return dispatchCustomerName(row, references);
+    case 'destination':
+      return dispatchDestinationName(row, references);
+    case 'driver':
+      return row.driverId ?? '';
+    case 'order':
+      return row.sellerOrderKey;
+    case 'status':
+      return dispatchOperationStatusLabel(row.operationStatus);
+    case 'vehicle':
+      return row.vehicleId ?? '';
+  }
+}
+
+function lifecycleOrder(status: DispatchOperationStatus): number {
+  switch (status) {
+    case 'UNASSIGNED':
+      return 0;
+    case 'READY':
+      return 1;
+    case 'IN_PROGRESS':
+      return 2;
+    case 'CANCELLED':
+      return 3;
+    case 'COMPLETED':
+      return 4;
+  }
 }
 
 function reviewStatusLabel(status: DispatchListItem['reviewStatus']): string {

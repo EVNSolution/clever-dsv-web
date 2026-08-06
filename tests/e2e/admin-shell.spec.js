@@ -204,7 +204,7 @@ test('dispatch keeps the driver workspace at a fixed desktop width', async ({ pa
   }
 
   const actionButtons = page.locator('.dispatch-assignment-action .btn');
-  await expect(actionButtons).toHaveCount(3);
+  await expect(actionButtons).toHaveCount(2);
   expect(await actionButtons.evaluateAll((buttons) => buttons.every((button) => (
     getComputedStyle(button).whiteSpace === 'nowrap' && button.scrollWidth <= button.clientWidth
   )))).toBe(true);
@@ -390,8 +390,8 @@ test('dispatch upload exposes validation and can be cancelled', async ({ page })
   await expect(firstBoxCell).toHaveText('0');
   await expect(firstBoxCell.locator('..')).toHaveClass(/is-error/u);
   await expect(firstBoxCell.locator('..')).toHaveCSS('box-shadow', /rgb\(212, 59, 47\)/u);
-  const cancelButton = page.getByRole('button', { name: '취소', exact: true });
-  const closeButton = page.getByRole('button', { name: '닫기', exact: true });
+  const cancelButton = uploadPanel.getByRole('button', { name: '취소', exact: true });
+  const closeButton = uploadPanel.getByRole('button', { name: '닫기', exact: true });
   await expect(cancelButton).toBeVisible();
   const [cancelBox, closeBox] = await Promise.all([cancelButton.boundingBox(), closeButton.boundingBox()]);
   expect(cancelBox.y).toBe(closeBox.y);
@@ -419,7 +419,7 @@ test('dispatch upload exposes validation and can be cancelled', async ({ page })
   await page.locator('.condition-candidate').last().scrollIntoViewIfNeeded();
   expect(await uploadScroll.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   await expect(page.locator('.condition-candidate').last()).toBeVisible();
-  await page.getByRole('button', { name: '닫기' }).click();
+  await closeButton.click();
   await page.getByRole('button', { name: '주문 업로드' }).click();
   await expect(page.getByText('dsv-fixed-dispatch-10.csv', { exact: true })).toBeVisible();
   await cancelButton.click();
@@ -427,7 +427,7 @@ test('dispatch upload exposes validation and can be cancelled', async ({ page })
   await expect(page.getByRole('button', { name: '파일 업로드', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '예제 업로드', exact: true })).toBeVisible();
   await expect(page.locator('.dispatch-upload-summary')).toHaveCount(0);
-  await page.getByRole('button', { name: '닫기' }).click();
+  await uploadPanel.getByRole('button', { name: '닫기', exact: true }).click();
 });
 
 test('empty notification center does not fabricate vehicle actions', async ({ page }) => {

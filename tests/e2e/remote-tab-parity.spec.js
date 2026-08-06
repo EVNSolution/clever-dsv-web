@@ -82,6 +82,7 @@ function adminFixtures(fixtures) {
 async function installApiFixtures(page, fixtures) {
   const resolvedFixtures = {
     'GET /api/dsv/v1/map/profile': v1Envelope(mapProviderProfile, 'g006-map-profile'),
+    'GET /api/dsv/v1/operational-notifications': v1Envelope({ items: [] }, 'g006-parity-empty-notifications'),
     'GET /api/dsv/manual-email': legacyEnvelope({ apiConfigured: false, configured: false, defaultRecipients: [], defaultSubject: operationSettings().manualEmailSubject, defaultTextContent: operationSettings().manualEmailBody, senderEmail: null, senderName: 'CLEVER DSV' }),
     'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings()),
     ...fixtures,
@@ -386,11 +387,11 @@ test('dispatch list selects and clears every visible order from the header check
   const selectAll = page.getByRole('checkbox', { name: '전체 선택' });
   await selectAll.check();
   await expect(page.getByRole('region', { name: '배송원' })).toContainText('2곳');
-  await expect(page.locator('.dispatch-order-table tbody tr[aria-selected="true"]')).toHaveCount(2);
+  await expect(page.locator('.dispatch-order-table tbody tr.selected')).toHaveCount(2);
 
   await selectAll.uncheck();
   await expect(page.getByRole('region', { name: '배송원' })).toContainText('0곳');
-  await expect(page.locator('.dispatch-order-table tbody tr[aria-selected="true"]')).toHaveCount(0);
+  await expect(page.locator('.dispatch-order-table tbody tr.selected')).toHaveCount(0);
   expectOnlyFixtureCalls(api);
 });
 
@@ -711,10 +712,7 @@ test('dispatch unassigns 53 selected orders with one atomic batch request', asyn
   expectOnlyFixtureCalls(api);
 });
 
-test('dispatch permanently deletes selected orders with one confirmed batch request', async ({ page }) => {
-  let dispatchReads = 0;
-  let deletionCalls = 0;
-  let deletionPayload;
+test('dispatch removes the permanent deletion UI', async ({ page }) => {
   const selectedRows = [
     {
       assignmentStatus: 'ASSIGNED',
@@ -746,50 +744,21 @@ test('dispatch permanently deletes selected orders with one confirmed batch requ
     },
   ];
   const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
-    'GET /api/dsv/v1/dispatches': () => {
-      dispatchReads += 1;
-      return v1Envelope({
-        items: dispatchReads === 1 ? selectedRows : [],
-        page: { hasMore: false },
-      }, `g006-dispatch-delete-${dispatchReads}`);
-    },
-    'POST /api/dsv/v1/seller-order-deletions': async ({ request }) => {
-      deletionCalls += 1;
-      deletionPayload = await request.postDataJSON();
-      return legacyEnvelope({
-        commandId: deletionPayload.commandId,
-        deletedSellerOrderIds: deletionPayload.items.map((item) => item.sellerOrderId),
-        receiptId: 'delete-receipt-g006',
-      });
-    },
+    'GET /api/dsv/v1/dispatches': v1Envelope({
+      items: selectedRows,
+      page: { hasMore: false },
+    }, 'g006-dispatch-no-delete-ui'),
   })));
 
   await page.goto('/dispatch');
   await page.getByRole('button', { name: '목록', exact: true }).click();
   await page.getByRole('checkbox', { name: '전체 선택' }).check();
-  page.once('dialog', (dialog) => {
-    expect(dialog.message()).toContain('2건');
-    expect(dialog.message()).toContain('영구 삭제');
-    void dialog.accept();
-  });
-  await page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배송 삭제' }).click();
 
-  await expect.poll(() => dispatchReads).toBe(2);
-  expect(deletionCalls).toBe(1);
-  expect(deletionPayload).toMatchObject({
-    items: [
-      { expectedVersion: 'route-version-g006-delete-1', sellerOrderId: 'seller-order-g006-delete-1' },
-      { expectedVersion: 'UNASSIGNED', sellerOrderId: 'seller-order-g006-delete-2' },
-    ],
-    reason: '관리자 배송 삭제',
-  });
-  expect(deletionPayload.commandId).toEqual(expect.any(String));
-  await expect(page.getByRole('region', { name: '배송원' })).toContainText('0곳');
+  await expect(page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배송 삭제' })).toHaveCount(0);
   expectOnlyFixtureCalls(api);
 });
 
-test('dispatch blocks permanent deletion above the 100 order API limit', async ({ page }) => {
-  let deletionCalls = 0;
+test('dispatch has no permanent deletion action even above the former 100 order API limit', async ({ page }) => {
   const rows = Array.from({ length: 101 }, (_, index) => ({
     assignmentStatus: 'UNASSIGNED',
     customerId: 'customer-g006',
@@ -807,19 +776,13 @@ test('dispatch blocks permanent deletion above the 100 order API limit', async (
       items: rows,
       page: { hasMore: false },
     }, 'g006-dispatch-delete-limit'),
-    'POST /api/dsv/v1/seller-order-deletions': () => {
-      deletionCalls += 1;
-      return legacyEnvelope({ commandId: 'unexpected', deletedSellerOrderIds: [], receiptId: 'unexpected' });
-    },
   })));
 
   await page.goto('/dispatch');
   await page.getByRole('button', { name: '목록', exact: true }).click();
   await page.getByRole('checkbox', { name: '전체 선택' }).check();
-  await page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배송 삭제' }).click();
 
-  await expect(page.getByRole('alert')).toContainText('배송 삭제는 한 번에 최대 100건까지 가능합니다.');
-  expect(deletionCalls).toBe(0);
+  await expect(page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배송 삭제' })).toHaveCount(0);
   expectOnlyFixtureCalls(api);
 });
 
@@ -1018,6 +981,7 @@ test('dispatch keeps past service dates read-only in the same workspace', async 
         destinationId: 'destination-g006',
         driverId: 'driver-g006',
         etaStatus: 'PENDING',
+        operationStatus: 'READY',
         routePlanId: 'route-plan-g006-past',
         routeVersionId: 'route-version-g006-past',
         sellerOrderId: 'seller-order-g006-past',
@@ -1033,7 +997,7 @@ test('dispatch keeps past service dates read-only in the same workspace', async 
 
   await expect(page.getByText('지난 배차는 조회만 가능합니다.')).toBeVisible();
   await expect(page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배정 해제' })).toBeDisabled();
-  await expect(page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배송 삭제' })).toBeDisabled();
+  await expect(page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배송 삭제' })).toHaveCount(0);
   await expect.poll(() => api.calls.some((call) => call.key.includes('serviceDate=2020-01-01'))).toBe(true);
   expectOnlyFixtureCalls(api);
 });
@@ -1228,7 +1192,7 @@ test('management renders customer, destination, and condition reference lists', 
   await customerRow.click();
   await expect(customerWorkspace).toHaveClass(/has-selection/u);
   await expect(customerWorkspace.getByLabel('고객사 상세')).toContainText('4건 Order');
-  await expect(customerWorkspace.getByLabel('고객사 상세').getByRole('button', { name: '고객사 수정', exact: true })).toBeDisabled();
+  await expect(customerWorkspace.getByLabel('고객사 상세').getByRole('button', { name: '고객사 수정', exact: true })).toBeEnabled();
   await customerWorkspace.getByRole('button', { name: '선택 취소', exact: true }).click();
   await expect(customerWorkspace).toHaveClass(/is-idle/u);
   await page.getByRole('button', { name: '운송조건', exact: true }).click();

@@ -60,7 +60,7 @@ type V1CustomerListItem = {
   displayName: string;
   externalCustomerCode?: string;
   notificationEmailEnabled?: boolean;
-  notificationEmailRecipient?: string;
+  notificationEmailRecipient?: string | null;
   orderCount: number;
   status?: string;
 };
@@ -453,7 +453,7 @@ function isV1CustomerListItem(value: unknown): value is V1CustomerListItem {
     && isNonEmptyString(value.displayName)
     && isOptionalString(value.externalCustomerCode)
     && (value.notificationEmailEnabled === undefined || typeof value.notificationEmailEnabled === 'boolean')
-    && isOptionalString(value.notificationEmailRecipient)
+    && (value.notificationEmailRecipient === null || isOptionalString(value.notificationEmailRecipient))
     && typeof value.orderCount === 'number'
     && Number.isInteger(value.orderCount)
     && value.orderCount >= 0

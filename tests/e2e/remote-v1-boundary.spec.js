@@ -109,6 +109,7 @@ function g003DispatchRows() {
       etaStatus: 'NOT_REQUIRED',
       latitude: 37.500643,
       longitude: 127.036545,
+      operationStatus: 'READY',
       rawNote: '오전 11시 배송',
       reviewStatus: 'UNCONFIRMED',
       routeConstraintStatus: 'UNCONFIRMED',
@@ -126,6 +127,7 @@ function g003DispatchRows() {
       etaStatus: 'NOT_REQUIRED',
       latitude: 37.500643,
       longitude: 127.036545,
+      operationStatus: 'READY',
       reviewStatus: 'NOT_APPLICABLE',
       routeConstraintStatus: 'NOT_APPLICABLE',
       sellerOrderId: '44444444-4444-4444-8444-444444444444',
@@ -139,7 +141,17 @@ async function installApiFixtures(page, fixtures) {
   const resolvedFixtures = {
     'GET /api/dsv/v1/map/profile': v1Envelope(mapProviderProfile, 'g006-map-profile'),
     'GET /api/dsv/v1/conditions?limit=100': emptyV1List(),
+    'GET /api/dsv/manual-email': {
+      apiConfigured: false,
+      configured: false,
+      defaultRecipients: [],
+      defaultSubject: '',
+      defaultTextContent: '',
+      senderEmail: null,
+      senderName: 'CLEVER DSV',
+    },
     'GET /api/dsv/v1/drivers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/operational-notifications': v1Envelope({ items: [] }, 'g006-empty-notifications'),
     'GET /api/dsv/settings/operations': { data: operationalSettings, error: null },
     ...fixtures,
   };
@@ -1138,6 +1150,51 @@ test('requires every read scope used by the remote master-data page before manag
   expect(api.unexpected).toEqual([]);
 });
 
+test('edits only customer notification settings in remote master data', async ({ page }) => {
+  const commandBodies = [];
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(fullAdminSession),
+    'GET /api/dsv/v1/drivers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/vehicles?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({
+      items: [{
+        customerId: 'customer-notification-settings',
+        displayName: '알림 고객사',
+        notificationEmailEnabled: false,
+        notificationEmailRecipient: null,
+        orderCount: 1,
+        status: 'ACTIVE',
+      }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/destinations?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/conditions?limit=100': emptyV1List(),
+    'PATCH /api/dsv/v1/customers/customer-notification-settings/notification-settings': ({ request }) => {
+      const body = JSON.parse(request.postData() ?? '{}');
+      commandBodies.push(body);
+      return v1Envelope({
+        customerId: 'customer-notification-settings',
+        notificationEmailEnabled: body.enabled,
+        notificationEmailRecipient: body.recipient,
+      });
+    },
+  });
+
+  await page.goto('/master-data');
+  await page.getByRole('button', { name: '고객사', exact: true }).click();
+  await page.getByRole('row', { name: /알림 고객사/ }).click();
+  await page.getByRole('button', { name: '고객사 수정' }).click();
+
+  await expect(page.getByLabel('고객사명')).toHaveAttribute('readonly', '');
+  await expect(page.getByLabel('고객 코드')).toHaveAttribute('readonly', '');
+  await page.getByLabel('이메일 알림 사용').check();
+  await page.getByLabel('대표 수신자 이메일').fill('customer@example.com');
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+
+  await expect.poll(() => commandBodies).toEqual([{ enabled: true, recipient: 'customer@example.com' }]);
+  expect(api.unexpected).toEqual([]);
+});
+
 test('fails closed when a v1 success envelope is missing requestId', async ({ page }) => {
   await seedCanonicalSentinels(page);
   const api = await installApiFixtures(page, {
@@ -1674,6 +1731,62 @@ test('remote logout sends CSRF, clears transport storage, and returns to login',
   expect(api.unexpected).toEqual([]);
 });
 
+test('notification center renders server alerts, preserves read state, and recovers cancelled orders', async ({ page }) => {
+  const sellerOrderId = 'seller-order-notification-recover';
+  let notificationReads = 0;
+  let recovered = false;
+  let recoverBody = null;
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Envelope(controlSummary),
+    'GET /api/dsv/v1/control/routes': v1Envelope({ routes: [], serviceDate: controlSummary.serviceDate }),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({ items: [], page: { hasMore: false } }),
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({ items: [], page: { hasMore: false } }),
+    'GET /api/dsv/v1/dispatches': v1Envelope({ items: [], page: { hasMore: false } }),
+    'GET /api/dsv/v1/operational-notifications': () => {
+      notificationReads += 1;
+      return v1Envelope({
+        items: recovered ? [] : [{
+          changeRequestId: 'change-request-notification-recover',
+          createdAt: '2026-08-06T01:20:00.000Z',
+          description: '취소된 주문이 배차 대상에서 제외되었습니다.',
+          id: 'notification-cancelled-order-recover',
+          kind: 'CANCELLED_ORDER',
+          recoverable: true,
+          sellerOrderId,
+          severity: 'critical',
+          title: '취소 주문 확인 필요',
+        }],
+      }, `g006-notifications-${notificationReads}`);
+    },
+    [`POST /api/dsv/v1/seller-orders/${sellerOrderId}/recover-unassigned`]: async ({ request }) => {
+      recoverBody = await request.postDataJSON();
+      recovered = true;
+      return v1Envelope({ recovered: true }, 'g006-recover-cancelled-order');
+    },
+  });
+
+  await page.goto('/control');
+  await expect(page.locator('.notification-count')).toHaveText('1');
+  await page.getByLabel('알림 열기').click();
+  await expect(page.getByText('취소 주문 확인 필요')).toBeVisible();
+  await expect(page.getByText('취소된 주문이 배차 대상에서 제외되었습니다.')).toBeVisible();
+  await expect(page.getByText('긴급 · 읽지 않음')).toBeVisible();
+  await page.getByRole('button', { name: '읽음', exact: true }).click();
+  await expect(page.getByText('긴급 · 읽음')).toBeVisible();
+  await expect(page.locator('.notification-count')).toBeHidden();
+  await page.reload();
+  await page.getByLabel('알림 열기').click();
+  await expect(page.getByText('긴급 · 읽음')).toBeVisible();
+
+  await page.getByRole('button', { name: '주문 복구' }).click();
+  await expect(page.getByText('알림이 없습니다.')).toBeVisible();
+  expect(recoverBody).toEqual({ commandId: expect.any(String) });
+  expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/operational-notifications')).toBe(true);
+  expect(api.calls.some((call) => call.method === 'POST' && call.path === `/api/dsv/v1/seller-orders/${sellerOrderId}/recover-unassigned`)).toBe(true);
+  expect(api.unexpected).toEqual([]);
+});
+
 test('rejects legacy resource snapshots and new legacy read-model endpoints outside the bounded allowlist', () => {
   const clientSource = readFileSync(new URL('../../src/api/client.ts', import.meta.url), 'utf8');
   expect(extractAllowlist(clientSource, 'legacyAllowlist')).toEqual([
@@ -1736,6 +1849,7 @@ test('pins the exact normalized G005 v1 read allowlist', () => {
     'GET conditions',
     'GET customer/deliveries',
     'GET customers/deliveries',
+    'GET operational-notifications',
   ]);
 
   const readClient = clientSource.match(/export async function requestV1ReadJson[\s\S]*?\n\}/u)?.[0] ?? '';
@@ -1748,7 +1862,6 @@ test('keeps the v1 assignment-command legacy envelope exception bounded to the e
   expect(extractAllowlist(clientSource, 'assignmentCommandAllowlist')).toEqual([
     'POST seller-order-assignments/reassign',
     'POST seller-order-assignments/unassign',
-    'POST seller-order-deletions',
     'POST seller-orders/[^/]+/assignment/unassign',
     'POST seller-orders/[^/]+/assignment/reassign',
   ]);
@@ -1759,6 +1872,16 @@ test('keeps the strict v1 time-constraint command allowlist exact', () => {
   expect(extractAllowlist(clientSource, 'timeConstraintCommandAllowlist')).toEqual([
     'POST seller-orders/[^/]+/time-constraint/confirm',
     'POST seller-orders/[^/]+/time-constraint/clear',
+  ]);
+});
+
+test('keeps the strict v1 dispatch operation command allowlist exact', () => {
+  const clientSource = readFileSync(new URL('../../src/api/client.ts', import.meta.url), 'utf8');
+  expect(extractAllowlist(clientSource, 'dispatchOperationCommandAllowlist')).toEqual([
+    'POST seller-orders/[^/]+/active-removal/request',
+    'POST seller-orders/[^/]+/messages',
+    'POST seller-orders/[^/]+/recover-unassigned',
+    'POST dispatch-change-requests/[^/]+/cancel',
   ]);
 });
 
@@ -1832,6 +1955,85 @@ test('sends strict v1 time-constraint command payloads without using legacy enve
     },
     outcome: 'resolved',
   });
+});
+
+test('accepts an active-route time constraint that is pending driver acknowledgement', async ({ page }) => {
+  const commandBodies = [];
+  const dispatchItems = g003DispatchRows().map((row) => row.sellerOrderKey === '2018330248'
+    ? {
+        ...row,
+        assignmentStatus: 'ASSIGNED',
+        driverId: 'driver-active-route',
+        operationStatus: 'IN_PROGRESS',
+        routeVersionId: 'route-version-active-route',
+        vehicleId: 'vehicle-active-route',
+      }
+    : row);
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(g003AdminSession),
+    'GET /api/dsv/v1/dispatches': v1Envelope({ items: dispatchItems, page: { hasMore: false } }),
+    'GET /api/dsv/v1/drivers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/vehicles?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({
+      items: [{ customerId: 'customer-g003', displayName: 'DSV-HEALTH', orderCount: 2, status: 'ACTIVE' }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/destinations?limit=100': v1Envelope({
+      items: [
+        { address: '서울특별시 강남구 테헤란로 152', destinationId: 'destination-g003-a', displayName: '같은 주소 배송처 A' },
+        { address: '서울특별시 강남구 테헤란로 152', destinationId: 'destination-g003-b', displayName: '같은 주소 배송처 B' },
+      ],
+      page: { hasMore: false },
+    }),
+    'POST /api/dsv/v1/seller-orders/22222222-2222-4222-8222-222222222222/time-constraint/confirm': ({ request }) => {
+      const body = JSON.parse(request.postData() ?? '{}');
+      commandBodies.push(body);
+      expect(body).toMatchObject({
+        deliveryStopId: '11111111-1111-4111-8111-111111111111',
+        expectedVersion: 'route-version-active-route',
+        timeWindowEnd: '11:00',
+        timeWindowStart: '10:30',
+      });
+      expect(body.commandId).toMatch(/^[0-9a-f-]{36}$/u);
+      return v1Envelope({
+        auditEventId: 'audit-active-route',
+        changeRequestId: 'change-request-active-route',
+        commandId: body.commandId,
+        deliveryStopId: body.deliveryStopId,
+        rawNote: '오전 11시 배송',
+        recalculation: {
+          reason: 'ACTIVE_ROUTE_PENDING_DRIVER_ACK',
+          retryable: false,
+          routePlanId: 'route-plan-active-route',
+          status: 'PENDING_DRIVER_ACK',
+        },
+        reviewStatus: 'CONFIRMED',
+        routeConstraintStatus: 'PENDING_RECALCULATION',
+        sellerOrderId: '22222222-2222-4222-8222-222222222222',
+        sellerOrderKey: '2018330248',
+        timeConstraint: {
+          auditEventId: 'audit-active-route',
+          confirmedAt: '2026-08-03T09:47:08.000Z',
+          status: 'CONFIRMED',
+          timeWindowEnd: '11:00',
+          timeWindowStart: '10:30',
+        },
+      }, 'active-route-command');
+    },
+  });
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  const targetRow = page.locator('.dispatch-order-table tbody tr').filter({ hasText: '2018330248' });
+  await targetRow.getByRole('button', { name: '같은 주소 배송처 A 작업' }).click();
+  await page.getByLabel('시간 제약 시작').fill('10:30');
+  await page.getByLabel('시간 제약 종료').fill('11:00');
+  await page.getByRole('button', { name: '확정', exact: true }).click();
+
+  await expect.poll(() => commandBodies.length).toBe(1);
+  await expect(page.getByText('응답 형식이 올바르지 않습니다.', { exact: false })).toHaveCount(0);
+  await expect(targetRow).toContainText('2018330248');
+  expect(api.unexpected).toEqual([]);
 });
 
 test('preserves strict v1 409 time-constraint errors', async ({ page }) => {
@@ -2006,9 +2208,11 @@ test('confirms and clears selected dispatch time constraints with exact IDs and 
 
   await page.goto('/dispatch');
   await page.getByRole('button', { name: '목록', exact: true }).click();
-  await page.getByText('2018330248', { exact: true }).click();
+  const targetRow = page.locator('.dispatch-order-table tbody tr').filter({ hasText: '2018330248' });
+  const rowAction = targetRow.getByRole('button', { name: '같은 주소 배송처 A 작업' });
+  await rowAction.click();
 
-  const instruction = page.getByLabel('특이사항');
+  const instruction = page.getByRole('menu');
   await expect(instruction).toContainText('오전 11시 배송');
   await expect(instruction).toContainText('미확인');
   const dispatchRows = page.locator('.dispatch-order-table tbody');
@@ -2018,7 +2222,7 @@ test('confirms and clears selected dispatch time constraints with exact IDs and 
   const startInput = page.getByLabel('시간 제약 시작');
   const endInput = page.getByLabel('시간 제약 종료');
   const confirmButton = page.getByRole('button', { name: '확정', exact: true });
-  const clearButton = page.getByLabel('특이사항').getByRole('button', { name: '해제', exact: true });
+  const clearButton = instruction.getByRole('button', { name: '해제', exact: true });
   await expect(startInput).toBeEnabled();
   await expect(endInput).toBeEnabled();
   await expect(confirmButton).toBeEnabled();
@@ -2034,9 +2238,13 @@ test('confirms and clears selected dispatch time constraints with exact IDs and 
   await endInput.fill('11:00');
   await confirmButton.click();
   await expect(dispatchRows.locator('tr').filter({ hasText: '2018330248' })).toContainText('확정');
-  await page.getByText('2018330248', { exact: true }).click();
-  await expect(clearButton).toBeEnabled();
-  await clearButton.click();
+  await expect(rowAction).toHaveAttribute('aria-expanded', 'false');
+  await rowAction.click();
+  const refreshedInstruction = page.getByRole('menu');
+  await expect(refreshedInstruction).toBeVisible();
+  const refreshedClearButton = refreshedInstruction.getByRole('button', { name: '해제', exact: true });
+  await expect(refreshedClearButton).toBeEnabled();
+  await refreshedClearButton.click();
   await expect(dispatchRows.locator('tr').filter({ hasText: '2018330248' })).not.toContainText('확정');
 
   expect(commandBodies.map((entry) => entry.action)).toEqual(['confirm', 'clear']);

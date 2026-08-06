@@ -178,15 +178,15 @@ function NetworkMaster({ data, onChange }: { data: ManagementData; onChange: (da
           </AdminTableFrame>
         </section>
         <section className="page-panel management-detail-panel customer-detail-panel" aria-label="고객사 상세">
-          {editor?.kind === 'customer' ? <CustomerForm customer={data.customers.find((item) => item.id === editor.id)} onCancel={() => setEditor(null)} onSave={async (saved) => {
+          {editor?.kind === 'customer' ? <CustomerForm customer={data.customers.find((item) => item.id === editor.id)} identityReadOnly={isRemote} onCancel={() => setEditor(null)} onSave={async (saved) => {
             const customers = editor.id ? data.customers.map((item) => item.id === editor.id ? saved : item) : [...data.customers, saved];
             await onChange({ ...data, customers }); setSelectedCustomerId(saved.id); setSelectedDestinationId(data.destinations.find((item) => item.customerId === saved.id)?.id ?? ''); setEditor(null);
           }} /> : <>
             <AdminSectionHeader
               title="고객사 상세"
-              side={customer ? <span className="management-heading-side"><span className="section-meta">{customerOrderCount}건 Order</span><ManagementDetailAction name="고객사" disabled={isRemote} onEdit={() => setEditor({ kind: 'customer', id: customer.id })} /><ManagementSelectionClear onClick={() => selectCustomer(customer.id)} /></span> : undefined}
+              side={customer ? <span className="management-heading-side"><span className="section-meta">{customerOrderCount}건 Order</span><ManagementDetailAction name="고객사" onEdit={() => setEditor({ kind: 'customer', id: customer.id })} /><ManagementSelectionClear onClick={() => selectCustomer(customer.id)} /></span> : undefined}
             />
-            {customer ? <><div className="master-detail-grid"><dl><dt>고객사</dt><dd>{customer.name}</dd><dt>고객 코드</dt><dd>{customer.billingCode || unavailable(isRemote)}</dd></dl><div><strong>배송지</strong><p>{destinations.length}곳 등록</p></div></div><CustomerInvitationEmailPanel customerName={customer.name} /></> : <EmptyState label="고객사를 선택하면 상세 정보를 확인할 수 있습니다." />}
+            {customer ? <><div className="master-detail-grid"><dl><dt>고객사</dt><dd>{customer.name}</dd><dt>고객 코드</dt><dd>{customer.billingCode || unavailable(isRemote)}</dd><dt>이메일 알림</dt><dd>{customer.notificationEmailEnabled ? '사용' : '사용 안 함'}</dd><dt>대표 수신자</dt><dd>{customer.notificationEmailRecipient || unavailable(isRemote)}</dd></dl><div><strong>배송지</strong><p>{destinations.length}곳 등록</p></div></div><CustomerInvitationEmailPanel customerName={customer.name} /></> : <EmptyState label="고객사를 선택하면 상세 정보를 확인할 수 있습니다." />}
           </>}
         </section>
       </div>
@@ -311,19 +311,27 @@ function ConditionMaster({ data, onChange }: { data: ManagementData; onChange: (
   </div>;
 }
 
-function CustomerForm({ customer, onSave, onCancel }: { customer?: ManagementData['customers'][number]; onSave: (customer: ManagementData['customers'][number]) => void | Promise<void>; onCancel: () => void }): ReactElement {
+function CustomerForm({ customer, identityReadOnly = false, onSave, onCancel }: { customer?: ManagementData['customers'][number]; identityReadOnly?: boolean; onSave: (customer: ManagementData['customers'][number]) => void | Promise<void>; onCancel: () => void }): ReactElement {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const notificationEmailEnabled = form.get('notificationEmailEnabled') === 'on';
+    const notificationEmailRecipient = text(form, 'notificationEmailRecipient').toLowerCase();
+    if (notificationEmailEnabled && (notificationEmailRecipient === '' || !validEmailInput(notificationEmailRecipient))) {
+      window.alert('이메일 알림을 사용하려면 올바른 대표 수신자 이메일을 입력하세요.');
+      return;
+    }
     try {
       await onSave({
         id: customer?.id ?? managementId('customer'),
         name: text(form, 'name'),
         billingCode: text(form, 'billingCode'),
+        notificationEmailEnabled,
+        notificationEmailRecipient,
       });
     } catch {}
   };
-  return <form className="management-editor" aria-label="고객사 편집" onSubmit={submit}><EditorTitle title={customer ? '고객사 수정' : '고객사 등록'} /><div className="management-form-grid"><label>고객사명<input name="name" required defaultValue={customer?.name} /></label><label>고객 코드<input name="billingCode" required defaultValue={customer?.billingCode} /></label></div><FormActions onCancel={onCancel} /></form>;
+  return <form className="management-editor" aria-label="고객사 편집" onSubmit={submit}><EditorTitle title={customer ? '고객사 수정' : '고객사 등록'} /><div className="management-form-grid"><label>고객사명<input name="name" required readOnly={identityReadOnly} defaultValue={customer?.name} /></label><label>고객 코드<input name="billingCode" required readOnly={identityReadOnly} defaultValue={customer?.billingCode} /></label><label className="management-checkbox-field wide"><span><input name="notificationEmailEnabled" type="checkbox" defaultChecked={customer?.notificationEmailEnabled ?? false} /> 이메일 알림 사용</span></label><label className="wide">대표 수신자 이메일<input name="notificationEmailRecipient" type="email" maxLength={320} defaultValue={customer?.notificationEmailRecipient ?? ''} placeholder="customer@example.com" /></label></div><FormActions onCancel={onCancel} /></form>;
 }
 
 function DestinationForm({ customerId, destination, destinations, address, similar, onAddressChange, onSave, onCancel }: {
@@ -386,6 +394,7 @@ function FormActions({ onCancel }: { onCancel: () => void }): ReactElement { ret
 function EmptyState({ label }: { label: string }): ReactElement { return <ManagementEmptyState>{label}</ManagementEmptyState>; }
 function unavailable(remote: boolean): string { return remote ? '미제공' : '-'; }
 function text(form: FormData, key: string): string { return String(form.get(key) ?? '').trim(); }
+function validEmailInput(value: string): boolean { return value === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value); }
 function nullableNumber(form: FormData, key: string): number | null {
   const value = String(form.get(key) ?? '').trim();
   if (value === '') return null;

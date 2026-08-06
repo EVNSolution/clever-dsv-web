@@ -432,7 +432,7 @@ function RemoteCustomerDeliveryDetail({ delivery }: { delivery: CustomerDestinat
       <span className="customer-destination-orders" aria-label={`${delivery.destinationDisplayName} 주문 목록`}>
         {delivery.orders.map((order) => (
           <span key={order.sellerOrderId} className="customer-destination-order">
-            <span><strong>{order.sellerOrderKey}</strong><small>{order.deliveryStatus}</small></span>
+            <span><strong>{order.sellerOrderKey}</strong><small>{order.latestCustomerMessage?.body ?? order.deliveryStatus}</small></span>
             <b>{order.shippedBoxes}박스</b>
           </span>
         ))}

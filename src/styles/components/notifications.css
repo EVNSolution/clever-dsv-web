@@ -29,9 +29,10 @@
 .notification-item em { display:inline-flex; margin-top:6px; min-height:20px; align-items:center; border-radius:var(--radius-pill); padding:0 7px; background:var(--color-risk-soft); color:var(--color-risk); font-size:10px; font-style:normal; font-weight:900; }
 .notification-item.read em { background:var(--color-complete-soft); color:var(--color-complete); }
 .notification-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 6px; margin-top: 2px; }
-.notification-action { min-height: 28px; border: 0; border-radius: var(--radius-pill); padding: 0 10px; background: #f2f2f7; color: var(--color-ink); cursor: pointer; font-size: 11px; font-weight: 1000; }
+.notification-action { min-height: 28px; border: 0; border-radius: var(--radius-pill); padding: 0 10px; background: #f2f2f7; color: var(--color-ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 11px; font-weight: 1000; }
 .notification-action.primary { background: var(--color-black); color: var(--color-white); }
 .notification-action:disabled { cursor:not-allowed; opacity:.45; }
+.notification-action svg { width: 13px; height: 13px; }
 .notification-action.close { width: 28px; padding: 0; background: #f2f2f7; color: var(--color-ink); }
 .notification-action.close svg { width:14px; height:14px; }
 .notification-empty { padding: 18px 10px; color: var(--color-muted); text-align: center; font-size: 12px; font-weight: 900; }
