@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, X } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { loadControlSummary, loadVehicleTemperatureHistory } from '../services/control';
 import type { ControlSummary, VehicleTemperatureHistory, VehicleTemperatureSample } from '../services/control';
@@ -318,6 +318,21 @@ function ControlPanels({
 
   return (
     <aside className={`side control-side${mobilePanel ? ' mobile-panel-active' : ''}`} aria-label="관제 운영 패널">
+      <label className="control-date-picker">
+        <span className="control-date-picker-label"><CalendarDays aria-hidden="true" />관제 기준일</span>
+        <strong>{formatControlServiceDate(selectedServiceDate ?? summary?.serviceDate ?? todayInSeoul())}</strong>
+        <span className="control-date-picker-action">날짜 변경</span>
+        <input
+          aria-label="관제 기준일"
+          disabled={onServiceDateChange === undefined}
+          max={todayInSeoul()}
+          onChange={(event) => {
+            if (event.currentTarget.value !== '') onServiceDateChange?.(event.currentTarget.value);
+          }}
+          type="date"
+          value={selectedServiceDate ?? summary?.serviceDate ?? todayInSeoul()}
+        />
+      </label>
       <div className={`panel-view ${selectedVehicleId === undefined ? 'vehicle-idle' : 'vehicle-focused'}${mobilePanel ? ' mobile-panel-open' : ''}`}>
         <section className={`card panel expand-card mobile-panel-${mobilePanel === 'vehicles' ? 'expanded' : 'collapsed'}`} id="vehicleCard" aria-label="차량 리스트">
           <div className="tab-line section-heading">
@@ -331,17 +346,6 @@ function ControlPanels({
           {error ? <div className="panel-state error" role="alert">{error}</div> : null}
           {summary && !loading && !error ? (
             <div className="control-summary-strip" role="status" aria-label="지원되는 관제 요약">
-              <label className="control-service-date">기준일
-                <input
-                  aria-label="관제 기준일"
-                  max={todayInSeoul()}
-                  onChange={(event) => {
-                    if (event.currentTarget.value !== '') onServiceDateChange?.(event.currentTarget.value);
-                  }}
-                  type="date"
-                  value={selectedServiceDate ?? summary.serviceDate}
-                />
-              </label>
               <span>주문 수 <b>{summary.totalDispatchCount}</b></span>
               <span>미배정 <b>{summary.unassignedCount}</b></span>
             </div>
@@ -515,6 +519,11 @@ function todayInSeoul(): string {
     timeZone: 'Asia/Seoul',
     year: 'numeric',
   }).format(new Date());
+}
+
+function formatControlServiceDate(value: string): string {
+  const [year, month, day] = value.split('-');
+  return year && month && day ? `${year}. ${month}. ${day}.` : value;
 }
 
 function VehicleTemperatureDialog({

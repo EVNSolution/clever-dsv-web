@@ -3,7 +3,7 @@
   position: absolute; right: 22px; top: 20px; bottom: auto; z-index: 4;
   width: min(370px, calc(100vw - 44px));
   height: clamp(300px, calc(100dvh - 44px - var(--control-overlay-clearance)), 820px);
-  min-height: 0; overflow: visible; padding: 0 0 0 4px;
+  min-height: 0; display:flex; flex-direction:column; gap:10px; overflow: visible; padding: 0 0 0 4px;
 }
 .side .card { border-color:var(--color-border); box-shadow:none; overflow:visible; min-height:0; }
 .panel { padding: 16px; min-height: 0; }
@@ -16,20 +16,31 @@
 }
 .side .section-heading .chip { min-height:24px; }
 .panel-view {
-  height: 100%; display: grid;
+  flex:1 1 auto; height:auto; display: grid;
   grid-template-rows: minmax(276px, 36%) minmax(0, 1fr);
   gap: 14px; min-height: 0; overflow: visible;
 }
+.control-date-picker {
+  position:relative; flex:0 0 52px; min-width:0; display:grid; grid-template-columns:minmax(0, 1fr) auto auto; gap:10px; align-items:center;
+  padding:0 14px; border:1px solid var(--color-border); border-radius:16px; background:rgba(255,255,255,.97); color:var(--color-ink);
+  box-shadow:0 10px 30px rgba(0,0,0,.1); cursor:pointer; backdrop-filter:blur(18px);
+}
+.control-date-picker:hover { border-color:var(--color-black); }
+.control-date-picker:focus-within { outline:2px solid var(--color-black); outline-offset:2px; }
+.control-date-picker-label { min-width:0; display:flex; align-items:center; gap:7px; font-size:12px; font-weight:900; white-space:nowrap; }
+.control-date-picker-label svg { width:16px; height:16px; stroke-width:2.2; }
+.control-date-picker strong { font-size:14px; font-weight:950; letter-spacing:-.025em; white-space:nowrap; }
+.control-date-picker-action { min-height:26px; display:inline-flex; align-items:center; border-radius:999px; padding:0 9px; background:var(--color-black); color:var(--color-white); font-size:10px; font-weight:900; white-space:nowrap; }
+.control-date-picker input { position:absolute; inset:0; width:100%; height:100%; border:0; opacity:0; cursor:pointer; }
+.control-date-picker input:disabled { cursor:default; }
 .expand-card { position: relative; display: flex; flex-direction: column; min-height: 0; }
 .card-tools { display: inline-flex; align-items: center; gap: 8px; }
 .mobile-panel-toggle { display:none; }
 .panel-state { padding:14px; border:1px dashed var(--color-border); border-radius:14px; color:var(--color-muted); font-size:12px; font-weight:800; text-align:center; }
 .panel-state.error { border-color:rgba(217,45,32,.25); background:var(--color-risk-soft); color:var(--color-risk); }
-.control-summary-strip { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:6px; margin-top:10px; }
+.control-summary-strip { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:6px; margin-top:10px; }
 .control-summary-strip span { min-width:0; padding:7px 8px; border-radius:10px; background:#f6f6f8; color:var(--color-muted); font-size:10px; font-weight:750; white-space:nowrap; }
 .control-summary-strip b { display:block; margin-top:2px; overflow:hidden; color:var(--color-ink); font-size:12px; font-weight:900; text-overflow:ellipsis; }
-.control-service-date { min-width:0; padding:7px 8px; border-radius:10px; background:#f6f6f8; color:var(--color-muted); font-size:10px; font-weight:750; }
-.control-service-date input { display:block; width:100%; min-width:0; height:20px; margin-top:1px; padding:0; border:0; background:transparent; color:var(--color-ink); font:inherit; font-size:12px; font-weight:900; }
 .control-vehicle-list, .control-destination-list, .control-customer-order-list { flex:1 1 auto; min-height:0; margin-top:8px; overflow:auto; overscroll-behavior:contain; }
 .control-vehicle-list { display:grid; align-content:start; }
 .control-vehicle-row {
