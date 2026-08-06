@@ -482,7 +482,7 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory): MapCanvasRou
   });
   return sessions.flatMap((session, sessionOrder) => session.segments.map((segment, segmentOrder) => ({
     casingColor: '#ffffff',
-    color: '#72bff3',
+    color: '#d92d20',
     coordinates: segment.samples.map((sample) => [sample.longitude, sample.latitude] as [number, number]),
     dashed: true,
     endMarker: segmentOrder < session.segments.length - 1 ? 'interrupted' as const : 'end' as const,

@@ -52,9 +52,9 @@ export function updateOperationalRoutes(
       source: sourceId,
       filter: ['==', '$type', 'Point'],
       paint: {
-        'circle-color': ['case', ['==', ['get', 'markerKind'], 'interrupted'], '#ffffff', '#72bff3'],
+        'circle-color': ['case', ['==', ['get', 'markerKind'], 'interrupted'], '#ffffff', '#d92d20'],
         'circle-radius': ['case', ['==', ['get', 'markerKind'], 'interrupted'], 3, 3.5],
-        'circle-stroke-color': '#238bcf',
+        'circle-stroke-color': '#d92d20',
         'circle-stroke-width': 1.5,
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
