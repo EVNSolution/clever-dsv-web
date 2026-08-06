@@ -386,16 +386,18 @@ function ControlPanels({
             <button className="mobile-panel-toggle" type="button" aria-expanded={mobilePanel === 'vehicles'} aria-label={`차량 리스트 ${mobilePanel === 'vehicles' ? '닫기' : '펼치기'}`} onClick={() => setMobilePanel((current) => current === 'vehicles' ? undefined : 'vehicles')}>
               <span>차량 리스트</span><span className="chip mini">{vehicles.length}대</span><span className="mobile-panel-action">{mobilePanel === 'vehicles' ? '닫기' : '펼치기'}</span>
             </button>
-            <span className="card-tools desktop-panel-tools"><span className="chip mini">{vehicles.length}대</span></span>
+            <span className="card-tools desktop-panel-tools">
+              {summary && !loading && !error ? (
+                <span className="control-vehicle-heading-summary" role="status" aria-label="지원되는 관제 요약">
+                  <span>주문 수 <b>{summary.totalDispatchCount}</b></span>
+                  <span>미배정 <b>{summary.unassignedCount}</b></span>
+                </span>
+              ) : null}
+              <span className="chip mini">{vehicles.length}대</span>
+            </span>
           </div>
           {loading ? <div className="panel-state" role="status">차량을 불러오는 중입니다.</div> : null}
           {error ? <div className="panel-state error" role="alert">{error}</div> : null}
-          {summary && !loading && !error ? (
-            <div className="control-summary-strip" role="status" aria-label="지원되는 관제 요약">
-              <span>주문 수 <b>{summary.totalDispatchCount}</b></span>
-              <span>미배정 <b>{summary.unassignedCount}</b></span>
-            </div>
-          ) : null}
           {!loading && !error ? (
             <div className="control-vehicle-list fleet overlay-scroll" id="fleetList">
               {vehicles.map((vehicle) => {

@@ -73,9 +73,9 @@
 .mobile-panel-toggle { display:none; }
 .panel-state { padding:14px; border:1px dashed var(--color-border); border-radius:14px; color:var(--color-muted); font-size:12px; font-weight:800; text-align:center; }
 .panel-state.error { border-color:rgba(217,45,32,.25); background:var(--color-risk-soft); color:var(--color-risk); }
-.control-summary-strip { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:6px; margin-top:10px; }
-.control-summary-strip span { min-width:0; padding:7px 8px; border-radius:10px; background:#f6f6f8; color:var(--color-muted); font-size:10px; font-weight:750; white-space:nowrap; }
-.control-summary-strip b { display:block; margin-top:2px; overflow:hidden; color:var(--color-ink); font-size:12px; font-weight:900; text-overflow:ellipsis; }
+.control-vehicle-heading-summary { display:inline-flex; align-items:center; gap:10px; color:var(--color-muted); font-size:10px; font-weight:750; white-space:nowrap; }
+.control-vehicle-heading-summary > span { display:inline-flex; align-items:baseline; gap:4px; }
+.control-vehicle-heading-summary b { color:var(--color-ink); font-size:12px; font-weight:900; }
 .control-vehicle-list, .control-destination-list, .control-customer-order-list { flex:1 1 auto; min-height:0; margin-top:8px; overflow:auto; overscroll-behavior:contain; }
 .control-vehicle-list { display:grid; align-content:start; }
 .control-vehicle-row {
