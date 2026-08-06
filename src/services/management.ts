@@ -1,4 +1,4 @@
-import { ApiError, requestLegacyJson, requestV1ReadJson } from '../api/client';
+import { ApiError, requestLegacyJson, requestV1CustomerCommandJson, requestV1ReadJson } from '../api/client';
 import { apiConfig } from '../api/config';
 import type { ManagementCondition, ManagementData, ManagementDriver, ManagementVehicle } from '../demo/management';
 import { loadManagementData, saveManagementData } from '../demo/management';
@@ -59,6 +59,8 @@ type V1CustomerListItem = {
   customerId: string;
   displayName: string;
   externalCustomerCode?: string;
+  notificationEmailEnabled?: boolean;
+  notificationEmailRecipient?: string;
   orderCount: number;
   status?: string;
 };
@@ -210,6 +212,23 @@ function resourceOperation(previous: ManagementData, next: ManagementData): (() 
   const removedAssignment = previous.assignments.find((assignment) => !next.assignments.some((item) => item.id === assignment.id));
   if (removedAssignment) return async () => { await requestLegacyJson(`vehicles/${removedAssignment.vehicleId}/drivers/${removedAssignment.id}`, { method: 'DELETE' }); return next; };
 
+  const changedCustomer = next.customers.find((customer) => {
+    const current = previous.customers.find((item) => item.id === customer.id);
+    return current !== undefined
+      && (current.notificationEmailEnabled !== customer.notificationEmailEnabled
+        || current.notificationEmailRecipient !== customer.notificationEmailRecipient);
+  });
+  if (changedCustomer) return async () => {
+    await requestV1CustomerCommandJson(`customers/${changedCustomer.id}/notification-settings`, {
+      json: {
+        enabled: changedCustomer.notificationEmailEnabled ?? false,
+        recipient: changedCustomer.notificationEmailRecipient?.trim() || null,
+      },
+      method: 'PATCH',
+    });
+    return next;
+  };
+
   const addedCondition = next.conditions.find((condition) => !previous.conditions.some((item) => item.id === condition.id));
   if (addedCondition) return async () => {
     const { condition } = await requestLegacyJson<{ condition: ManagementCondition }>('conditions', { json: conditionWritePayload(addedCondition), method: 'POST' });
@@ -318,6 +337,8 @@ function customerViewModel(customer: V1CustomerListItem): ManagementData['custom
     billingCode: customer.externalCustomerCode ?? '',
     id: customer.customerId,
     name: customer.displayName,
+    notificationEmailEnabled: customer.notificationEmailEnabled ?? false,
+    notificationEmailRecipient: customer.notificationEmailRecipient ?? '',
     orderCount: customer.orderCount,
   };
 }
@@ -427,10 +448,12 @@ function isV1VehicleDriverAssignment(value: unknown): value is V1VehicleDriverAs
 }
 
 function isV1CustomerListItem(value: unknown): value is V1CustomerListItem {
-  return hasOnlyKeys(value, ['customerId', 'displayName', 'externalCustomerCode', 'orderCount', 'status'])
+  return hasOnlyKeys(value, ['customerId', 'displayName', 'externalCustomerCode', 'notificationEmailEnabled', 'notificationEmailRecipient', 'orderCount', 'status'])
     && isNonEmptyString(value.customerId)
     && isNonEmptyString(value.displayName)
     && isOptionalString(value.externalCustomerCode)
+    && (value.notificationEmailEnabled === undefined || typeof value.notificationEmailEnabled === 'boolean')
+    && isOptionalString(value.notificationEmailRecipient)
     && typeof value.orderCount === 'number'
     && Number.isInteger(value.orderCount)
     && value.orderCount >= 0

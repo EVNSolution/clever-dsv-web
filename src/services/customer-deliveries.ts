@@ -5,8 +5,18 @@ export type CustomerDeliveryEvent = {
   type: string;
 };
 
+export type CustomerDeliveryMessageSummary = {
+  audience: 'CUSTOMER';
+  authorId?: string;
+  authorType: string;
+  body: string;
+  createdAt: string;
+  messageId: string;
+};
+
 export type CustomerDeliveryItem = {
   actualCompletedAt?: string;
+  latestCustomerMessage?: CustomerDeliveryMessageSummary;
   deliveryStatus: string;
   destinationAddress?: string;
   destinationDisplayName: string;
@@ -177,6 +187,7 @@ function customerDeliveryRouteFrom(value: unknown): CustomerDeliveryRoute {
 function customerDeliveryFrom(value: unknown): CustomerDeliveryItem {
   if (!hasOnlyKeys(value, [
     'deliveryStatus',
+    'latestCustomerMessage',
     'destinationAddress',
     'destinationDisplayName',
     'destinationId',
@@ -197,6 +208,7 @@ function customerDeliveryFrom(value: unknown): CustomerDeliveryItem {
   const events = requiredArray(value, 'eventSummary').map(customerDeliveryEventFrom);
   return {
     actualCompletedAt: events.find((event) => event.type === 'STOP_DELIVERED')?.occurredAt,
+    latestCustomerMessage: customerDeliveryMessageSummaryFrom(value.latestCustomerMessage),
     deliveryStatus: requiredString(value, 'deliveryStatus'),
     destinationAddress: optionalString(value, 'destinationAddress'),
     destinationDisplayName: requiredString(value, 'destinationDisplayName'),
@@ -214,6 +226,21 @@ function customerDeliveryFrom(value: unknown): CustomerDeliveryItem {
     vehicleId: optionalString(value, 'vehicleId'),
     vehicleLatitude: optionalNumber(value, 'vehicleLatitude'),
     vehicleLongitude: optionalNumber(value, 'vehicleLongitude'),
+  };
+}
+
+function customerDeliveryMessageSummaryFrom(value: unknown): CustomerDeliveryMessageSummary | undefined {
+  if (value === undefined) return undefined;
+  if (!hasOnlyKeys(value, ['audience', 'authorId', 'authorType', 'body', 'createdAt', 'messageId', 'readByDriverAt']) || value.audience !== 'CUSTOMER') {
+    throw new Error('고객 배송 메모 응답 형식이 올바르지 않습니다.');
+  }
+  return {
+    audience: 'CUSTOMER',
+    authorId: optionalString(value, 'authorId'),
+    authorType: requiredString(value, 'authorType'),
+    body: requiredString(value, 'body'),
+    createdAt: requiredString(value, 'createdAt'),
+    messageId: requiredString(value, 'messageId'),
   };
 }
 

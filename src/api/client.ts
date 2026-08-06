@@ -81,12 +81,12 @@ const v1ReadAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'GET', pattern: /^conditions$/u },
   { method: 'GET', pattern: /^customer\/deliveries$/u },
   { method: 'GET', pattern: /^customers\/deliveries$/u },
+  { method: 'GET', pattern: /^operational-notifications$/u },
 ];
 
 const assignmentCommandAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'POST', pattern: /^seller-order-assignments\/reassign$/u },
   { method: 'POST', pattern: /^seller-order-assignments\/unassign$/u },
-  { method: 'POST', pattern: /^seller-order-deletions$/u },
   { method: 'POST', pattern: /^seller-orders\/[^/]+\/assignment\/unassign$/u },
   { method: 'POST', pattern: /^seller-orders\/[^/]+\/assignment\/reassign$/u },
 ];
@@ -94,6 +94,17 @@ const assignmentCommandAllowlist: Array<{ method: string; pattern: RegExp }> = [
 const timeConstraintCommandAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'POST', pattern: /^seller-orders\/[^/]+\/time-constraint\/confirm$/u },
   { method: 'POST', pattern: /^seller-orders\/[^/]+\/time-constraint\/clear$/u },
+];
+
+const dispatchOperationCommandAllowlist: Array<{ method: string; pattern: RegExp }> = [
+  { method: 'POST', pattern: /^seller-orders\/[^/]+\/active-removal\/request$/u },
+  { method: 'POST', pattern: /^seller-orders\/[^/]+\/messages$/u },
+  { method: 'POST', pattern: /^seller-orders\/[^/]+\/recover-unassigned$/u },
+  { method: 'POST', pattern: /^dispatch-change-requests\/[^/]+\/cancel$/u },
+];
+
+const customerCommandAllowlist: Array<{ method: string; pattern: RegExp }> = [
+  { method: 'PATCH', pattern: /^customers\/[^/]+\/notification-settings$/u },
 ];
 
 export async function requestV1ReadJson<ResponseBody>(path: string, init: JsonRequestInit = {}): Promise<ResponseBody> {
@@ -117,6 +128,22 @@ export async function requestV1AssignmentCommandJson<ResponseBody>(path: string,
 export async function requestV1TimeConstraintCommandJson<ResponseBody>(path: string, init: JsonRequestInit = {}): Promise<ResponseBody> {
   const target = requestTarget(path, init.method);
   assertAllowed('v1 time constraint command', target, timeConstraintCommandAllowlist);
+  const { body, response } = await fetchV1CommandResponse(path, init, target, readV1ResponseBody);
+  if (!response.ok) throw strictV1Error(response.status, body);
+  return strictV1Data<ResponseBody>(body);
+}
+
+export async function requestV1DispatchOperationCommandJson<ResponseBody>(path: string, init: JsonRequestInit = {}): Promise<ResponseBody> {
+  const target = requestTarget(path, init.method);
+  assertAllowed('v1 dispatch operation command', target, dispatchOperationCommandAllowlist);
+  const { body, response } = await fetchV1CommandResponse(path, init, target, readV1ResponseBody);
+  if (!response.ok) throw strictV1Error(response.status, body);
+  return strictV1Data<ResponseBody>(body);
+}
+
+export async function requestV1CustomerCommandJson<ResponseBody>(path: string, init: JsonRequestInit = {}): Promise<ResponseBody> {
+  const target = requestTarget(path, init.method);
+  assertAllowed('v1 customer command', target, customerCommandAllowlist);
   const { body, response } = await fetchV1CommandResponse(path, init, target, readV1ResponseBody);
   if (!response.ok) throw strictV1Error(response.status, body);
   return strictV1Data<ResponseBody>(body);

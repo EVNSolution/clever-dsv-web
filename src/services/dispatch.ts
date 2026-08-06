@@ -1,5 +1,6 @@
 import {
   requestV1AssignmentCommandJson,
+  requestV1DispatchOperationCommandJson,
   requestV1ReadJson,
   requestV1TimeConstraintCommandJson,
 } from '../api/client';
@@ -7,6 +8,27 @@ import {
 export type DispatchAssignmentStatus = 'ASSIGNED' | 'UNASSIGNED';
 export type DispatchEtaStatus = 'FAILED' | 'NOT_REQUIRED' | 'PENDING' | 'READY' | 'STALE';
 export type DispatchEventType = 'ROUTE_COMPLETED' | 'ROUTE_STARTED' | 'STOP_ARRIVED' | 'STOP_DELIVERED' | 'STOP_FAILED';
+export type DispatchOperationStatus = 'CANCELLED' | 'COMPLETED' | 'IN_PROGRESS' | 'READY' | 'UNASSIGNED';
+export type DispatchChangeRequest = {
+  changeRequestId: string;
+  commandId: string;
+  requestedAt: string;
+  routePlanId: string;
+  routeVersionId: string;
+  status: 'PENDING_ACK';
+  timeWindowEnd?: string;
+  timeWindowStart?: string;
+  type: string;
+};
+export type DispatchOrderMessageSummary = {
+  audience: 'CUSTOMER' | 'DRIVER';
+  authorId?: string;
+  authorType: string;
+  body: string;
+  createdAt: string;
+  messageId: string;
+  readByDriverAt?: string;
+};
 export type DispatchEventSummary = {
   occurredAt: string;
   type: DispatchEventType;
@@ -24,14 +46,15 @@ export type DispatchTimeConstraint = {
 };
 
 export type DispatchTimeConstraintRecalculation = {
-  reason: 'ASSIGNED_ROUTE_TIME_CONSTRAINT_CLEARED' | 'ASSIGNED_ROUTE_TIME_CONSTRAINT_CONFIRMED' | 'SCHEDULER_UNAVAILABLE' | 'TIME_CONSTRAINT_CLEARED' | 'UNASSIGNED_ORDER';
+  reason: 'ACTIVE_ROUTE_PENDING_DRIVER_ACK' | 'ASSIGNED_ROUTE_TIME_CONSTRAINT_CLEARED' | 'ASSIGNED_ROUTE_TIME_CONSTRAINT_CONFIRMED' | 'SCHEDULER_UNAVAILABLE' | 'TIME_CONSTRAINT_CLEARED' | 'UNASSIGNED_ORDER';
   retryable: boolean;
   routePlanId: string | null;
-  status: 'FAILED_TO_SCHEDULE' | 'NOT_REQUIRED' | 'SCHEDULED';
+  status: 'FAILED_TO_SCHEDULE' | 'NOT_REQUIRED' | 'PENDING_DRIVER_ACK' | 'SCHEDULED';
 };
 
 export type DispatchTimeConstraintCommandResult = {
   auditEventId: string;
+  changeRequestId?: string;
   clearedAt?: string;
   clearedBy?: string;
   commandId: string;
@@ -48,18 +71,22 @@ export type DispatchTimeConstraintCommandResult = {
 export type DispatchListItem = {
   actualCompletedAt: string | null;
   assignmentStatus: DispatchAssignmentStatus;
+  changeRequest: DispatchChangeRequest | null;
   conditionCode: string | null;
   customerId: string;
   destinationAddress: string | null;
   destinationDisplayName: string | null;
   destinationId: string;
   deliveryStopId: string | null;
+  latestCustomerMessage: DispatchOrderMessageSummary | null;
+  latestDriverMessage: DispatchOrderMessageSummary | null;
   driverId: string | null;
   estimatedArrivalAt: string | null;
   etaStatus: DispatchEtaStatus;
   eventSummary: DispatchEventSummary[];
   latitude: number | null;
   longitude: number | null;
+  operationStatus: DispatchOperationStatus;
   rawNote: string | null;
   reviewStatus: DispatchSpecialInstructionReviewStatus | null;
   routePlanId: string | null;
@@ -97,18 +124,22 @@ export type DispatchSearch = {
 type RawDispatch = {
   actualCompletedAt?: string;
   assignmentStatus: DispatchAssignmentStatus;
+  changeRequest?: DispatchChangeRequest;
   conditionCode?: string;
   customerId: string;
   destinationAddress?: string;
   destinationDisplayName?: string;
   destinationId: string;
   deliveryStopId?: string;
+  latestCustomerMessage?: DispatchOrderMessageSummary;
+  latestDriverMessage?: DispatchOrderMessageSummary;
   driverId?: string;
   estimatedArrivalAt?: string;
   etaStatus: DispatchEtaStatus;
   eventSummary?: DispatchEventSummary[];
   latitude?: number;
   longitude?: number;
+  operationStatus?: DispatchOperationStatus;
   rawNote?: string;
   reviewStatus?: DispatchSpecialInstructionReviewStatus;
   routePlanId?: string;
@@ -134,14 +165,7 @@ export type DispatchBatchAssignmentResult = {
   routePlanId: string | null;
 };
 
-export type DispatchBatchDeleteResult = {
-  commandId: string;
-  deletedSellerOrderIds: string[];
-  receiptId: string;
-};
-
 export const MAX_DISPATCH_ASSIGNMENT_COUNT = 100;
-export const MAX_DISPATCH_DELETE_COUNT = 100;
 
 export async function loadDispatchList(
   serviceDate: string,
@@ -258,25 +282,6 @@ export async function unassignDispatchOrders(orders: DispatchListItem[]): Promis
   return batchAssignmentResult(data);
 }
 
-export async function deleteDispatchOrders(orders: DispatchListItem[], reason?: string): Promise<DispatchBatchDeleteResult> {
-  if (orders.length === 0) throw new Error('삭제할 배송을 선택하세요.');
-  if (orders.length > MAX_DISPATCH_DELETE_COUNT) {
-    throw new Error(`배송 삭제는 한 번에 최대 ${MAX_DISPATCH_DELETE_COUNT}건까지 가능합니다.`);
-  }
-  const data = await requestV1AssignmentCommandJson<unknown>('seller-order-deletions', {
-    json: {
-      commandId: crypto.randomUUID(),
-      items: orders.map((order) => ({
-        expectedVersion: order.routeVersionId ?? 'UNASSIGNED',
-        sellerOrderId: order.sellerOrderId,
-      })),
-      ...(reason === undefined ? {} : { reason }),
-    },
-    method: 'POST',
-  });
-  return batchDeleteResult(data);
-}
-
 export async function confirmDispatchTimeConstraint(
   order: DispatchListItem,
   input: { timeWindowEnd: string; timeWindowStart: string },
@@ -316,26 +321,77 @@ export async function clearDispatchTimeConstraint(order: DispatchListItem, reaso
   return timeConstraintCommandResult(data);
 }
 
+export async function updateDispatchDriverMemo(order: DispatchListItem, memo: string): Promise<void> {
+  await requestV1DispatchOperationCommandJson<unknown>(
+    `seller-orders/${encodeURIComponent(order.sellerOrderId)}/messages`,
+    {
+      json: {
+        audience: 'DRIVER',
+        body: memo,
+        commandId: crypto.randomUUID(),
+      },
+      method: 'POST',
+    },
+  );
+}
+
+export async function updateDispatchCustomerMemo(order: DispatchListItem, memo: string): Promise<void> {
+  await requestV1DispatchOperationCommandJson<unknown>(
+    `seller-orders/${encodeURIComponent(order.sellerOrderId)}/messages`,
+    {
+      json: {
+        audience: 'CUSTOMER',
+        body: memo,
+        commandId: crypto.randomUUID(),
+      },
+      method: 'POST',
+    },
+  );
+}
+
+export async function removeDispatchActiveRoute(order: DispatchListItem): Promise<void> {
+  await requestV1DispatchOperationCommandJson<unknown>(
+    `seller-orders/${encodeURIComponent(order.sellerOrderId)}/active-removal/request`,
+    {
+      json: {
+        commandId: crypto.randomUUID(),
+        deliveryStopId: order.deliveryStopId,
+        expectedVersion: order.routeVersionId ?? 'UNASSIGNED',
+      },
+      method: 'POST',
+    },
+  );
+}
+
+export async function cancelDispatchChangeRequest(order: DispatchListItem): Promise<void> {
+  if (order.changeRequest === null) return;
+  await requestV1DispatchOperationCommandJson<unknown>(
+    `dispatch-change-requests/${encodeURIComponent(order.changeRequest.changeRequestId)}/cancel`,
+    {
+      json: {
+        commandId: crypto.randomUUID(),
+        expectedVersion: order.changeRequest.routeVersionId,
+      },
+      method: 'POST',
+    },
+  );
+}
+
+export async function recoverCancelledDispatchOrder(sellerOrderId: string): Promise<void> {
+  await requestV1DispatchOperationCommandJson<unknown>(
+    `seller-orders/${encodeURIComponent(sellerOrderId)}/recover-unassigned`,
+    {
+      json: { commandId: crypto.randomUUID() },
+      method: 'POST',
+    },
+  );
+}
+
 function dispatchResponse(data: unknown): { items: unknown[]; page?: DispatchListPage } {
   if (!hasOnlyKeys(data, ['items', 'page']) || !Array.isArray(data.items)) throw new Error('배차 목록 응답 형식이 올바르지 않습니다.');
   return {
     items: data.items,
     page: dispatchPage(data.page),
-  };
-}
-
-function batchDeleteResult(value: unknown): DispatchBatchDeleteResult {
-  if (!hasOnlyKeys(value, ['commandId', 'deletedSellerOrderIds', 'receiptId'])
-    || typeof value.commandId !== 'string'
-    || !Array.isArray(value.deletedSellerOrderIds)
-    || value.deletedSellerOrderIds.some((sellerOrderId) => typeof sellerOrderId !== 'string')
-    || typeof value.receiptId !== 'string') {
-    throw new Error('배송 삭제 응답 형식이 올바르지 않습니다.');
-  }
-  return {
-    commandId: value.commandId,
-    deletedSellerOrderIds: value.deletedSellerOrderIds as string[],
-    receiptId: value.receiptId,
   };
 }
 
@@ -355,18 +411,22 @@ function toDispatchListItem(raw: unknown): DispatchListItem {
   return {
     actualCompletedAt: dispatch.actualCompletedAt ?? null,
     assignmentStatus: dispatch.assignmentStatus,
+    changeRequest: dispatch.changeRequest ?? null,
     conditionCode: dispatch.conditionCode ?? null,
     customerId: dispatch.customerId,
     destinationAddress: dispatch.destinationAddress ?? null,
     destinationDisplayName: dispatch.destinationDisplayName ?? null,
     destinationId: dispatch.destinationId,
     deliveryStopId: dispatch.deliveryStopId ?? null,
+    latestCustomerMessage: dispatch.latestCustomerMessage ?? null,
+    latestDriverMessage: dispatch.latestDriverMessage ?? null,
     driverId: dispatch.driverId ?? null,
     estimatedArrivalAt: dispatch.estimatedArrivalAt ?? null,
     etaStatus: dispatch.etaStatus,
     eventSummary: dispatch.eventSummary ?? [],
     latitude: dispatch.latitude ?? null,
     longitude: dispatch.longitude ?? null,
+    operationStatus: dispatch.operationStatus ?? (dispatch.assignmentStatus === 'UNASSIGNED' ? 'UNASSIGNED' : 'READY'),
     rawNote: dispatch.rawNote ?? null,
     reviewStatus: dispatch.reviewStatus ?? null,
     routePlanId: dispatch.routePlanId ?? null,
@@ -384,6 +444,7 @@ function toDispatchListItem(raw: unknown): DispatchListItem {
 function rawDispatch(value: unknown): RawDispatch {
   if (!hasOnlyKeys(value, [
     'actualCompletedAt',
+    'changeRequest',
     'conditionCode',
     'sellerOrderId',
     'sellerOrderKey',
@@ -393,10 +454,13 @@ function rawDispatch(value: unknown): RawDispatch {
     'deliveryStopId',
     'destinationDisplayName',
     'destinationAddress',
+    'latestCustomerMessage',
+    'latestDriverMessage',
     'driverId',
     'vehicleId',
     'latitude',
     'longitude',
+    'operationStatus',
     'rawNote',
     'reviewStatus',
     'assignmentStatus',
@@ -415,11 +479,15 @@ function rawDispatch(value: unknown): RawDispatch {
     if (typeof value[field] !== 'string' || value[field].trim() === '') throw new Error(`배차 항목의 ${field} 필드가 올바르지 않습니다.`);
   }
   if (!['ASSIGNED', 'UNASSIGNED'].includes(value.assignmentStatus as string)) throw new Error('배차 항목의 assignmentStatus 필드가 올바르지 않습니다.');
+  if (value.operationStatus !== undefined && !isOperationStatus(value.operationStatus)) throw new Error('배차 항목의 operationStatus 필드가 올바르지 않습니다.');
   if (!['FAILED', 'NOT_REQUIRED', 'PENDING', 'READY', 'STALE'].includes(value.etaStatus as string)) throw new Error('배차 항목의 etaStatus 필드가 올바르지 않습니다.');
   if (value.eventSummary !== undefined) parseEventSummary(value.eventSummary);
   for (const field of ['actualCompletedAt', 'deliveryStopId', 'destinationDisplayName', 'destinationAddress', 'driverId', 'vehicleId', 'estimatedArrivalAt', 'routePlanId', 'rawNote', 'routeVersionId'] as const) {
     if (value[field] !== undefined && typeof value[field] !== 'string') throw new Error(`배차 항목의 ${field} 필드가 올바르지 않습니다.`);
   }
+  if (value.changeRequest !== undefined) parseChangeRequest(value.changeRequest);
+  if (value.latestCustomerMessage !== undefined) parseOrderMessageSummary(value.latestCustomerMessage, 'CUSTOMER');
+  if (value.latestDriverMessage !== undefined) parseOrderMessageSummary(value.latestDriverMessage, 'DRIVER');
   if (value.conditionCode !== undefined && (typeof value.conditionCode !== 'string' || value.conditionCode.trim() === '')) {
     throw new Error('배차 항목의 conditionCode 필드가 올바르지 않습니다.');
   }
@@ -441,6 +509,54 @@ function rawDispatch(value: unknown): RawDispatch {
   return value as RawDispatch;
 }
 
+function parseOrderMessageSummary(value: unknown, expectedAudience: DispatchOrderMessageSummary['audience']): DispatchOrderMessageSummary {
+  if (!hasOnlyKeys(value, ['audience', 'authorId', 'authorType', 'body', 'createdAt', 'messageId', 'readByDriverAt'])) {
+    throw new Error('배차 항목의 메모 필드가 올바르지 않습니다.');
+  }
+  if (value.audience !== expectedAudience) throw new Error('배차 항목의 메모 대상이 올바르지 않습니다.');
+  for (const field of ['authorType', 'body', 'createdAt', 'messageId'] as const) {
+    if (typeof value[field] !== 'string' || value[field].trim() === '') throw new Error(`배차 항목의 메모 ${field} 필드가 올바르지 않습니다.`);
+  }
+  for (const field of ['authorId', 'readByDriverAt'] as const) {
+    if (value[field] !== undefined && typeof value[field] !== 'string') throw new Error(`배차 항목의 메모 ${field} 필드가 올바르지 않습니다.`);
+  }
+  return value as DispatchOrderMessageSummary;
+}
+
+function isOperationStatus(value: unknown): value is DispatchOperationStatus {
+  return value === 'UNASSIGNED' || value === 'READY' || value === 'IN_PROGRESS' || value === 'CANCELLED' || value === 'COMPLETED';
+}
+
+function parseChangeRequest(value: unknown): DispatchChangeRequest {
+  if (!hasOnlyKeys(value, [
+    'changeRequestId',
+    'commandId',
+    'requestedAt',
+    'routePlanId',
+    'routeVersionId',
+    'status',
+    'timeWindowEnd',
+    'timeWindowStart',
+    'type',
+  ])) {
+    throw new Error('배차 항목의 changeRequest 필드가 올바르지 않습니다.');
+  }
+  for (const field of ['changeRequestId', 'commandId', 'requestedAt', 'routePlanId', 'routeVersionId', 'type'] as const) {
+    if (typeof value[field] !== 'string' || value[field].trim() === '') {
+      throw new Error(`배차 항목의 changeRequest.${field} 필드가 올바르지 않습니다.`);
+    }
+  }
+  if (value.status !== 'PENDING_ACK') {
+    throw new Error('배차 항목의 changeRequest.status 필드가 올바르지 않습니다.');
+  }
+  for (const field of ['timeWindowEnd', 'timeWindowStart'] as const) {
+    if (value[field] !== undefined && typeof value[field] !== 'string') {
+      throw new Error(`배차 항목의 changeRequest.${field} 필드가 올바르지 않습니다.`);
+    }
+  }
+  return value as DispatchChangeRequest;
+}
+
 function parseEventSummary(value: unknown): DispatchEventSummary[] {
   if (!Array.isArray(value)) throw new Error('배차 항목의 eventSummary 필드가 올바르지 않습니다.');
   return value.map((event) => {
@@ -457,6 +573,7 @@ function parseEventSummary(value: unknown): DispatchEventSummary[] {
 function timeConstraintCommandResult(value: unknown): DispatchTimeConstraintCommandResult {
   if (!hasOnlyKeys(value, [
     'auditEventId',
+    'changeRequestId',
     'clearedAt',
     'clearedBy',
     'commandId',
@@ -470,6 +587,7 @@ function timeConstraintCommandResult(value: unknown): DispatchTimeConstraintComm
     'timeConstraint',
   ])
     || typeof value.auditEventId !== 'string'
+    || (value.changeRequestId !== undefined && typeof value.changeRequestId !== 'string')
     || typeof value.commandId !== 'string'
     || typeof value.deliveryStopId !== 'string'
     || (value.rawNote !== null && typeof value.rawNote !== 'string')
@@ -483,6 +601,7 @@ function timeConstraintCommandResult(value: unknown): DispatchTimeConstraintComm
   }
   return {
     auditEventId: value.auditEventId,
+    ...(value.changeRequestId === undefined ? {} : { changeRequestId: value.changeRequestId }),
     ...(value.clearedAt === undefined ? {} : { clearedAt: value.clearedAt }),
     ...(value.clearedBy === undefined ? {} : { clearedBy: value.clearedBy }),
     commandId: value.commandId,
@@ -520,6 +639,7 @@ function parseTimeConstraint(value: unknown): DispatchTimeConstraint {
 function parseRecalculation(value: unknown): DispatchTimeConstraintRecalculation {
   if (!hasOnlyKeys(value, ['reason', 'retryable', 'routePlanId', 'status'])
     || ![
+      'ACTIVE_ROUTE_PENDING_DRIVER_ACK',
       'ASSIGNED_ROUTE_TIME_CONSTRAINT_CLEARED',
       'ASSIGNED_ROUTE_TIME_CONSTRAINT_CONFIRMED',
       'SCHEDULER_UNAVAILABLE',
@@ -528,7 +648,7 @@ function parseRecalculation(value: unknown): DispatchTimeConstraintRecalculation
     ].includes(value.reason as string)
     || typeof value.retryable !== 'boolean'
     || (value.routePlanId !== null && typeof value.routePlanId !== 'string')
-    || !['FAILED_TO_SCHEDULE', 'NOT_REQUIRED', 'SCHEDULED'].includes(value.status as string)) {
+    || !['FAILED_TO_SCHEDULE', 'NOT_REQUIRED', 'PENDING_DRIVER_ACK', 'SCHEDULED'].includes(value.status as string)) {
     throw new Error('시간 제약 재계산 응답 형식이 올바르지 않습니다.');
   }
   return value as DispatchTimeConstraintRecalculation;
