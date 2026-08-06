@@ -46,23 +46,36 @@ export type DeliverySummary = {
 };
 
 export type RecordsPageInfo = {
-  hasMore?: boolean;
-  nextCursor?: string;
+  currentPage: number;
+  hasMore: boolean;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
 };
 
 export type RemoteRecords = {
   records: DeliverySummary[];
-  page?: RecordsPageInfo;
+  page: RecordsPageInfo;
 };
 
-export async function loadRemoteRecords(signal?: AbortSignal): Promise<RemoteRecords> {
-  const data = await requestV1ReadJson<unknown>('records', { signal });
+export async function loadRemoteRecords({
+  page = 1,
+  serviceDate,
+  signal,
+}: {
+  page?: number;
+  serviceDate?: string;
+  signal?: AbortSignal;
+} = {}): Promise<RemoteRecords> {
+  const query = new URLSearchParams({ limit: '50', page: String(page) });
+  if (serviceDate !== undefined) query.set('serviceDate', serviceDate);
+  const data = await requestV1ReadJson<unknown>(`records?${query}`, { signal });
   if (!hasOnlyKeys(data, ['items', 'page']) || !Array.isArray(data.items)) {
     throw new Error('배송 이력 응답 형식이 올바르지 않습니다.');
   }
   return {
     records: data.items.map(deliverySummaryFrom),
-    page: pageInfoFrom(data.page),
+    page: pageInfoFrom(data.page, page, data.items.length),
   };
 }
 
@@ -170,12 +183,17 @@ function proofFrom(value: unknown): DeliveryProof {
   };
 }
 
-function pageInfoFrom(value: unknown): RecordsPageInfo | undefined {
-  if (value === undefined) return undefined;
-  if (!hasOnlyKeys(value, ['hasMore', 'nextCursor'])) throw new Error('페이지 응답 형식이 올바르지 않습니다.');
+function pageInfoFrom(value: unknown, requestedPage: number, itemCount: number): RecordsPageInfo {
+  if (!hasOnlyKeys(value, ['currentPage', 'hasMore', 'nextCursor', 'pageSize', 'totalItems', 'totalPages'])) {
+    throw new Error('페이지 응답 형식이 올바르지 않습니다.');
+  }
+  const hasMore = requiredBoolean(value, 'hasMore');
   return {
-    hasMore: optionalBoolean(value, 'hasMore'),
-    nextCursor: optionalString(value, 'nextCursor'),
+    currentPage: optionalNumber(value, 'currentPage') ?? requestedPage,
+    hasMore,
+    pageSize: optionalNumber(value, 'pageSize') ?? 50,
+    totalItems: optionalNumber(value, 'totalItems') ?? ((requestedPage - 1) * 50 + itemCount + (hasMore ? 1 : 0)),
+    totalPages: optionalNumber(value, 'totalPages') ?? (requestedPage + (hasMore ? 1 : 0)),
   };
 }
 
@@ -198,9 +216,8 @@ function optionalString(source: Record<string, unknown>, key: string): string | 
   return value;
 }
 
-function optionalBoolean(source: Record<string, unknown>, key: string): boolean | undefined {
+function requiredBoolean(source: Record<string, unknown>, key: string): boolean {
   const value = source[key];
-  if (value === undefined) return undefined;
   if (typeof value !== 'boolean') throw new Error(`${key} 필드 형식이 올바르지 않습니다.`);
   return value;
 }

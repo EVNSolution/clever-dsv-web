@@ -68,6 +68,12 @@
 .control-calendar-popover .rdp-selected .rdp-day_button { background:var(--color-black); color:var(--color-white); }
 .control-calendar-popover .rdp-today:not(.rdp-selected) .rdp-day_button { background:var(--color-primary-soft); color:var(--color-primary); }
 .control-calendar-popover .rdp-day_button:focus-visible { outline:2px solid var(--color-primary); outline-offset:1px; }
+.control-calendar-clear {
+  width:100%; min-height:36px; margin-top:10px; border:1px solid var(--color-border); border-radius:10px;
+  background:var(--color-white); color:var(--color-ink); font:800 12px/1 var(--font-sans); cursor:pointer;
+}
+.control-calendar-clear:hover { background:var(--color-row-hover); }
+.control-calendar-clear:focus-visible { outline:2px solid var(--color-black); outline-offset:2px; }
 .expand-card { position: relative; display: flex; flex-direction: column; min-height: 0; }
 .card-tools { display: inline-flex; align-items: center; gap: 8px; }
 .mobile-panel-toggle { display:none; }

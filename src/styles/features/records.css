@@ -11,6 +11,31 @@
   margin-top:2px;
 }
 
+.records-heading-actions {
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.records-heading-actions .control-date-selector {
+  flex:0 0 260px;
+}
+
+.records-heading-actions .control-date-trigger {
+  height:52px;
+  grid-template-columns:34px minmax(0, 1fr) auto;
+  padding:0 12px 0 9px;
+  border-radius:16px;
+}
+
+.records-heading-actions .control-date-picker-icon {
+  width:34px;
+  height:34px;
+  border-radius:10px;
+}
+
+.records-heading-actions .control-date-picker-copy strong { font-size:14px; }
+
 .record-table {
   table-layout:fixed;
 }
@@ -25,6 +50,33 @@
   text-overflow:ellipsis;
   white-space:nowrap;
 }
+
+.record-sort-header {
+  width:100%; display:flex; align-items:center; justify-content:space-between; gap:6px;
+  border:0; padding:0; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer;
+}
+
+.record-sort-header b { min-width:10px; color:var(--color-primary); font-size:12px; }
+.record-sort-header:focus-visible { outline:2px solid var(--color-primary); outline-offset:3px; }
+
+.record-pagination {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  min-height:36px;
+  margin-top:8px;
+}
+
+.record-pagination button {
+  min-width:32px; height:32px; border:1px solid transparent; border-radius:10px;
+  background:transparent; color:var(--color-muted); font:800 12px/1 var(--font-sans); cursor:pointer;
+}
+
+.record-pagination button:hover { background:var(--color-row-hover); color:var(--color-ink); }
+.record-pagination button[aria-current="page"] { background:var(--color-black); color:var(--color-white); }
+.record-pagination button:focus-visible { outline:2px solid var(--color-primary); outline-offset:2px; }
+.record-pagination span { min-width:20px; color:var(--color-muted); text-align:center; }
 
 .record-detail-panel {
   min-width:0;
@@ -185,6 +237,8 @@
 }
 
 @media (max-width: 620px) {
+  .records-heading-actions .control-date-selector { flex-basis:190px; }
+  .records-heading-actions .record-detail-count { display:none; }
   .record-table th:nth-child(5),
   .record-table td:nth-child(5) {
     display:none;

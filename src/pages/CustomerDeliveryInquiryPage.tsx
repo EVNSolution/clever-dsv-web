@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { lazy, Suspense, useEffect, useState } from 'react';
+import { Search } from 'lucide-react';
 import { getCustomerInquiryPage } from '../dev-db/queries';
 import type { OrderDetailViewModel } from '../dev-db/queries';
 import { ProductHeader } from '../components/MapControls';
@@ -7,6 +8,7 @@ import { apiConfig } from '../api/config';
 import { loadRemoteCustomerDeliveries } from '../services/customer-deliveries';
 import type { CustomerDeliveryItem, RemoteCustomerDeliveries } from '../services/customer-deliveries';
 import type { MapCanvasPoint, MapCanvasRoute } from '../components/MapCanvas';
+import { ServiceDateSelector, todayInSeoul } from '../components/ServiceDateSelector';
 
 const MapCanvas = lazy(() => import('../components/MapCanvas').then((module) => ({ default: module.MapCanvas })));
 const locationRefreshIntervalMs = 60_000;
@@ -190,10 +192,14 @@ function RemoteCustomerDeliveryInquiryPage({
   const [state, setState] = useState<RemoteInquiryState>({ status: 'loading' });
   const [selectedKey, setSelectedKey] = useState<string>();
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>();
+  const [searchValue, setSearchValue] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [serviceDate, setServiceDate] = useState(() => (
+    new URLSearchParams(window.location.search).get('serviceDate') ?? todayInSeoul()
+  ));
   const [view, setView] = useState<CustomerInquiryView>(() => (
     new URLSearchParams(window.location.search).get('view') === 'history' ? 'history' : 'control'
   ));
-  const serviceDate = new URLSearchParams(window.location.search).get('serviceDate') ?? undefined;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -261,6 +267,7 @@ function RemoteCustomerDeliveryInquiryPage({
     : viewDeliveries.filter((delivery) => customerVehicleGroupId(delivery) === activeVehicleId);
   const destinationGroups = customerDestinationGroups(visibleDeliveries);
   const selected = destinationGroups.find((group) => group.destinationId === selectedKey);
+  const searchCandidates = customerSearchCandidates(viewDeliveries, searchValue);
   const points = customerMapPoints(destinationGroups);
   const vehicles = customerVehiclePoints(visibleDeliveries);
   const visibleRoutes = view === 'history'
@@ -291,6 +298,24 @@ function RemoteCustomerDeliveryInquiryPage({
     setSelectedKey(undefined);
   };
 
+  const selectServiceDate = (nextServiceDate: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('serviceDate', nextServiceDate);
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+    setSelectedVehicleId(undefined);
+    setSelectedKey(undefined);
+    setSearchValue('');
+    setSearchOpen(false);
+    setServiceDate(nextServiceDate);
+  };
+
+  const selectSearchCandidate = (candidate: CustomerSearchCandidate) => {
+    setSelectedVehicleId(candidate.vehicleId);
+    setSelectedKey(candidate.destinationId);
+    setSearchValue(candidate.label);
+    setSearchOpen(false);
+  };
+
   return (
     <main className="page customer-delivery-demo nav-expanded">
       <CustomerNavigation customerName={customerName} onSelect={selectView} view={view} />
@@ -311,6 +336,51 @@ function RemoteCustomerDeliveryInquiryPage({
             vehicles={vehicles}
           />
         </Suspense>
+        <div className="customer-map-tools">
+          <ServiceDateSelector
+            label="조회 기준일"
+            onChange={(value) => { if (value !== undefined) selectServiceDate(value); }}
+            serviceDate={serviceDate}
+          />
+          <div
+            className="customer-search-card"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false);
+            }}
+          >
+            <label className="customer-search-field">
+              <Search aria-hidden="true" />
+              <input
+                aria-label="고객사 배송 검색"
+                autoComplete="off"
+                onChange={(event) => {
+                  setSearchValue(event.target.value);
+                  setSearchOpen(true);
+                }}
+                onFocus={() => setSearchOpen(true)}
+                placeholder="주문 번호, 배송처 이름, 주소 검색"
+                type="search"
+                value={searchValue}
+              />
+            </label>
+            {searchOpen && searchValue.trim() !== '' && searchCandidates.length ? (
+              <div className="customer-search-suggestions" role="listbox" aria-label="검색 후보">
+                {searchCandidates.map((candidate) => (
+                  <button
+                    aria-selected="false"
+                    key={candidate.id}
+                    type="button"
+                    role="option"
+                    onClick={() => selectSearchCandidate(candidate)}
+                  >
+                    <small>{candidate.kind}</small>
+                    <strong>{candidate.label}</strong>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
         <aside className="customer-control-side" aria-label="고객사 관제 패널">
           <section className="card panel expand-card customer-panel customer-vehicle-panel" aria-label="차량 목록">
             <CustomerPanelHeader
@@ -463,7 +533,59 @@ type CustomerVehicleGroup = {
   orderCount: number;
 };
 
+type CustomerSearchCandidate = {
+  destinationId: string;
+  id: string;
+  kind: '주소' | '주문 번호' | '배송처 이름';
+  label: string;
+  vehicleId?: string;
+};
+
 const unassignedCustomerVehicleId = '__unassigned__';
+
+function customerSearchCandidates(deliveries: CustomerDeliveryItem[], query: string): CustomerSearchCandidate[] {
+  const normalizedQuery = normalizeCustomerSearch(query);
+  if (normalizedQuery === '') return [];
+  const candidates = new Map<string, CustomerSearchCandidate>();
+  for (const delivery of deliveries) {
+    addCustomerSearchCandidate(candidates, {
+      destinationId: delivery.destinationId,
+      id: `order:${delivery.sellerOrderId}`,
+      kind: '주문 번호',
+      label: delivery.sellerOrderKey,
+      vehicleId: delivery.vehicleId,
+    });
+    addCustomerSearchCandidate(candidates, {
+      destinationId: delivery.destinationId,
+      id: `destination:${delivery.destinationId}`,
+      kind: '배송처 이름',
+      label: delivery.destinationDisplayName,
+    });
+    const address = customerAddressLabel(delivery.destinationAddress);
+    if (address !== undefined) {
+      addCustomerSearchCandidate(candidates, {
+        destinationId: delivery.destinationId,
+        id: `address:${delivery.destinationId}`,
+        kind: '주소',
+        label: address,
+      });
+    }
+  }
+  return [...candidates.values()]
+    .filter((candidate) => normalizeCustomerSearch(candidate.label).includes(normalizedQuery))
+    .slice(0, 10);
+}
+
+function addCustomerSearchCandidate(
+  candidates: Map<string, CustomerSearchCandidate>,
+  candidate: CustomerSearchCandidate,
+): void {
+  if (candidate.label.trim() !== '' && !candidates.has(candidate.id)) candidates.set(candidate.id, candidate);
+}
+
+function normalizeCustomerSearch(value: string): string {
+  return value.normalize('NFKC').replace(/\s+/gu, '').toLocaleLowerCase('ko-KR');
+}
 
 function customerDestinationGroups(deliveries: CustomerDeliveryItem[]): CustomerDestinationGroup[] {
   const groups = new Map<string, CustomerDeliveryItem[]>();
