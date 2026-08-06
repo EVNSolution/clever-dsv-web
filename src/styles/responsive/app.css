@@ -169,9 +169,9 @@
     position:fixed; left:12px; right:12px; top:auto; bottom:max(12px, env(safe-area-inset-bottom)); z-index:12;
     width:auto; height:auto; min-height:0; margin:0; padding:0; gap:8px; overflow:visible;
   }
-  .control-date-picker { flex-basis:48px; min-height:48px; padding:0 12px; border-radius:18px; }
-  .control-date-picker-label { font-size:11px; }
-  .control-date-picker strong { font-size:13px; }
+  .control-date-picker { flex-basis:58px; min-height:58px; padding:0 12px 0 10px; border-radius:18px; }
+  .control-date-picker-icon { width:36px; height:36px; }
+  .control-date-picker-copy strong { font-size:14px; }
   .control-side.mobile-panel-active { z-index:40; }
   .control-side .panel-view {
     height:auto; display:grid; grid-template-rows:auto auto; gap:8px; overflow:visible;

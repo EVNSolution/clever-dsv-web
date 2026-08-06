@@ -319,9 +319,12 @@ function ControlPanels({
   return (
     <aside className={`side control-side${mobilePanel ? ' mobile-panel-active' : ''}`} aria-label="관제 운영 패널">
       <label className="control-date-picker">
-        <span className="control-date-picker-label"><CalendarDays aria-hidden="true" />관제 기준일</span>
-        <strong>{formatControlServiceDate(selectedServiceDate ?? summary?.serviceDate ?? todayInSeoul())}</strong>
-        <span className="control-date-picker-action">날짜 변경</span>
+        <span className="control-date-picker-icon"><CalendarDays aria-hidden="true" /></span>
+        <span className="control-date-picker-copy">
+          <small>관제 기준일</small>
+          <strong>{formatControlServiceDate(selectedServiceDate ?? summary?.serviceDate ?? todayInSeoul())}</strong>
+        </span>
+        <span className="control-date-picker-action">날짜 선택<ChevronDown aria-hidden="true" /></span>
         <input
           aria-label="관제 기준일"
           disabled={onServiceDateChange === undefined}
@@ -523,7 +526,7 @@ function todayInSeoul(): string {
 
 function formatControlServiceDate(value: string): string {
   const [year, month, day] = value.split('-');
-  return year && month && day ? `${year}. ${month}. ${day}.` : value;
+  return year && month && day ? `${year}년 ${month}월 ${day}일` : value;
 }
 
 function VehicleTemperatureDialog({
