@@ -165,7 +165,14 @@ export type DispatchBatchAssignmentResult = {
   routePlanId: string | null;
 };
 
+export type DispatchBatchDeleteResult = {
+  commandId: string;
+  deletedSellerOrderIds: string[];
+  receiptId: string;
+};
+
 export const MAX_DISPATCH_ASSIGNMENT_COUNT = 100;
+export const MAX_DISPATCH_DELETE_COUNT = 100;
 
 export async function loadDispatchList(
   serviceDate: string,
@@ -280,6 +287,25 @@ export async function unassignDispatchOrders(orders: DispatchListItem[]): Promis
     method: 'POST',
   });
   return batchAssignmentResult(data);
+}
+
+export async function deleteDispatchOrders(orders: DispatchListItem[], reason?: string): Promise<DispatchBatchDeleteResult> {
+  if (orders.length === 0) throw new Error('삭제할 배송을 선택하세요.');
+  if (orders.length > MAX_DISPATCH_DELETE_COUNT) {
+    throw new Error(`배송 삭제는 한 번에 최대 ${MAX_DISPATCH_DELETE_COUNT}건까지 가능합니다.`);
+  }
+  const data = await requestV1AssignmentCommandJson<unknown>('seller-order-deletions', {
+    json: {
+      commandId: crypto.randomUUID(),
+      items: orders.map((order) => ({
+        expectedVersion: order.routeVersionId ?? 'UNASSIGNED',
+        sellerOrderId: order.sellerOrderId,
+      })),
+      ...(reason === undefined ? {} : { reason }),
+    },
+    method: 'POST',
+  });
+  return batchDeleteResult(data);
 }
 
 export async function confirmDispatchTimeConstraint(
@@ -669,6 +695,21 @@ function batchAssignmentResult(value: unknown): DispatchBatchAssignmentResult {
   return {
     assignmentResults: value.assignmentResults.map(parseAssignmentResult),
     routePlanId: value.routePlanId,
+  };
+}
+
+function batchDeleteResult(value: unknown): DispatchBatchDeleteResult {
+  if (!hasOnlyKeys(value, ['commandId', 'deletedSellerOrderIds', 'receiptId'])
+    || typeof value.commandId !== 'string'
+    || !Array.isArray(value.deletedSellerOrderIds)
+    || value.deletedSellerOrderIds.some((sellerOrderId) => typeof sellerOrderId !== 'string')
+    || typeof value.receiptId !== 'string') {
+    throw new Error('배송 삭제 응답 형식이 올바르지 않습니다.');
+  }
+  return {
+    commandId: value.commandId,
+    deletedSellerOrderIds: value.deletedSellerOrderIds as string[],
+    receiptId: value.receiptId,
   };
 }
 

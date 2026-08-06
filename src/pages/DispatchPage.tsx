@@ -1888,10 +1888,12 @@ function routeConstraintStatusLabel(status: DispatchListItem['routeConstraintSta
   }
 }
 
-function timeConstraintCommandMessage(status: 'FAILED_TO_SCHEDULE' | 'NOT_REQUIRED' | 'SCHEDULED'): string {
+function timeConstraintCommandMessage(status: 'FAILED_TO_SCHEDULE' | 'NOT_REQUIRED' | 'PENDING_DRIVER_ACK' | 'SCHEDULED'): string {
   switch (status) {
     case 'FAILED_TO_SCHEDULE':
       return '저장은 완료됐고 재계산 예약은 실패했습니다.';
+    case 'PENDING_DRIVER_ACK':
+      return '배송원 확인 요청을 대기열에 반영했습니다.';
     case 'SCHEDULED':
       return '저장 후 재계산을 예약했습니다.';
     default:

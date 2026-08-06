@@ -40,6 +40,8 @@ export type ManagementCustomer = {
   id: string;
   name: string;
   billingCode: string;
+  notificationEmailEnabled?: boolean;
+  notificationEmailRecipient?: string | null;
   orderCount?: number;
 };
 
