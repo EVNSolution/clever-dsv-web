@@ -127,6 +127,8 @@ type RawDispatch = {
   changeRequest?: DispatchChangeRequest;
   conditionCode?: string;
   customerId: string;
+  customerNotificationEmailEnabled?: boolean;
+  customerNotificationEmailRecipient?: string;
   destinationAddress?: string;
   destinationDisplayName?: string;
   destinationId: string;
@@ -472,6 +474,8 @@ function rawDispatch(value: unknown): RawDispatch {
     'actualCompletedAt',
     'changeRequest',
     'conditionCode',
+    'customerNotificationEmailEnabled',
+    'customerNotificationEmailRecipient',
     'sellerOrderId',
     'sellerOrderKey',
     'shippedBoxes',
@@ -516,6 +520,12 @@ function rawDispatch(value: unknown): RawDispatch {
   if (value.latestDriverMessage !== undefined) parseOrderMessageSummary(value.latestDriverMessage, 'DRIVER');
   if (value.conditionCode !== undefined && (typeof value.conditionCode !== 'string' || value.conditionCode.trim() === '')) {
     throw new Error('배차 항목의 conditionCode 필드가 올바르지 않습니다.');
+  }
+  if (value.customerNotificationEmailEnabled !== undefined && typeof value.customerNotificationEmailEnabled !== 'boolean') {
+    throw new Error('배차 항목의 customerNotificationEmailEnabled 필드가 올바르지 않습니다.');
+  }
+  if (value.customerNotificationEmailRecipient !== undefined && typeof value.customerNotificationEmailRecipient !== 'string') {
+    throw new Error('배차 항목의 customerNotificationEmailRecipient 필드가 올바르지 않습니다.');
   }
   if (value.shippedBoxes !== undefined && (!Number.isInteger(value.shippedBoxes) || (value.shippedBoxes as number) < 1)) {
     throw new Error('배차 항목의 shippedBoxes 필드가 올바르지 않습니다.');

@@ -281,6 +281,7 @@ test('package dependency inventory is unchanged', () => {
     'maplibre-gl',
     'pretendard',
     'react',
+    'react-day-picker',
     'react-dom',
     'xlsx',
   ]);

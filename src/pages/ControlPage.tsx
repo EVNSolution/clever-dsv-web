@@ -1,6 +1,8 @@
 import type { CSSProperties, ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CalendarDays, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { DayPicker } from 'react-day-picker';
+import { ko } from 'react-day-picker/locale';
 import { apiConfig } from '../api/config';
 import { loadControlSummary, loadVehicleTemperatureHistory } from '../services/control';
 import type { ControlSummary, VehicleTemperatureHistory, VehicleTemperatureSample } from '../services/control';
@@ -253,6 +255,9 @@ function ControlPanels({
   const [temperatureHistory, setTemperatureHistory] = useState<VehicleTemperatureHistory>();
   const [temperatureLoading, setTemperatureLoading] = useState(false);
   const [temperatureError, setTemperatureError] = useState('');
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendarRef = useRef<HTMLDivElement>(null);
+  const controlServiceDate = selectedServiceDate ?? summary?.serviceDate ?? todayInSeoul();
   const selectedVehicleOrders = selectedVehicleId === undefined
     ? []
     : orders
@@ -293,6 +298,24 @@ function ControlPanels({
   }, [mobilePanel]);
 
   useEffect(() => {
+    if (!calendarOpen) return undefined;
+    const closeCalendar = (event: MouseEvent | TouchEvent) => {
+      if (!calendarRef.current?.contains(event.target as Node)) setCalendarOpen(false);
+    };
+    const closeCalendarOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCalendarOpen(false);
+    };
+    document.addEventListener('mousedown', closeCalendar);
+    document.addEventListener('touchstart', closeCalendar);
+    window.addEventListener('keydown', closeCalendarOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeCalendar);
+      document.removeEventListener('touchstart', closeCalendar);
+      window.removeEventListener('keydown', closeCalendarOnEscape);
+    };
+  }, [calendarOpen]);
+
+  useEffect(() => {
     if (!temperatureVehicle) return undefined;
     const controller = new AbortController();
     setTemperatureLoading(true);
@@ -318,24 +341,44 @@ function ControlPanels({
 
   return (
     <aside className={`side control-side${mobilePanel ? ' mobile-panel-active' : ''}`} aria-label="관제 운영 패널">
-      <label className="control-date-picker">
-        <span className="control-date-picker-icon"><CalendarDays aria-hidden="true" /></span>
-        <span className="control-date-picker-copy">
-          <small>관제 기준일</small>
-          <strong>{formatControlServiceDate(selectedServiceDate ?? summary?.serviceDate ?? todayInSeoul())}</strong>
-        </span>
-        <span className="control-date-picker-action">날짜 선택<ChevronDown aria-hidden="true" /></span>
-        <input
-          aria-label="관제 기준일"
+      <div className="control-date-selector" ref={calendarRef}>
+        <button
+          aria-controls="controlDateCalendar"
+          aria-expanded={calendarOpen}
+          aria-label="관제 기준일 날짜 변경"
+          className="control-date-trigger"
           disabled={onServiceDateChange === undefined}
-          max={todayInSeoul()}
-          onChange={(event) => {
-            if (event.currentTarget.value !== '') onServiceDateChange?.(event.currentTarget.value);
-          }}
-          type="date"
-          value={selectedServiceDate ?? summary?.serviceDate ?? todayInSeoul()}
-        />
-      </label>
+          onClick={() => setCalendarOpen((current) => !current)}
+          type="button"
+        >
+          <span className="control-date-picker-icon"><CalendarDays aria-hidden="true" /></span>
+          <span className="control-date-picker-copy">
+            <small>관제 기준일</small>
+            <strong>{formatControlServiceDate(controlServiceDate)}</strong>
+          </span>
+          <span className="control-date-picker-action">변경<ChevronDown aria-hidden="true" /></span>
+        </button>
+        {calendarOpen ? (
+          <div className="control-calendar-popover" id="controlDateCalendar">
+            <DayPicker
+              defaultMonth={serviceDateToDate(controlServiceDate)}
+              disabled={{ after: serviceDateToDate(todayInSeoul()) }}
+              endMonth={serviceDateToDate(todayInSeoul())}
+              fixedWeeks
+              locale={ko}
+              mode="single"
+              navLayout="around"
+              onSelect={(date) => {
+                if (!date) return;
+                onServiceDateChange?.(dateToServiceDate(date));
+                setCalendarOpen(false);
+              }}
+              selected={serviceDateToDate(controlServiceDate)}
+              showOutsideDays
+            />
+          </div>
+        ) : null}
+      </div>
       <div className={`panel-view ${selectedVehicleId === undefined ? 'vehicle-idle' : 'vehicle-focused'}${mobilePanel ? ' mobile-panel-open' : ''}`}>
         <section className={`card panel expand-card mobile-panel-${mobilePanel === 'vehicles' ? 'expanded' : 'collapsed'}`} id="vehicleCard" aria-label="차량 리스트">
           <div className="tab-line section-heading">
@@ -526,7 +569,20 @@ function todayInSeoul(): string {
 
 function formatControlServiceDate(value: string): string {
   const [year, month, day] = value.split('-');
-  return year && month && day ? `${year}년 ${month}월 ${day}일` : value;
+  return year && month && day ? `${year}. ${month}. ${day}.` : value;
+}
+
+function serviceDateToDate(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day, 12);
+}
+
+function dateToServiceDate(value: Date): string {
+  return [
+    value.getFullYear(),
+    String(value.getMonth() + 1).padStart(2, '0'),
+    String(value.getDate()).padStart(2, '0'),
+  ].join('-');
 }
 
 function VehicleTemperatureDialog({

@@ -606,7 +606,7 @@ test('accepts a valid admin session only through the strict v1 session envelope'
   await expect(page.getByLabel('관리자 세션 확인')).toHaveCount(0);
   await expect(page.getByRole('link', { name: '관제', exact: true })).toBeVisible();
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/control');
-  await expect(page.getByLabel('지원되는 관제 요약')).toContainText(controlSummary.serviceDate);
+  await expect(page.getByRole('button', { name: '관제 기준일 날짜 변경' })).toContainText('2026. 07. 23.');
   await expect(page.getByLabel('지원되는 관제 요약')).toContainText(`주문 수 ${controlSummary.totalDispatchCount}`);
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
   await expect(page.getByRole('img', { name: /출발 위치: 경기도 군포시 번영로 82/ })).toBeVisible();
@@ -615,6 +615,51 @@ test('accepts a valid admin session only through the strict v1 session envelope'
   await expect(vehicleList).toContainText('차량이 없습니다.');
   await expect(page.getByLabel('고객사별 주문 리스트')).toBeVisible();
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session')).toBe(true);
+  expect(api.unexpected).toEqual([]);
+});
+
+test('loads a historical control date with current dispatch contract fields', async ({ page }) => {
+  const historicalDate = '2026-07-22';
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': ({ url }) => v1Envelope({
+      ...controlSummary,
+      serviceDate: url.searchParams.get('serviceDate') ?? controlSummary.serviceDate,
+      totalDispatchCount: url.searchParams.get('serviceDate') === historicalDate ? 1 : 0,
+    }),
+    'GET /api/dsv/v1/vehicles?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({
+      items: [{ customerId: 'customer-historical', displayName: '과거 고객사', orderCount: 1, status: 'ACTIVE' }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/dispatches': ({ url }) => v1Envelope({
+      items: url.searchParams.get('serviceDate') === historicalDate ? [{
+        assignmentStatus: 'UNASSIGNED',
+        customerId: 'customer-historical',
+        customerNotificationEmailEnabled: true,
+        customerNotificationEmailRecipient: 'historical@example.com',
+        deliveryStopId: 'stop-historical',
+        destinationDisplayName: '과거 배송지',
+        destinationId: 'destination-historical',
+        etaStatus: 'NOT_REQUIRED',
+        eventSummary: [],
+        operationStatus: 'UNASSIGNED',
+        sellerOrderId: 'seller-order-historical',
+        sellerOrderKey: 'SELLER-HISTORICAL',
+      }] : [],
+      page: { hasMore: false },
+    }),
+  });
+
+  await page.goto('/control');
+  await page.getByRole('button', { name: '관제 기준일 날짜 변경' }).click();
+  await expect(page.locator('.control-calendar-popover')).toBeVisible();
+  await page.locator('.control-calendar-popover .rdp-day_button').filter({ hasText: /^22$/u }).click();
+
+  await expect.poll(() => api.calls.some((call) => call.path === '/api/dsv/v1/dispatches' && call.search.includes(`serviceDate=${historicalDate}`))).toBe(true);
+  await expect(page.getByRole('button', { name: '관제 기준일 날짜 변경' })).toContainText('2026. 07. 22.');
+  await expect(page.getByLabel('고객사별 주문 리스트')).toContainText('과거 고객사');
+  await expect(page.getByText('배차 항목 응답 형식이 올바르지 않습니다.')).toHaveCount(0);
   expect(api.unexpected).toEqual([]);
 });
 
