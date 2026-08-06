@@ -1336,11 +1336,12 @@ test('requests customer deliveries only after a valid customer v1 session', asyn
 });
 
 test('loads the administrator customer map through the customer-scoped contract', async ({ page }) => {
+  const requestedServiceDates = [];
   const api = await installApiFixtures(page, {
     'GET /api/dsv/v1/session': v1Envelope(fullAdminSession),
     'GET /api/dsv/v1/customers/deliveries': ({ url }) => {
       expect(url.searchParams.get('customerId')).toBe('customer-g006-map');
-      expect(url.searchParams.get('serviceDate')).toBe('2026-08-03');
+      requestedServiceDates.push(url.searchParams.get('serviceDate'));
       return v1Envelope({
         customerDisplayName: 'G006 Healthcare',
         departureLocation: {
@@ -1382,6 +1383,7 @@ test('loads the administrator customer map through the customer-scoped contract'
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customers/deliveries');
   await expect(page.getByRole('article', { name: '고객사 배송지 지도' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: '고객사 메뉴' })).toContainText('G006 Healthcare');
+  await expect(page.getByRole('button', { name: '조회 기준일 날짜 변경' })).toContainText('2026. 08. 03.');
   await expect(page.getByLabel('차량 목록')).toContainText('서울86바3800');
   await expect.poll(() => page.getByLabel('차량 목록').locator('.customer-vehicle-list').evaluate((element) => element.clientHeight)).toBe(56);
   await expect(page.getByLabel('배송지 리스트')).toBeVisible();
@@ -1398,6 +1400,18 @@ test('loads the administrator customer map through the customer-scoped contract'
   await destination.click();
   await expect(destination).toHaveAttribute('aria-expanded', 'false');
   await expect(destination).not.toContainText('SELLER-G006-MAP');
+  await page.getByLabel('고객사 배송 검색').fill('G006-MAP');
+  await expect(page.getByRole('option', { name: /주문 번호 SELLER-G006-MAP/u })).toBeVisible();
+  await page.getByLabel('고객사 배송 검색').fill('Customer Destination');
+  await expect(page.getByRole('option', { name: /배송처 이름 G006 Customer Destination/u })).toBeVisible();
+  await page.getByLabel('고객사 배송 검색').fill('세종대로');
+  const addressCandidate = page.getByRole('option', { name: /주소 서울특별시 중구 세종대로 110/u });
+  await expect(addressCandidate).toBeVisible();
+  await addressCandidate.click();
+  await expect(destination).toHaveAttribute('aria-expanded', 'true');
+  await page.getByRole('button', { name: '조회 기준일 날짜 변경' }).click();
+  await page.locator('.customer-map-tools .rdp-day_button').filter({ hasText: /^2$/u }).click();
+  await expect.poll(() => requestedServiceDates.includes('2026-08-02')).toBe(true);
   expect(api.unexpected).toEqual([]);
 });
 

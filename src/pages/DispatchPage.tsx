@@ -982,7 +982,8 @@ function RemoteDispatchBoard({
 }
 
 type DispatchFilter = 'ALL' | DispatchOperationStatus;
-type DispatchSortKey = 'customer' | 'destination' | 'driver' | 'order' | 'status' | 'vehicle';
+type DispatchSortKey = 'address' | 'customer' | 'destination' | 'driver' | 'order' | 'status' | 'vehicle';
+type DispatchDriverSortKey = 'assigned' | 'driver' | 'vehicle';
 type DispatchSortDirection = 'asc' | 'desc';
 type DispatchWorkspaceView = 'LIST' | 'MAP';
 
@@ -1023,6 +1024,7 @@ function DispatchWorkspace({
   const [focusedOrderId, setFocusedOrderId] = useState<string | null>(null);
   const [openActionOrderId, setOpenActionOrderId] = useState<string | null>(null);
   const [sort, setSort] = useState<{ direction: DispatchSortDirection; key: DispatchSortKey } | null>(null);
+  const [driverSort, setDriverSort] = useState<{ direction: DispatchSortDirection; key: DispatchDriverSortKey } | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const [selectionCoordinates, setSelectionCoordinates] = useState<Array<[number, number]>>([]);
@@ -1076,6 +1078,18 @@ function DispatchWorkspace({
   const drivers = references?.drivers ?? [];
   const vehicles = references?.vehicles ?? [];
   const assignments = references?.assignments ?? [];
+  const driverAssignedCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    rows.forEach((row) => {
+      if (row.driverId !== null) counts.set(row.driverId, (counts.get(row.driverId) ?? 0) + 1);
+    });
+    return counts;
+  }, [rows]);
+  const driverOrder = useMemo(() => new Map(drivers.map((driver, index) => [driver.id, index])), [drivers]);
+  const sortedDrivers = useMemo(
+    () => sortDispatchDrivers(drivers, driverSort, driverOrder, driverAssignedCounts, assignments, vehicles),
+    [assignments, driverAssignedCounts, driverOrder, driverSort, drivers, vehicles],
+  );
   const selectedDriver = drivers.find((driver) => driver.id === selectedDriverId) ?? null;
   const selectedVehicleAssignment = selectedDriver === null ? undefined : assignments.find((assignment) => assignment.driverId === selectedDriver.id);
   const selectedVehicle = vehicles.find((vehicle) => vehicle.id === selectedVehicleAssignment?.vehicleId) ?? null;
@@ -1189,6 +1203,14 @@ function DispatchWorkspace({
 
   function cycleSort(key: DispatchSortKey): void {
     setSort((current) => {
+      if (current?.key !== key) return { direction: 'desc', key };
+      if (current.direction === 'desc') return { direction: 'asc', key };
+      return null;
+    });
+  }
+
+  function cycleDriverSort(key: DispatchDriverSortKey): void {
+    setDriverSort((current) => {
       if (current?.key !== key) return { direction: 'desc', key };
       if (current.direction === 'desc') return { direction: 'asc', key };
       return null;
@@ -1576,7 +1598,7 @@ function DispatchWorkspace({
                     </th>
                     <SortableDispatchHeader label="주문" onSort={cycleSort} sort={sort} sortKey="order" />
                     <SortableDispatchHeader label="배송처" onSort={cycleSort} sort={sort} sortKey="destination" />
-                    <th scope="col">주소</th>
+                    <SortableDispatchHeader label="주소" onSort={cycleSort} sort={sort} sortKey="address" />
                     <SortableDispatchHeader label="고객사" onSort={cycleSort} sort={sort} sortKey="customer" />
                     <SortableDispatchHeader label="배송원" onSort={cycleSort} sort={sort} sortKey="driver" />
                     <SortableDispatchHeader label="차량" onSort={cycleSort} sort={sort} sortKey="vehicle" />
@@ -1695,12 +1717,16 @@ function DispatchWorkspace({
           <AdminSectionHeader title="배송원" side={<span className="section-meta">{drivers.length}명</span>} />
           <div className="dispatch-driver-table-wrap overlay-scroll">
             <table className="dispatch-driver-table">
-              <thead><tr><th scope="col">배송원</th><th scope="col">차량</th><th scope="col">배정</th></tr></thead>
+              <thead><tr>
+                <SortableDispatchDriverHeader label="배송원" onSort={cycleDriverSort} sort={driverSort} sortKey="driver" />
+                <SortableDispatchDriverHeader label="차량" onSort={cycleDriverSort} sort={driverSort} sortKey="vehicle" />
+                <SortableDispatchDriverHeader label="배정" onSort={cycleDriverSort} sort={driverSort} sortKey="assigned" />
+              </tr></thead>
               <tbody>
-                {drivers.map((driver) => {
+                {sortedDrivers.map((driver) => {
                   const assignment = assignments.find((item) => item.driverId === driver.id);
                   const vehicle = vehicles.find((item) => item.id === assignment?.vehicleId);
-                  const assignedCount = rows.filter((row) => row.driverId === driver.id).length;
+                  const assignedCount = driverAssignedCounts.get(driver.id) ?? 0;
                   return (
                     <tr
                       aria-selected={driver.id === selectedDriver?.id}
@@ -1759,6 +1785,34 @@ function SortableDispatchHeader({
   onSort: (key: DispatchSortKey) => void;
   sort: { direction: DispatchSortDirection; key: DispatchSortKey } | null;
   sortKey: DispatchSortKey;
+}): ReactElement {
+  const active = sort?.key === sortKey;
+  const directionLabel = active ? (sort.direction === 'desc' ? '내림차순' : '오름차순') : '기본순';
+  return (
+    <th scope="col">
+      <button
+        aria-label={`${label} 정렬 ${directionLabel}`}
+        className={`dispatch-sort-header${active ? ' active' : ''}`}
+        type="button"
+        onClick={() => onSort(sortKey)}
+      >
+        <span>{label}</span>
+        <b aria-hidden="true">{active ? (sort.direction === 'desc' ? '↓' : '↑') : ''}</b>
+      </button>
+    </th>
+  );
+}
+
+function SortableDispatchDriverHeader({
+  label,
+  onSort,
+  sort,
+  sortKey,
+}: {
+  label: string;
+  onSort: (key: DispatchDriverSortKey) => void;
+  sort: { direction: DispatchSortDirection; key: DispatchDriverSortKey } | null;
+  sortKey: DispatchDriverSortKey;
 }): ReactElement {
   const active = sort?.key === sortKey;
   const directionLabel = active ? (sort.direction === 'desc' ? '내림차순' : '오름차순') : '기본순';
@@ -2201,6 +2255,8 @@ function sortDispatchRows(
 
 function dispatchSortValue(row: DispatchListItem, key: DispatchSortKey, references: ManagementData | null): string {
   switch (key) {
+    case 'address':
+      return row.destinationAddress ?? '';
     case 'customer':
       return dispatchCustomerName(row, references);
     case 'destination':
@@ -2214,6 +2270,42 @@ function dispatchSortValue(row: DispatchListItem, key: DispatchSortKey, referenc
     case 'vehicle':
       return row.vehicleId ?? '';
   }
+}
+
+function sortDispatchDrivers(
+  drivers: ManagementData['drivers'],
+  sort: { direction: DispatchSortDirection; key: DispatchDriverSortKey } | null,
+  driverOrder: Map<string, number>,
+  assignedCounts: ReadonlyMap<string, number>,
+  assignments: ManagementData['assignments'],
+  vehicles: ManagementData['vehicles'],
+): ManagementData['drivers'] {
+  if (sort === null) return drivers;
+  const direction = sort.direction === 'asc' ? 1 : -1;
+  return [...drivers].sort((left, right) => {
+    const valueDelta = dispatchDriverSortValue(left.id, left.name, sort.key, assignedCounts, assignments, vehicles)
+      .localeCompare(
+        dispatchDriverSortValue(right.id, right.name, sort.key, assignedCounts, assignments, vehicles),
+        'ko',
+        { numeric: true, sensitivity: 'base' },
+      );
+    if (valueDelta !== 0) return valueDelta * direction;
+    return (driverOrder.get(left.id) ?? 0) - (driverOrder.get(right.id) ?? 0);
+  });
+}
+
+function dispatchDriverSortValue(
+  driverId: string,
+  driverName: string,
+  key: DispatchDriverSortKey,
+  assignedCounts: ReadonlyMap<string, number>,
+  assignments: ManagementData['assignments'],
+  vehicles: ManagementData['vehicles'],
+): string {
+  if (key === 'assigned') return String(assignedCounts.get(driverId) ?? 0);
+  if (key === 'driver') return driverName;
+  const vehicleId = assignments.find((assignment) => assignment.driverId === driverId)?.vehicleId;
+  return vehicles.find((vehicle) => vehicle.id === vehicleId)?.plate ?? '';
 }
 
 function lifecycleOrder(status: DispatchOperationStatus): number {

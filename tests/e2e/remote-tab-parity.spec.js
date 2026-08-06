@@ -384,6 +384,17 @@ test('dispatch list selects and clears every visible order from the header check
 
   await page.goto('/dispatch');
   await page.getByRole('button', { name: '목록', exact: true }).click();
+  const orderTable = page.locator('.dispatch-order-table');
+  const addressSort = orderTable.getByRole('button', { name: '주소 정렬 기본순' });
+  await addressSort.click();
+  await expect(orderTable.getByRole('button', { name: '주소 정렬 내림차순' })).toBeVisible();
+  await orderTable.getByRole('button', { name: '주소 정렬 내림차순' }).click();
+  await expect(orderTable.getByRole('button', { name: '주소 정렬 오름차순' })).toBeVisible();
+  await orderTable.getByRole('button', { name: '주소 정렬 오름차순' }).click();
+  await expect(orderTable.getByRole('button', { name: '주소 정렬 기본순' })).toBeVisible();
+  const driverTable = page.locator('.dispatch-driver-table');
+  await driverTable.getByRole('button', { name: '배송원 정렬 기본순' }).click();
+  await expect(driverTable.getByRole('button', { name: '배송원 정렬 내림차순' })).toBeVisible();
   const selectAll = page.getByRole('checkbox', { name: '전체 선택' });
   await selectAll.check();
   await expect(page.getByRole('region', { name: '배송원' })).toContainText('2곳');
@@ -1057,8 +1068,31 @@ test('records route stays visible and renders an empty canonical record list', a
   await expect(page).toHaveURL(/\/records$/);
   await expect(page.getByRole('heading', { name: '이력', exact: true })).toBeVisible();
   await expect(page.getByText('배송 이력이 없습니다.')).toBeVisible();
-  expect(api.calls.some((call) => call.key === 'GET /api/dsv/v1/records')).toBe(true);
+  expect(api.calls.some((call) => call.key === 'GET /api/dsv/v1/records?limit=50&page=1')).toBe(true);
   await expectNoConcreteDemo(page);
+  expectOnlyFixtureCalls(api);
+});
+
+test('records route keeps first, nearby, and last numbered pages and filters only when a date is selected', async ({ page }) => {
+  const api = await installApiFixtures(page, adminFixtures({
+    'GET /api/dsv/v1/records': ({ url }) => {
+      const currentPage = Number(url.searchParams.get('page') ?? '1');
+      return v1Envelope({
+        items: [],
+        page: { currentPage, hasMore: currentPage < 10, pageSize: 50, totalItems: 500, totalPages: 10 },
+      }, `records-page-${currentPage}`);
+    },
+  }));
+
+  await page.goto('/records?page=4&serviceDate=2026-08-05');
+
+  const pagination = page.getByRole('navigation', { name: '배송 이력 페이지' });
+  await expect(pagination.getByRole('button')).toHaveText(['1', '3', '4', '5', '10']);
+  await expect(pagination.getByText('…')).toHaveCount(2);
+  await pagination.getByRole('button', { name: '5', exact: true }).click();
+  await expect(page).toHaveURL(/serviceDate=2026-08-05.*page=5|page=5.*serviceDate=2026-08-05/u);
+  expect(api.calls.some((call) => call.key === 'GET /api/dsv/v1/records?limit=50&page=4&serviceDate=2026-08-05')).toBe(true);
+  expect(api.calls.some((call) => call.key === 'GET /api/dsv/v1/records?limit=50&page=5&serviceDate=2026-08-05')).toBe(true);
   expectOnlyFixtureCalls(api);
 });
 
@@ -1111,6 +1145,12 @@ test('records route renders proof metadata and event details for the selected de
 
   await page.goto('/records');
 
+  await page.getByRole('button', { name: '주문번호 정렬 기본순' }).click();
+  await expect(page.getByRole('button', { name: '주문번호 정렬 내림차순' })).toBeVisible();
+  await page.getByRole('button', { name: '주문번호 정렬 내림차순' }).click();
+  await expect(page.getByRole('button', { name: '주문번호 정렬 오름차순' })).toBeVisible();
+  await page.getByRole('button', { name: '주문번호 정렬 오름차순' }).click();
+  await expect(page.getByRole('button', { name: '주문번호 정렬 기본순' })).toBeVisible();
   await expect(page.getByText('서울특별시 중구 퇴계로 131 5층', { exact: true })).toBeVisible();
   await expect(page.getByText('delivery.jpg', { exact: true })).toBeVisible();
   await expect(page.getByText('배송 완료', { exact: true })).toBeVisible();
