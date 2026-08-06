@@ -16,6 +16,8 @@ import type { AdminSettings } from '../services/settings';
 import type { DispatchListItem } from '../services/dispatch';
 import { loadControlRoutes } from '../services/control-routes';
 import type { ControlRouteResult } from '../services/control-routes';
+import { loadVehicleGpsTrailHistory } from '../services/control';
+import type { VehicleGpsTrailHistory } from '../services/control';
 import type { ManagementData } from '../demo/management';
 import type { DepartureLocation } from './DepartureMarker';
 import type { MapCanvasPoint, MapCanvasRoute, MapCanvasVehiclePoint } from './MapCanvas';
@@ -80,6 +82,7 @@ export function AdminShell({
   const [selectedControlVehicleId, setSelectedControlVehicleId] = useState<string>();
   const [selectedControlDestinationId, setSelectedControlDestinationId] = useState<string>();
   const [controlRouteResults, setControlRouteResults] = useState<ReadonlyMap<string, ControlRouteResult>>(new Map());
+  const [controlVehicleTrail, setControlVehicleTrail] = useState<VehicleGpsTrailHistory>();
   const vehicleColors = useMemo(() => controlVehicleColors(controlOrders), [controlOrders]);
   const controlMapPoints = useMemo(
     () => assignedControlMapPoints(controlOrders, vehicleColors, selectedControlVehicleId),
@@ -90,8 +93,17 @@ export function AdminShell({
     [controlOrders, vehicleColors],
   );
   const controlMapRoutes = useMemo(
-    () => assignedControlMapRoutes(controlRouteRequests, controlRouteResults, controlManagement, selectedControlVehicleId),
-    [controlManagement, controlRouteRequests, controlRouteResults, selectedControlVehicleId],
+    () => assignedControlMapRoutes(
+      controlRouteRequests,
+      controlRouteResults,
+      isTodayInSeoul(controlServiceDate) ? controlManagement : undefined,
+      selectedControlVehicleId,
+    ),
+    [controlManagement, controlRouteRequests, controlRouteResults, controlServiceDate, selectedControlVehicleId],
+  );
+  const controlTrailRoutes = useMemo(
+    () => controlVehicleTrail === undefined ? [] : vehicleGpsTrailMapRoutes(controlVehicleTrail),
+    [controlVehicleTrail],
   );
   const controlEstimatedArrivalByOrderId = useMemo(
     () => configuredControlEtas(
@@ -104,8 +116,10 @@ export function AdminShell({
     [controlRouteRequests, controlRouteResults, controlServiceDate, controlSettings],
   );
   const controlVehiclePoints = useMemo(
-    () => scheduledControlVehiclePoints(controlOrders, departureLocation, vehicleColors, controlManagement),
-    [controlManagement, controlOrders, departureLocation, vehicleColors],
+    () => isTodayInSeoul(controlServiceDate)
+      ? scheduledControlVehiclePoints(controlOrders, departureLocation, vehicleColors, controlManagement)
+      : [],
+    [controlManagement, controlOrders, controlServiceDate, departureLocation, vehicleColors],
   );
   const handleControlOrdersChange = useCallback((orders: DispatchListItem[], serviceDate?: string) => {
     setControlOrders(orders);
@@ -171,6 +185,24 @@ export function AdminShell({
       });
     return () => controller.abort();
   }, [controlRouteRequests, controlServiceDate]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setControlVehicleTrail(undefined);
+    if (
+      apiConfig.mode !== 'remote'
+      || selectedControlVehicleId === undefined
+      || controlServiceDate === undefined
+    ) return () => controller.abort();
+    void loadVehicleGpsTrailHistory(selectedControlVehicleId, controlServiceDate, controller.signal)
+      .then((history) => {
+        if (!controller.signal.aborted) setControlVehicleTrail(history);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setControlVehicleTrail(undefined);
+      });
+    return () => controller.abort();
+  }, [controlServiceDate, selectedControlVehicleId]);
 
   useEffect(() => {
     if (activePath !== '/control' || previewOnly) {
@@ -281,7 +313,7 @@ export function AdminShell({
                     }
                   }}
                   points={controlMapPoints}
-                  routes={controlMapRoutes}
+                  routes={[...controlMapRoutes, ...controlTrailRoutes]}
                   selectedPointId={selectedControlDestinationId}
                   showEveryPoint={selectedControlVehicleId !== undefined}
                   vehicles={controlVehiclePoints}
@@ -441,6 +473,35 @@ function assignedControlMapRoutes(
       sortOrder: index,
     }));
   });
+}
+
+function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory): MapCanvasRoute[] {
+  const sessions = [...history.sessions].sort((left, right) => {
+    const timeOrder = Date.parse(left.startedAt) - Date.parse(right.startedAt);
+    return timeOrder === 0 ? left.sessionIndex - right.sessionIndex : timeOrder;
+  });
+  return sessions.flatMap((session, sessionOrder) => session.segments.map((segment, segmentOrder) => ({
+    casingColor: '#ffffff',
+    color: '#72bff3',
+    coordinates: segment.samples.map((sample) => [sample.longitude, sample.latitude] as [number, number]),
+    dashed: true,
+    endMarker: segmentOrder < session.segments.length - 1 ? 'interrupted' as const : 'end' as const,
+    id: `vehicle-trail:${session.routePlanId}:${session.sessionIndex}:${segmentOrder}`,
+    selected: true,
+    sortOrder: 200 + sessionOrder * 10 + segmentOrder,
+    startMarker: sessionOrder === 0 && segmentOrder === 0 ? 'start' as const : 'restart' as const,
+  })));
+}
+
+function isTodayInSeoul(serviceDate?: string): boolean {
+  if (serviceDate === undefined) return true;
+  const today = new Intl.DateTimeFormat('en-CA', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+  }).format(new Date());
+  return serviceDate === today;
 }
 
 function configuredControlEtas(

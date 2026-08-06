@@ -119,6 +119,7 @@ function RemoteControlPage({
   const [orders, setOrders] = useState<DispatchListItem[]>([]);
   const [panelError, setPanelError] = useState('');
   const [panelLoading, setPanelLoading] = useState(true);
+  const [serviceDateFilter, setServiceDateFilter] = useState<string>();
 
   useEffect(() => {
     const summaryController = new AbortController();
@@ -130,7 +131,7 @@ function RemoteControlPage({
       if (refreshing) return;
       refreshing = true;
       try {
-        const nextSummary = await loadControlSummary(summaryController.signal);
+        const nextSummary = await loadControlSummary(serviceDateFilter, summaryController.signal);
         if (summaryController.signal.aborted) return;
         setSummary(nextSummary);
         const [nextManagement, dispatch] = await Promise.all([
@@ -170,7 +171,7 @@ function RemoteControlPage({
       onManagementChange?.(undefined);
       onOrdersChange?.([]);
     };
-  }, [onManagementChange, onOrdersChange]);
+  }, [onManagementChange, onOrdersChange, serviceDateFilter]);
 
   return (
     <ControlPanels
@@ -187,7 +188,9 @@ function RemoteControlPage({
       drivers={management?.drivers ?? []}
       onVehicleSelect={onVehicleSelect}
       onDestinationSelect={onDestinationSelect}
+      onServiceDateChange={setServiceDateFilter}
       selectedDestinationId={selectedDestinationId}
+      selectedServiceDate={serviceDateFilter}
       selectedVehicleId={selectedVehicleId}
       vehicleColors={vehicleColors}
     />
@@ -220,7 +223,9 @@ function ControlPanels({
   vehicles,
   onVehicleSelect,
   onDestinationSelect,
+  onServiceDateChange,
   selectedDestinationId,
+  selectedServiceDate,
   selectedVehicleId,
   vehicleColors = new Map(),
 }: {
@@ -237,7 +242,9 @@ function ControlPanels({
   vehicles: ManagementData['vehicles'];
   onVehicleSelect?: (vehicleId: string) => void;
   onDestinationSelect?: (destinationId: string) => void;
+  onServiceDateChange?: (serviceDate: string) => void;
   selectedDestinationId?: string;
+  selectedServiceDate?: string;
   selectedVehicleId?: string;
   vehicleColors?: ReadonlyMap<string, string>;
 }): ReactElement {
@@ -324,7 +331,17 @@ function ControlPanels({
           {error ? <div className="panel-state error" role="alert">{error}</div> : null}
           {summary && !loading && !error ? (
             <div className="control-summary-strip" role="status" aria-label="지원되는 관제 요약">
-              <span>기준일 <b>{summary.serviceDate}</b></span>
+              <label className="control-service-date">기준일
+                <input
+                  aria-label="관제 기준일"
+                  max={todayInSeoul()}
+                  onChange={(event) => {
+                    if (event.currentTarget.value !== '') onServiceDateChange?.(event.currentTarget.value);
+                  }}
+                  type="date"
+                  value={selectedServiceDate ?? summary.serviceDate}
+                />
+              </label>
               <span>주문 수 <b>{summary.totalDispatchCount}</b></span>
               <span>미배정 <b>{summary.unassignedCount}</b></span>
             </div>
@@ -489,6 +506,15 @@ function ControlPanels({
       ) : null}
     </aside>
   );
+}
+
+function todayInSeoul(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+  }).format(new Date());
 }
 
 function VehicleTemperatureDialog({

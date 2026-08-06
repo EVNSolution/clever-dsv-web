@@ -50,9 +50,12 @@ export type MapCanvasRoute = {
   casingColor?: string;
   color: string;
   coordinates: MapCanvasCoordinate[];
+  dashed?: boolean;
+  endMarker?: 'end' | 'interrupted';
   id: string;
   selected?: boolean;
   sortOrder?: number;
+  startMarker?: 'restart' | 'start';
 };
 
 export type MapCanvasVehiclePoint = {
