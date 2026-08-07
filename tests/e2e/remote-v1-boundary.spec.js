@@ -611,8 +611,9 @@ test('accepts a valid admin session only through the strict v1 session envelope'
   await expect(page.locator('.maplibregl-canvas')).toBeVisible();
   await expect(page.getByRole('img', { name: /출발 위치: 경기도 군포시 번영로 82/ })).toBeVisible();
   const vehicleList = page.getByRole('region', { name: '차량 리스트', exact: true });
-  await expect(vehicleList).not.toContainText('99테 6006');
-  await expect(vehicleList).toContainText('차량이 없습니다.');
+  await expect(vehicleList).toContainText('99테 6006');
+  await expect(vehicleList.locator('.control-vehicle-row', { hasText: '99테 6006' })).toContainText('주문 없음');
+  await expect(vehicleList.getByRole('radio', { name: /전체 1/ })).toBeChecked();
   await expect(page.getByLabel('고객사별 주문 리스트')).toBeVisible();
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session')).toBe(true);
   expect(api.unexpected).toEqual([]);
@@ -663,10 +664,14 @@ test('loads a historical control date with current dispatch contract fields', as
   expect(api.unexpected).toEqual([]);
 });
 
-test('shows only vehicles referenced by assigned dispatches in the scheduled fleet', async ({ page }) => {
+test('shows all vehicles by default and filters the fleet and map to vehicles with orders', async ({ page }) => {
+  const currentSummary = {
+    ...controlSummary,
+    serviceDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date()),
+  };
   const api = await installApiFixtures(page, {
     'GET /api/dsv/v1/session': v1Envelope(adminSession),
-    'GET /api/dsv/v1/control': v1Envelope(controlSummary),
+    'GET /api/dsv/v1/control': v1Envelope(currentSummary),
     'GET /api/dsv/v1/control/routes': v1Envelope({
       routes: [
         {
@@ -684,7 +689,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
           routePlanId: 'route-plan-g006-second',
         },
       ],
-      serviceDate: controlSummary.serviceDate,
+      serviceDate: currentSummary.serviceDate,
     }),
     'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
       items: [
@@ -751,6 +756,18 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
         { observedAt: '2026-07-23T00:05:00.000Z', temperatureA: 4.2, temperatureB: 4.4 },
         { observedAt: '2026-07-23T00:10:00.000Z', temperatureA: 4.3, temperatureB: 4.5 },
       ],
+    }),
+    'GET /api/dsv/v1/vehicles/vehicle-g006-scheduled/gps-trail-history': v1Envelope({
+      serviceDate: currentSummary.serviceDate,
+      sessions: [],
+      timezone: 'Asia/Seoul',
+      vehicleId: 'vehicle-g006-scheduled',
+    }),
+    'GET /api/dsv/v1/vehicles/vehicle-g006-unscheduled/gps-trail-history': v1Envelope({
+      serviceDate: currentSummary.serviceDate,
+      sessions: [],
+      timezone: 'Asia/Seoul',
+      vehicleId: 'vehicle-g006-unscheduled',
     }),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({
       items: [{ customerId: 'customer-g006-control', displayName: 'Canonical Customer', orderCount: 3, status: 'ACTIVE' }],
@@ -845,7 +862,9 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
   await expect(scheduledFleet).toContainText('99테 6006');
   await expect(scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' })).toContainText('2건');
   await expect(scheduledFleet).toContainText('77테 4004');
-  await expect(scheduledFleet).not.toContainText('88테 5005');
+  await expect(scheduledFleet).toContainText('88테 5005');
+  await expect(scheduledFleet.locator('.control-vehicle-row', { hasText: '88테 5005' })).toContainText('주문 없음');
+  await expect(scheduledFleet.getByRole('radio', { name: /전체 3/ })).toBeChecked();
   await expect(scheduledFleet).not.toContainText('vehicle-g006');
   await scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' }).getByRole('button', { name: '온도', exact: true }).click();
   const temperatureDialog = page.getByRole('dialog', { name: '99테 6006 온도' });
@@ -864,7 +883,7 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
   await temperatureDialog.getByRole('button', { name: '온도 이력 닫기' }).click();
   const customerInquiryLink = page.getByRole('link', { name: 'Canonical Customer 고객사 조회 화면으로 이동' });
   await expect(customerInquiryLink).toBeVisible();
-  await expect(customerInquiryLink).toHaveAttribute('href', `/customer/delivery-inquiry/admin?customer=customer-g006-control&serviceDate=${controlSummary.serviceDate}`);
+  await expect(customerInquiryLink).toHaveAttribute('href', `/customer/delivery-inquiry/admin?customer=customer-g006-control&serviceDate=${currentSummary.serviceDate}`);
   await expect(customerInquiryLink).toContainText('클릭하여 고객사 조회 화면으로 이동');
   await expect(customerInquiryLink).toHaveCSS('display', 'grid');
   await expect(page.getByLabel('고객사별 주문 리스트')).not.toContainText('destination-g006-control');
@@ -956,10 +975,26 @@ test('shows only vehicles referenced by assigned dispatches in the scheduled fle
       lineOpacity: ['case', ['get', 'selected'], 0.96, 1],
     },
     vehicles: [
-      { coordinates: [127.0412, 37.5021], label: '99테 6006', markerImageId: 'vehicle-marker-0066cc', vehicleId: null },
-      { coordinates: [126.9372235, 37.330948], label: '1대 예정', markerImageId: 'vehicle-marker-default', vehicleId: null },
+      { coordinates: [127.0412, 37.5021], label: '99테 6006', markerImageId: expect.stringMatching(/^vehicle-marker-(?!8e8e93)/u), vehicleId: 'vehicle-g006-scheduled' },
+      { coordinates: [127.12, 37.61], label: '88테 5005 · 주문 없음', markerImageId: 'vehicle-marker-8e8e93', vehicleId: 'vehicle-g006-unscheduled' },
+      { coordinates: [126.9372235, 37.330948], label: '1대 예정', markerImageId: 'vehicle-marker-default', vehicleId: 'scheduled-vehicles' },
     ],
   });
+  await scheduledFleet.locator('.control-vehicle-visibility label', { hasText: '주문 있음' }).click();
+  await expect(scheduledFleet).not.toContainText('88테 5005');
+  await expect.poll(() => page.evaluate(() => (
+    window.dsvMap.getSource('operational-vehicles').serialize().data.features.map((feature) => feature.properties.vehicleId)
+  ))).toEqual(['vehicle-g006-scheduled', 'scheduled-vehicles']);
+  await scheduledFleet.locator('.control-vehicle-visibility label', { hasText: '전체' }).click();
+  await expect(scheduledFleet).toContainText('88테 5005');
+  const noOrderVehicle = scheduledFleet.getByRole('button', { name: /88테 5005/ });
+  await noOrderVehicle.click();
+  await expect(noOrderVehicle).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('region', { name: '배송지 리스트', exact: true })).toContainText('선택한 차량에 배정된 배송지가 없습니다.');
+  await scheduledFleet.locator('.control-vehicle-visibility label', { hasText: '주문 있음' }).click();
+  await expect(page.getByRole('region', { name: '배송지 리스트', exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('고객사별 주문 리스트')).toBeVisible();
+  await scheduledFleet.locator('.control-vehicle-visibility label', { hasText: '전체' }).click();
   const colors = await page.evaluate(() => (
     window.dsvMap.getSource('operational-routes').serialize().data.features.map((feature) => feature.properties.color)
   ));

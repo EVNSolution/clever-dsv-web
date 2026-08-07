@@ -60,6 +60,7 @@ function vehicleFeatures(vehicles: MapCanvasVehiclePoint[]): FeatureCollection<P
       properties: {
         label: vehicle.label,
         markerImageId: markerImageId(vehicle.color),
+        vehicleId: vehicle.id,
       },
       geometry: {
         type: 'Point',
