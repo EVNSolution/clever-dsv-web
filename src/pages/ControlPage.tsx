@@ -671,10 +671,10 @@ function VehicleTemperatureDialog({
   vehicle: ManagementData['vehicles'][number];
 }): ReactElement {
   const temperatureBandCodes = temperatureBands.map((band) => band.code).join('\u0000');
-  const [selectedTemperatureBandCodes, setSelectedTemperatureBandCodes] = useState<string[]>(() => temperatureBands.map((band) => band.code));
+  const [selectedTemperatureBandCodes, setSelectedTemperatureBandCodes] = useState<string[]>([]);
   const [temperaturePickerOpen, setTemperaturePickerOpen] = useState(true);
   useEffect(() => {
-    setSelectedTemperatureBandCodes(temperatureBands.map((band) => band.code));
+    setSelectedTemperatureBandCodes([]);
   }, [temperatureBandCodes]);
   const selectedTemperatureBands = temperatureBands.filter((band) => selectedTemperatureBandCodes.includes(band.code));
   const temperatureWindowLabel = selectedTemperatureBands.length === 0
@@ -782,14 +782,15 @@ function TemperatureChart({
   const fiveMinutes = 5 * 60 * 1000;
   const thirtyMinutes = 30 * 60 * 1000;
   const height = 340;
-  const padding = { bottom: 38, left: 48, right: 20, top: 24 };
+  const axisWidth = 52;
+  const padding = { bottom: 38, right: 20, top: 24 };
   const timestamps = samples.map((sample) => new Date(sample.observedAt).getTime()).filter((value) => !Number.isNaN(value));
   const firstTime = Math.min(...timestamps);
   const lastTime = Math.max(...timestamps);
   const minTime = Math.floor(firstTime / thirtyMinutes) * thirtyMinutes;
   const maxTime = Math.max(minTime + thirtyMinutes, Math.ceil(lastTime / thirtyMinutes) * thirtyMinutes);
   const halfHourCount = Math.max(1, Math.round((maxTime - minTime) / thirtyMinutes));
-  const width = Math.max(860, padding.left + padding.right + halfHourCount * 108);
+  const width = Math.max(808, padding.right + halfHourCount * 108);
   const scaleValues = [...values, ...temperatureBands.flatMap((band) => [band.minimum, band.maximum])];
   let minValue = Math.floor(Math.min(...scaleValues) / 5) * 5;
   let maxValue = Math.ceil(Math.max(...scaleValues) / 5) * 5;
@@ -799,8 +800,8 @@ function TemperatureChart({
   }
   const xFor = (observedAt: string): number => {
     const timestamp = new Date(observedAt).getTime();
-    if (maxTime === minTime || Number.isNaN(timestamp)) return padding.left;
-    return padding.left + ((timestamp - minTime) / (maxTime - minTime)) * (width - padding.left - padding.right);
+    if (maxTime === minTime || Number.isNaN(timestamp)) return 0;
+    return ((timestamp - minTime) / (maxTime - minTime)) * (width - padding.right);
   };
   const yFor = (value: number): number => {
     if (maxValue === minValue) return height / 2;
@@ -817,13 +818,23 @@ function TemperatureChart({
       <div className="temperature-legend" aria-hidden="true">
         {channels.map((channel) => <span key={channel.key}><i style={{ background: channel.color }} />{channel.label}</span>)}
       </div>
-      <div className="temperature-chart-scroll" ref={scrollRef}>
-        <svg
-          aria-label="전날부터 최근 수신까지 차량 온도 A 채널과 B 채널 꺾은선 차트"
-          role="img"
-          style={{ width: `${width}px` }}
-          viewBox={`0 0 ${width} ${height}`}
-        >
+      <div className="temperature-chart-frame">
+        <svg aria-hidden="true" className="temperature-y-axis" viewBox={`0 0 ${axisWidth} ${height}`}>
+          {yTicks.map((tick) => {
+            const major = tick % 5 === 0;
+            return major ? (
+              <text className="temperature-axis-label" key={tick} x={axisWidth - 10} y={yFor(tick) + 4} textAnchor="end">{tick}℃</text>
+            ) : null;
+          })}
+          <line className="temperature-axis-line" x1={axisWidth - 1} x2={axisWidth - 1} y1={padding.top} y2={height - padding.bottom} />
+        </svg>
+        <div className="temperature-chart-scroll" ref={scrollRef}>
+          <svg
+            aria-label="전날부터 최근 수신까지 차량 온도 A 채널과 B 채널 꺾은선 차트"
+            role="img"
+            style={{ width: `${width}px` }}
+            viewBox={`0 0 ${width} ${height}`}
+          >
           <title>전날부터 최근 수신까지 차량 온도 이력</title>
           <desc>A 채널과 B 채널을 5분 수집 포인트와 꺾은선으로 표시하고 운영 상태별 온도 범위를 투명 영역으로 구분합니다.</desc>
           {temperatureBands.map((band) => (
@@ -833,8 +844,8 @@ function TemperatureChart({
               fillOpacity="0.12"
               height={Math.max(1, yFor(band.minimum) - yFor(band.maximum))}
               key={band.code}
-              width={width - padding.left - padding.right}
-              x={padding.left}
+              width={width - padding.right}
+              x="0"
               y={yFor(band.maximum)}
             >
               <title>{`${band.code} ${band.label} ${formatTemperatureValue(band.minimum)}℃ ~ ${formatTemperatureValue(band.maximum)}℃`}</title>
@@ -846,13 +857,13 @@ function TemperatureChart({
               <g key={tick}>
                 <line
                   className={`temperature-grid-line temperature-grid-x temperature-grid-${major ? 'major' : 'minor'}`}
-                  x1={xForTimestamp(tick, minTime, maxTime, width, padding)}
-                  x2={xForTimestamp(tick, minTime, maxTime, width, padding)}
+                  x1={xForTimestamp(tick, minTime, maxTime, width, { ...padding, left: 0 })}
+                  x2={xForTimestamp(tick, minTime, maxTime, width, { ...padding, left: 0 })}
                   y1={padding.top}
                   y2={height - padding.bottom}
                 />
                 {major ? (
-                  <text className="temperature-axis-label" x={xForTimestamp(tick, minTime, maxTime, width, padding)} y={height - 10} textAnchor="middle">
+                  <text className="temperature-axis-label" x={xForTimestamp(tick, minTime, maxTime, width, { ...padding, left: 0 })} y={height - 10} textAnchor="middle">
                     {formatTemperatureAxisTime(new Date(tick).toISOString())}
                   </text>
                 ) : null}
@@ -863,13 +874,11 @@ function TemperatureChart({
             const major = tick % 5 === 0;
             return (
               <g key={tick}>
-                <line className={`temperature-grid-line temperature-grid-y temperature-grid-${major ? 'major' : 'minor'}`} x1={padding.left} x2={width - padding.right} y1={yFor(tick)} y2={yFor(tick)} />
-                {major ? <text className="temperature-axis-label" x={padding.left - 8} y={yFor(tick) + 4} textAnchor="end">{tick}℃</text> : null}
+                <line className={`temperature-grid-line temperature-grid-y temperature-grid-${major ? 'major' : 'minor'}`} x1="0" x2={width - padding.right} y1={yFor(tick)} y2={yFor(tick)} />
               </g>
             );
           })}
-          <line className="temperature-axis-line" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
-          <line className="temperature-axis-line" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
+          <line className="temperature-axis-line" x1="0" x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
           {channels.map((channel) => {
             const points = samples
               .filter((sample) => typeof sample[channel.key] === 'number' && Number.isFinite(sample[channel.key]))
@@ -886,7 +895,8 @@ function TemperatureChart({
               </g>
             );
           })}
-        </svg>
+          </svg>
+        </div>
       </div>
     </div>
   );

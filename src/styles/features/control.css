@@ -220,7 +220,9 @@
 .temperature-legend { display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-bottom:8px; color:var(--color-muted); font-size:12px; font-weight:850; }
 .temperature-legend span { display:inline-flex; align-items:center; gap:6px; }
 .temperature-legend i { width:10px; height:10px; border-radius:50%; }
-.temperature-chart-scroll { overflow-x:auto; overscroll-behavior-x:contain; }
+.temperature-chart-frame { display:grid; grid-template-columns:52px minmax(0, 1fr); }
+.temperature-y-axis { width:52px; height:340px; display:block; background:var(--color-white); }
+.temperature-chart-scroll { min-width:0; overflow-x:auto; overscroll-behavior-x:contain; }
 .temperature-chart svg { height:auto; max-width:none; display:block; }
 .temperature-condition-band { pointer-events:none; }
 .temperature-grid-line { stroke:var(--color-border); stroke-width:1; }
