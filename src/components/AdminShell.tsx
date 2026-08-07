@@ -20,7 +20,7 @@ import { loadVehicleGpsTrailHistory } from '../services/control';
 import type { VehicleGpsTrailHistory } from '../services/control';
 import type { ManagementData } from '../demo/management';
 import type { DepartureLocation } from './DepartureMarker';
-import type { MapCanvasPoint, MapCanvasRoute, MapCanvasVehiclePoint } from './MapCanvas';
+import type { MapCanvasCenterRequest, MapCanvasPoint, MapCanvasRoute, MapCanvasVehiclePoint } from './MapCanvas';
 import {
   assignControlDestinationProgress,
   CONTROL_PROGRESS_COLORS,
@@ -72,6 +72,7 @@ export function AdminShell({
   const [controlVehicleVisibility, setControlVehicleVisibility] = useState<ControlVehicleVisibility>('ALL');
   const [selectedControlVehicleId, setSelectedControlVehicleId] = useState<string>();
   const [selectedControlDestinationId, setSelectedControlDestinationId] = useState<string>();
+  const [controlMapCenterRequest, setControlMapCenterRequest] = useState<MapCanvasCenterRequest>();
   const [controlRouteResults, setControlRouteResults] = useState<ReadonlyMap<string, ControlRouteResult>>(new Map());
   const [controlVehicleTrail, setControlVehicleTrail] = useState<VehicleGpsTrailHistory>();
   const vehicleColors = useMemo(
@@ -304,6 +305,7 @@ export function AdminShell({
               <Suspense fallback={<MapFallback />}>
                 <MapCanvas
                   ariaLabel="관리자 관제 지도 - OpenFreeMap"
+                  centerRequest={controlMapCenterRequest}
                   departureLocation={departureLocation}
                   onPointSelect={(pointId) => {
                     const vehicleId = controlOrders.find((order) => order.destinationId === pointId)?.vehicleId;
@@ -311,6 +313,10 @@ export function AdminShell({
                       setSelectedControlVehicleId(vehicleId);
                       setSelectedControlDestinationId(pointId);
                     }
+                  }}
+                  onVehicleSelect={(vehicleId) => {
+                    setSelectedControlDestinationId(undefined);
+                    setSelectedControlVehicleId(vehicleId);
                   }}
                   points={controlMapPoints}
                   routes={[...controlMapRoutes, ...controlTrailRoutes]}
@@ -333,6 +339,13 @@ export function AdminShell({
                   onVehicleSelect={(vehicleId) => {
                     setSelectedControlDestinationId(undefined);
                     setSelectedControlVehicleId((current) => current === vehicleId ? undefined : vehicleId);
+                  }}
+                  onVehicleCenter={(latitude, longitude) => {
+                    setControlMapCenterRequest((current) => ({
+                      id: (current?.id ?? 0) + 1,
+                      latitude,
+                      longitude,
+                    }));
                   }}
                   selectedDestinationId={selectedControlDestinationId}
                   selectedVehicleId={selectedControlVehicleId}

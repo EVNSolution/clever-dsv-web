@@ -15,12 +15,14 @@ import { updateVehicleMarkers } from './map/VehicleMarkers';
 
 type MapCanvasProps = {
   ariaLabel: string;
+  centerRequest?: MapCanvasCenterRequest;
   departureLocation?: DepartureLocation | null;
   onMapPointAdd?: (coordinate: MapCanvasCoordinate) => void;
   onReady?: () => void;
   onPointSelect?: (pointId: string) => void;
   onSelectionChange?: (coordinates: MapCanvasCoordinate[]) => void;
   onSelectionComplete?: (coordinates: MapCanvasCoordinate[]) => void;
+  onVehicleSelect?: (vehicleId: string) => void;
   points?: MapCanvasPoint[];
   selectionCoordinates?: MapCanvasCoordinate[];
   selectionMode?: boolean;
@@ -35,6 +37,12 @@ type MapCanvasProps = {
 export type { DepartureLocation } from './DepartureMarker';
 
 export type MapCanvasCoordinate = [longitude: number, latitude: number];
+
+export type MapCanvasCenterRequest = {
+  id: number;
+  latitude: number;
+  longitude: number;
+};
 
 export type MapCanvasPoint = {
   color?: string;
@@ -76,12 +84,14 @@ const initialMapLoadTimeoutMs = 15_000;
 
 export function MapCanvas({
   ariaLabel,
+  centerRequest,
   departureLocation = null,
   onMapPointAdd,
   onReady,
   onPointSelect,
   onSelectionChange,
   onSelectionComplete,
+  onVehicleSelect,
   points = [],
   selectionCoordinates = [],
   selectionMode = false,
@@ -100,6 +110,7 @@ export function MapCanvas({
   const onPointSelectRef = useRef(onPointSelect);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const onSelectionCompleteRef = useRef(onSelectionComplete);
+  const onVehicleSelectRef = useRef(onVehicleSelect);
   const selectionCoordinatesRef = useRef(selectionCoordinates);
   const readyNotifiedRef = useRef(false);
   const [loadState, setLoadState] = useState<MapLoadState>({ status: 'preview' });
@@ -109,6 +120,7 @@ export function MapCanvas({
   onPointSelectRef.current = onPointSelect;
   onSelectionChangeRef.current = onSelectionChange;
   onSelectionCompleteRef.current = onSelectionComplete;
+  onVehicleSelectRef.current = onVehicleSelect;
   selectionCoordinatesRef.current = selectionCoordinates;
 
   useEffect(() => {
@@ -239,7 +251,10 @@ export function MapCanvas({
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map || (loadState.status !== 'revealing' && loadState.status !== 'ready')) return;
-    void updateVehicleMarkers(map, vehicles).catch(() => undefined);
+    void updateVehicleMarkers(map, vehicles, (vehicleId, coordinate) => {
+      onVehicleSelectRef.current?.(vehicleId);
+      map.easeTo({ center: coordinate, duration: 260 });
+    }).catch(() => undefined);
   }, [loadState.status, vehicles]);
 
   useEffect(() => {
@@ -424,6 +439,15 @@ export function MapCanvas({
       zoom: Math.max(map.getZoom(), 12),
     });
   }, [loadState.status, points, selectedPointId]);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !centerRequest || loadState.status !== 'ready') return;
+    map.easeTo({
+      center: [centerRequest.longitude, centerRequest.latitude],
+      duration: 260,
+    });
+  }, [centerRequest, loadState.status]);
 
   useEffect(() => {
     if (loadState.status !== 'revealing' || !window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;

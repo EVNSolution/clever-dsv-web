@@ -12,6 +12,7 @@ const vehicleIconPath = 'M20 8H17V4H3C1.9 4 1 4.9 1 6V17H3C3 18.66 4.34 20 6 20C
 export async function updateVehicleMarkers(
   map: maplibregl.Map,
   vehicles: MapCanvasVehiclePoint[],
+  onVehicleSelect?: (vehicleId: string, coordinate: [number, number]) => void,
 ): Promise<void> {
   for (const vehicle of vehicles) registerMarkerImage(map, vehicle.color);
   registerMarkerImage(map);
@@ -48,6 +49,16 @@ export async function updateVehicleMarkers(
         'text-halo-width': 2.2,
       },
     });
+    map.on('click', markerLayerId, (event) => {
+      const feature = event.features?.[0];
+      const vehicleId = feature?.properties?.vehicleId;
+      if (typeof vehicleId !== 'string' || feature?.geometry.type !== 'Point') return;
+      const [longitude, latitude] = feature.geometry.coordinates;
+      if (typeof longitude !== 'number' || typeof latitude !== 'number') return;
+      onVehicleSelect?.(vehicleId, [longitude, latitude]);
+    });
+    map.on('mouseenter', markerLayerId, () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', markerLayerId, () => { map.getCanvas().style.cursor = ''; });
   }
   (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData(vehicleFeatures(vehicles));
 }

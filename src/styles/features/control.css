@@ -18,7 +18,7 @@
 }
 .side .section-heading .chip { min-height:24px; }
 .panel-view {
-  flex:1 1 auto; height:auto; display: grid;
+  position:relative; flex:1 1 auto; height:auto; display: grid;
   grid-template-rows: minmax(276px, 36%) minmax(0, 1fr);
   gap: 14px; min-height: 0; overflow: visible;
 }
@@ -107,7 +107,7 @@
 .control-vehicle-row > i { grid-column:1; grid-row:1; width:8px; height:24px; border-radius:999px; background:var(--control-route-color); }
 .control-vehicle-select {
   grid-column:2; grid-row:1;
-  min-width:0; min-height:34px; display:grid; grid-template-columns:minmax(0, 1fr) 16px; gap:6px; align-items:center;
+  min-width:0; min-height:34px; display:block;
   border:0; padding:0; background:transparent; color:inherit; cursor:pointer; font:inherit; text-align:left;
 }
 .control-vehicle-select:focus-visible,
@@ -127,8 +127,20 @@
   display:block; min-width:0; overflow:visible; color:var(--color-ink); font-size:11px; font-weight:750; line-height:1.45;
   overflow-wrap:anywhere; text-overflow:clip; white-space:normal;
 }
-.control-vehicle-details { grid-column:2 / -1; grid-row:2; width:100%; grid-template-columns:repeat(3, minmax(0, 1fr)); }
+.control-vehicle-detail-panel {
+  position:absolute; right:calc(100% + 14px); top:0; width:320px; max-height:100%; z-index:2;
+  padding:16px; overflow:auto; background:rgba(255,255,255,.97); backdrop-filter:blur(18px);
+}
+.control-vehicle-detail-content { grid-template-columns:repeat(2, minmax(0, 1fr)); }
 .control-vehicle-detail-wide { grid-column:1 / -1; }
+.control-vehicle-center-button {
+  min-height:30px; display:inline-flex; align-items:center; gap:6px; border:1px solid var(--color-control-border); border-radius:9px;
+  padding:0 9px; background:var(--color-white); color:var(--color-ink); cursor:pointer; font:850 10px/1 var(--font-sans); white-space:nowrap;
+}
+.control-vehicle-center-button:hover:not(:disabled) { border-color:var(--color-black); background:var(--color-row-hover); }
+.control-vehicle-center-button:focus-visible { outline:2px solid var(--color-black); outline-offset:2px; }
+.control-vehicle-center-button:disabled { cursor:not-allowed; opacity:.45; }
+.control-vehicle-center-button svg { width:15px; height:15px; stroke-width:2.2; }
 .control-detail-list { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
 .control-detail-list li { min-width:0; display:grid; grid-template-columns:minmax(72px, auto) minmax(0, 1fr); gap:8px; align-items:start; }
 .control-detail-list strong,

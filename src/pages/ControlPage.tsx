@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactElement } from 'react';
-import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, Crosshair, X } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { loadControlSummary, loadVehicleTemperatureHistory } from '../services/control';
 import type { ControlSummary, VehicleTemperatureHistory, VehicleTemperatureSample } from '../services/control';
@@ -51,6 +51,7 @@ export function ControlPage({
   onOrdersChange,
   onManagementChange,
   onDestinationSelect,
+  onVehicleCenter,
   onVehicleSelect,
   selectedDestinationId,
   selectedVehicleId,
@@ -62,6 +63,7 @@ export function ControlPage({
   onManagementChange?: (management: ManagementData | undefined) => void;
   onOrdersChange?: (orders: DispatchListItem[], serviceDate?: string) => void;
   onDestinationSelect?: (destinationId: string) => void;
+  onVehicleCenter?: (latitude: number, longitude: number) => void;
   onVehicleSelect?: (vehicleId: string) => void;
   selectedDestinationId?: string;
   selectedVehicleId?: string;
@@ -76,6 +78,7 @@ export function ControlPage({
         onManagementChange={onManagementChange}
         onOrdersChange={onOrdersChange}
         onDestinationSelect={onDestinationSelect}
+        onVehicleCenter={onVehicleCenter}
         onVehicleSelect={onVehicleSelect}
         selectedDestinationId={selectedDestinationId}
         selectedVehicleId={selectedVehicleId}
@@ -113,6 +116,7 @@ function RemoteControlPage({
   onOrdersChange,
   onManagementChange,
   onDestinationSelect,
+  onVehicleCenter,
   onVehicleSelect,
   selectedDestinationId,
   selectedVehicleId,
@@ -124,6 +128,7 @@ function RemoteControlPage({
   onManagementChange?: (management: ManagementData | undefined) => void;
   onOrdersChange?: (orders: DispatchListItem[], serviceDate?: string) => void;
   onDestinationSelect?: (destinationId: string) => void;
+  onVehicleCenter?: (latitude: number, longitude: number) => void;
   onVehicleSelect?: (vehicleId: string) => void;
   selectedDestinationId?: string;
   selectedVehicleId?: string;
@@ -137,6 +142,7 @@ function RemoteControlPage({
   const [panelError, setPanelError] = useState('');
   const [panelLoading, setPanelLoading] = useState(true);
   const [serviceDateFilter, setServiceDateFilter] = useState<string>();
+  const managementRef = useRef<ManagementData | undefined>(undefined);
 
   useEffect(() => {
     const summaryController = new AbortController();
@@ -156,6 +162,7 @@ function RemoteControlPage({
           loadDispatchList(nextSummary.serviceDate, {}, dispatchController.signal),
         ]);
         if (summaryController.signal.aborted || dispatchController.signal.aborted) return;
+        managementRef.current = nextManagement;
         setManagement(nextManagement);
         onManagementChange?.(nextManagement);
         setOrders(dispatch.rows);
@@ -165,14 +172,17 @@ function RemoteControlPage({
         if (error instanceof DOMException && error.name === 'AbortError') return;
         if (initial) {
           setSummary(undefined);
+          managementRef.current = undefined;
           setManagement(undefined);
           onManagementChange?.(undefined);
           setOrders([]);
           onOrdersChange?.([]);
           setPanelError(error instanceof Error ? error.message : '관제 정보를 불러오지 못했습니다.');
         } else {
-          setManagement((current) => markControlTelemetryStale(current));
-          onManagementChange?.(undefined);
+          const staleManagement = markControlTelemetryStale(managementRef.current);
+          managementRef.current = staleManagement;
+          setManagement(staleManagement);
+          onManagementChange?.(staleManagement);
         }
       } finally {
         refreshing = false;
@@ -205,6 +215,7 @@ function RemoteControlPage({
       drivers={management?.drivers ?? []}
       onVehicleSelect={onVehicleSelect}
       onDestinationSelect={onDestinationSelect}
+      onVehicleCenter={onVehicleCenter}
       onServiceDateChange={setServiceDateFilter}
       selectedDestinationId={selectedDestinationId}
       selectedServiceDate={serviceDateFilter}
@@ -241,6 +252,7 @@ function ControlPanels({
   summary,
   vehicles,
   onVehicleSelect,
+  onVehicleCenter,
   onDestinationSelect,
   onServiceDateChange,
   selectedDestinationId,
@@ -262,6 +274,7 @@ function ControlPanels({
   summary?: ControlSummary;
   vehicles: ManagementData['vehicles'];
   onVehicleSelect?: (vehicleId: string) => void;
+  onVehicleCenter?: (latitude: number, longitude: number) => void;
   onDestinationSelect?: (destinationId: string) => void;
   onServiceDateChange?: (serviceDate: string) => void;
   selectedDestinationId?: string;
@@ -286,6 +299,23 @@ function ControlPanels({
   const vehicleOrderCounts = controlVehicleOrderCounts(orders);
   const visibleVehicles = visibleControlVehicles(vehicles, vehicleOrderCounts, vehicleVisibility);
   const orderedVehicleCount = vehicles.filter((vehicle) => (vehicleOrderCounts.get(vehicle.id) ?? 0) > 0).length;
+  const selectedVehicle = selectedVehicleId === undefined
+    ? undefined
+    : vehicles.find((vehicle) => vehicle.id === selectedVehicleId);
+  const selectedVehicleDrivers = selectedVehicle === undefined
+    ? []
+    : controlVehicleDriverNames(selectedVehicle.id, orders, drivers, assignments);
+  const selectedVehicleConditions = selectedVehicle === undefined
+    ? []
+    : controlVehicleConditionLabels(selectedVehicle.id, orders, conditions);
+  const selectedVehicleInstructions = selectedVehicle === undefined
+    ? []
+    : controlVehicleSpecialInstructions(selectedVehicle.id, orders);
+  const selectedVehicleHasPosition = selectedVehicle !== undefined
+    && typeof selectedVehicle.vehicleLatitude === 'number'
+    && Number.isFinite(selectedVehicle.vehicleLatitude)
+    && typeof selectedVehicle.vehicleLongitude === 'number'
+    && Number.isFinite(selectedVehicle.vehicleLongitude);
 
   useEffect(() => {
     const compactViewport = window.matchMedia(mobileControlQuery);
@@ -352,6 +382,43 @@ function ControlPanels({
         />
       ) : null}
       <div className={`panel-view ${selectedVehicleId === undefined ? 'vehicle-idle' : 'vehicle-focused'}${mobilePanel ? ' mobile-panel-open' : ''}`}>
+        {selectedVehicle ? (
+          <section className="card panel expand-card control-vehicle-detail-panel" aria-label="차량 상세">
+            <div className="tab-line section-heading">
+              <span>차량 상세</span>
+              <button
+                className="control-vehicle-center-button"
+                disabled={!selectedVehicleHasPosition}
+                onClick={() => {
+                  if (!selectedVehicleHasPosition) return;
+                  onVehicleCenter?.(selectedVehicle.vehicleLatitude as number, selectedVehicle.vehicleLongitude as number);
+                }}
+                title={selectedVehicleHasPosition ? '현재 줌을 유지하고 차량을 지도 중앙에 표시합니다.' : '확인된 차량 위치가 없습니다.'}
+                type="button"
+              >
+                <Crosshair aria-hidden="true" />
+                <span>차량 중앙정렬</span>
+              </button>
+            </div>
+            <div className="control-detail-card control-vehicle-detail-content">
+              <span><small>차량 번호</small><b className="control-detail-value">{selectedVehicle.plate || '차량 번호 미등록'}</b></span>
+              <span><small>차종</small><b className="control-detail-value">{selectedVehicle.type || '차종 미등록'}</b></span>
+              <span><small>운행</small><b className="control-detail-value">{controlVehicleMotionText(selectedVehicle)}</b></span>
+              <span><small>운전자</small><b className="control-detail-value">{selectedVehicleDrivers.join(', ')}</b></span>
+              <span className="control-vehicle-detail-wide"><small>운송 조건</small><b className="control-detail-value">{selectedVehicleConditions.join(', ')}</b></span>
+              <span className="control-vehicle-detail-wide">
+                <small>배송 특이사항</small>
+                {selectedVehicleInstructions.length ? (
+                  <ul className="control-detail-list">
+                    {selectedVehicleInstructions.map((instruction) => (
+                      <li key={instruction.id}><strong>{instruction.destination}</strong><span>{instruction.note}</span></li>
+                    ))}
+                  </ul>
+                ) : <b className="control-detail-value">특이사항 없음</b>}
+              </span>
+            </div>
+          </section>
+        ) : null}
         <section className={`card panel expand-card mobile-panel-${mobilePanel === 'vehicles' ? 'expanded' : 'collapsed'}`} id="vehicleCard" aria-label="차량 리스트">
           <div className="tab-line section-heading">
             <span className="desktop-panel-title">차량 리스트</span>
@@ -393,9 +460,6 @@ function ControlPanels({
           {!loading && !error ? (
             <div className="control-vehicle-list fleet overlay-scroll" id="fleetList">
               {visibleVehicles.map((vehicle) => {
-                const driverNames = controlVehicleDriverNames(vehicle.id, orders, drivers, assignments);
-                const conditionLabels = controlVehicleConditionLabels(vehicle.id, orders, conditions);
-                const specialInstructions = controlVehicleSpecialInstructions(vehicle.id, orders);
                 return <div
                   className={`control-vehicle-row${selectedVehicleId === vehicle.id ? ' selected' : ''}`}
                   key={vehicle.id}
@@ -403,35 +467,15 @@ function ControlPanels({
                 >
                   <i aria-hidden="true" />
                   <button
-                    aria-expanded={selectedVehicleId === vehicle.id}
                     aria-pressed={selectedVehicleId === vehicle.id}
                     className="control-vehicle-select"
                     onClick={() => onVehicleSelect?.(vehicle.id)}
                     type="button"
                   >
                     <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong></span>
-                    <ChevronDown aria-hidden="true" className="control-row-chevron" />
                   </button>
                   <em>{(vehicleOrderCounts.get(vehicle.id) ?? 0) > 0 ? `${vehicleOrderCounts.get(vehicle.id)}건` : '주문 없음'}</em>
                   <button className="control-temperature-button" type="button" onClick={() => setTemperatureVehicle(vehicle)}>온도</button>
-                  {selectedVehicleId === vehicle.id ? (
-                    <div className="control-detail-card control-vehicle-details" id={`control-vehicle-details-${vehicle.id}`}>
-                      <span><small>차종</small><b className="control-detail-value">{vehicle.type || '차종 미등록'}</b></span>
-                      <span><small>운행</small><b className="control-detail-value">{controlVehicleMotionText(vehicle)}</b></span>
-                      <span><small>운전자</small><b className="control-detail-value">{driverNames.join(', ')}</b></span>
-                      <span className="control-vehicle-detail-wide"><small>운송 조건</small><b className="control-detail-value">{conditionLabels.join(', ')}</b></span>
-                      <span className="control-vehicle-detail-wide">
-                        <small>배송 특이사항</small>
-                        {specialInstructions.length ? (
-                          <ul className="control-detail-list">
-                            {specialInstructions.map((instruction) => (
-                              <li key={instruction.id}><strong>{instruction.destination}</strong><span>{instruction.note}</span></li>
-                            ))}
-                          </ul>
-                        ) : <b className="control-detail-value">특이사항 없음</b>}
-                      </span>
-                    </div>
-                  ) : null}
                 </div>
               })}
               {!visibleVehicles.length ? <div className="panel-state">표시할 차량이 없습니다.</div> : null}

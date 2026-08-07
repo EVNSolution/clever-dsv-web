@@ -1002,13 +1002,18 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
 
   const selectedVehicle = scheduledFleet.getByRole('button', { name: /99테 6006/ });
   const selectedVehicleRow = scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' });
-  await expect(selectedVehicle).toHaveAttribute('aria-expanded', 'false');
   await expect(selectedVehicleRow.locator('.control-vehicle-details')).toHaveCount(0);
   await selectedVehicle.click();
   await expect(selectedVehicle).toHaveAttribute('aria-pressed', 'true');
-  await expect(selectedVehicle).toHaveAttribute('aria-expanded', 'true');
-  const vehicleDetails = selectedVehicleRow.locator('.control-vehicle-details');
+  await expect(selectedVehicleRow.locator('.control-vehicle-details')).toHaveCount(0);
+  const vehicleDetails = page.getByRole('region', { name: '차량 상세', exact: true });
   await expect(vehicleDetails).toBeVisible();
+  const panelPositions = await Promise.all([
+    vehicleDetails.boundingBox(),
+    scheduledFleet.boundingBox(),
+  ]);
+  expect(panelPositions[0]?.x + (panelPositions[0]?.width ?? 0)).toBeLessThan(panelPositions[1]?.x ?? 0);
+  await expect(vehicleDetails).toContainText('99테 6006');
   await expect(vehicleDetails).toContainText('Scheduled Truck');
   await expect(vehicleDetails).toContainText('이동');
   await expect(vehicleDetails).toContainText('김도윤');
@@ -1016,6 +1021,16 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await expect(vehicleDetails).toContainText('AMBIENT');
   await expect(vehicleDetails).toContainText('오전 11시 배송 필수');
   await expect(vehicleDetails).not.toContainText('온도 이탈');
+  const zoomBeforeCentering = await page.evaluate(() => {
+    window.dsvMap.jumpTo({ center: [126.85, 37.42], zoom: 10.75 });
+    return window.dsvMap.getZoom();
+  });
+  await vehicleDetails.getByRole('button', { name: '차량 중앙정렬' }).click();
+  await expect.poll(() => page.evaluate(() => {
+    const center = window.dsvMap.getCenter();
+    return [Number(center.lng.toFixed(4)), Number(center.lat.toFixed(4))];
+  })).toEqual([127.0412, 37.5021]);
+  expect(await page.evaluate(() => window.dsvMap.getZoom())).toBeCloseTo(zoomBeforeCentering, 5);
   await expect(page.locator('#destinationCard .control-destination-row')).toHaveCount(1);
   await expect(page.getByLabel('배송지 순서 1')).toHaveText('1');
   await expect(page.getByLabel('배송지 순서 1')).toHaveCSS('background-color', 'rgb(31, 139, 76)');
@@ -1062,6 +1077,32 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
     destinationCount: 2,
     iconAllowOverlap: false,
   });
+  await page.evaluate(() => new Promise((resolve) => {
+    window.dsvMap.jumpTo({ center: [127, 37.49], zoom: 10.75 });
+    window.dsvMap.once('idle', resolve);
+    window.dsvMap.triggerRepaint();
+  }));
+  const markerClickTarget = await page.evaluate(() => {
+    const point = window.dsvMap.project([127.0412, 37.5021]);
+    const vehicleIds = window.dsvMap
+      .queryRenderedFeatures(point, { layers: ['operational-vehicle-markers'] })
+      .map((feature) => feature.properties.vehicleId);
+    const canvas = window.dsvMap.getCanvas().getBoundingClientRect();
+    return {
+      vehicleIds,
+      x: canvas.left + point.x,
+      y: canvas.top + point.y,
+      zoom: window.dsvMap.getZoom(),
+    };
+  });
+  expect(markerClickTarget.vehicleIds).toContain('vehicle-g006-scheduled');
+  await page.mouse.click(markerClickTarget.x, markerClickTarget.y);
+  await expect(selectedVehicle).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => page.evaluate(() => {
+    const center = window.dsvMap.getCenter();
+    return [Number(center.lng.toFixed(4)), Number(center.lat.toFixed(4))];
+  })).toEqual([127.0412, 37.5021]);
+  expect(await page.evaluate(() => window.dsvMap.getZoom())).toBeCloseTo(markerClickTarget.zoom, 5);
   expect(api.unexpected).toEqual([]);
 });
 
@@ -1077,6 +1118,11 @@ test('marks previously loaded telemetry stale when a background refresh fails', 
       unassignedCount: 0,
     }),
     'GET /api/dsv/v1/control/routes': v1Envelope({ routes: [], serviceDate: controlSummary.serviceDate }),
+    'GET /api/dsv/v1/vehicles/vehicle-g006-refresh/gps-trail-history': v1Envelope({
+      segments: [],
+      serviceDate: controlSummary.serviceDate,
+      vehicleId: 'vehicle-g006-refresh',
+    }),
     'GET /api/dsv/v1/vehicles?limit=100': () => {
       vehicleReads += 1;
       if (vehicleReads > 1) return v1Error(503, 'temporary telemetry read failure');
@@ -1126,7 +1172,7 @@ test('marks previously loaded telemetry stale when a background refresh fails', 
   const scheduledFleet = page.getByRole('region', { name: '차량 리스트', exact: true });
   const vehicleRow = scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' });
   await vehicleRow.getByRole('button', { name: /99테 6006/ }).click();
-  const vehicleDetails = vehicleRow.locator('.control-vehicle-details');
+  const vehicleDetails = page.getByRole('region', { name: '차량 상세', exact: true });
   await expect(vehicleDetails).toContainText('정차');
   await page.clock.fastForward(30_000);
   await expect.poll(() => vehicleReads).toBeGreaterThan(1);
