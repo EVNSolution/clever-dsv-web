@@ -395,24 +395,29 @@ function ControlPanels({
               <span className="control-vehicle-detail-primary"><small>차종</small><b className="control-detail-value">{selectedVehicle.type || '차종 미등록'}</b></span>
               <span className="control-vehicle-detail-compact"><small>운행</small><b className="control-detail-value">{controlVehicleMotionText(selectedVehicle)}</b></span>
               <span className="control-vehicle-detail-primary"><small>운전자</small><b className="control-detail-value">{selectedVehicleDrivers.join(', ')}</b></span>
-              <span className="control-vehicle-detail-wide"><small>운송 조건</small><b className="control-detail-value">{selectedVehicleConditions.join(', ')}</b></span>
-              <span className="control-vehicle-detail-wide">
-                <small>배송 특이사항</small>
-                {selectedVehicleInstructions.length ? (
-                  <ul className="control-detail-list">
-                    {selectedVehicleInstructions.map((instruction) => (
-                      <li key={instruction.id}><strong>{instruction.destination}</strong><span>{instruction.note}</span></li>
-                    ))}
-                  </ul>
-                ) : <b className="control-detail-value">특이사항 없음</b>}
-              </span>
-              <div className="control-vehicle-recency" aria-label="차량 최근 조회 상태">
+              <div className="control-vehicle-detail-section">
+                <span>
+                  <small>운송 조건</small>
+                  <b className="control-detail-value">{selectedVehicleConditions.join(', ')}</b>
+                </span>
                 <TelemetryRecency
                   label="최근 위치 조회"
                   now={telemetryClock}
                   observedAt={selectedVehicle.vehiclePositionObservedAt}
                   stale={selectedVehicle.vehiclePositionStale === true}
                 />
+              </div>
+              <div className="control-vehicle-detail-section">
+                <span>
+                  <small>배송 특이사항</small>
+                  {selectedVehicleInstructions.length ? (
+                    <ul className="control-detail-list">
+                      {selectedVehicleInstructions.map((instruction) => (
+                        <li key={instruction.id}><strong>{instruction.destination}</strong><span>{instruction.note}</span></li>
+                      ))}
+                    </ul>
+                  ) : <b className="control-detail-value">특이사항 없음</b>}
+                </span>
                 <TelemetryRecency
                   label="최근 온도 조회"
                   now={telemetryClock}
