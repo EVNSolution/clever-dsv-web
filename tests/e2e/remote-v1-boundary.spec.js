@@ -976,7 +976,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
     },
     vehicles: [
       { coordinates: [127.0412, 37.5021], label: '99테 6006', markerImageId: expect.stringMatching(/^vehicle-marker-(?!8e8e93)/u), vehicleId: 'vehicle-g006-scheduled' },
-      { coordinates: [127.12, 37.61], label: '88테 5005 · 주문 없음', markerImageId: 'vehicle-marker-8e8e93', vehicleId: 'vehicle-g006-unscheduled' },
+      { coordinates: [127.12, 37.61], label: '88테 5005', markerImageId: 'vehicle-marker-8e8e93', vehicleId: 'vehicle-g006-unscheduled' },
       { coordinates: [126.9372235, 37.330948], label: '1대 예정', markerImageId: 'vehicle-marker-default', vehicleId: 'scheduled-vehicles' },
     ],
   });
