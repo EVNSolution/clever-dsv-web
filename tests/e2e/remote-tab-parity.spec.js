@@ -143,7 +143,7 @@ function managementListFixtures(overrides = {}) {
         displayName: 'Canonical Driver G006',
         driverId: 'driver-g006',
         gender: '남성',
-        phone: '010-6006-6006',
+        phone: '01060066006',
         score: 'A',
         status: 'ACTIVE',
         traits: ['냉장 운송'],

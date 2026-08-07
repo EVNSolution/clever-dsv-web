@@ -291,11 +291,20 @@ function driverViewModel(driver: V1DriverListItem): ManagementDriver {
     gender: driver.gender ?? '미제공',
     id: driver.driverId,
     name: driver.displayName,
-    phone: driver.phone,
+    phone: formatKoreanMobilePhone(driver.phone),
     score: driver.score ?? '미제공',
     traits: driver.traits ?? [],
     zone: driver.zone ?? '미제공',
   };
+}
+
+function formatKoreanMobilePhone(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const digits = value.replace(/\D/gu, '');
+  const localDigits = digits.startsWith('82') ? `0${digits.slice(2)}` : digits;
+  return /^010\d{8}$/u.test(localDigits)
+    ? `${localDigits.slice(0, 3)}-${localDigits.slice(3, 7)}-${localDigits.slice(7)}`
+    : value.trim();
 }
 
 function vehicleViewModel(vehicle: V1VehicleListItem): ManagementVehicle {
