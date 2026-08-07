@@ -694,7 +694,6 @@ function VehicleTemperatureDialog({
         <header>
           <span>
             <strong id="temperatureDialogTitle">{vehicle.plate || '차량 번호 미등록'} 온도</strong>
-            <small>전날부터 최근 수신까지, 5분 수집 포인트</small>
           </span>
           <button type="button" aria-label="온도 이력 닫기" onClick={onClose}><X aria-hidden="true" /></button>
         </header>
