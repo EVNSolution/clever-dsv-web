@@ -842,7 +842,6 @@ function TemperatureChart({
               role="img"
               viewBox={`0 0 ${width} ${height}`}
             >
-            <title>전날부터 최근 수신까지 차량 온도 이력</title>
             <desc>A 채널과 B 채널을 5분 수집 포인트와 꺾은선으로 표시하고 운영 상태별 온도 범위를 투명 영역으로 구분합니다.</desc>
           {temperatureBands.map((band) => (
             <rect
