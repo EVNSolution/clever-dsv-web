@@ -672,15 +672,19 @@ function VehicleTemperatureDialog({
 }): ReactElement {
   const temperatureBandCodes = temperatureBands.map((band) => band.code).join('\u0000');
   const [selectedTemperatureBandCodes, setSelectedTemperatureBandCodes] = useState<string[]>(() => temperatureBands.map((band) => band.code));
+  const [temperaturePickerOpen, setTemperaturePickerOpen] = useState(true);
   useEffect(() => {
     setSelectedTemperatureBandCodes(temperatureBands.map((band) => band.code));
   }, [temperatureBandCodes]);
   const selectedTemperatureBands = temperatureBands.filter((band) => selectedTemperatureBandCodes.includes(band.code));
-  const temperatureWindowLabel = selectedTemperatureBands.length > 1 ? `${selectedTemperatureBands.length}개 비교` : '단일 기준';
+  const temperatureWindowLabel = selectedTemperatureBands.length === 0
+    ? '기준 미적용'
+    : selectedTemperatureBands.length === 1
+      ? '단일 기준'
+      : `${selectedTemperatureBands.length}개 비교`;
   const toggleTemperatureBand = (code: string): void => {
     setSelectedTemperatureBandCodes((current) => {
       if (!current.includes(code)) return [...current, code];
-      if (current.length === 1) return current;
       return current.filter((currentCode) => currentCode !== code);
     });
   };
@@ -690,7 +694,7 @@ function VehicleTemperatureDialog({
         <header>
           <span>
             <strong id="temperatureDialogTitle">{vehicle.plate || '차량 번호 미등록'} 온도</strong>
-            <small>최근 24시간, 5분 수집 포인트</small>
+            <small>전날부터 최근 수신까지, 5분 수집 포인트</small>
           </span>
           <button type="button" aria-label="온도 이력 닫기" onClick={onClose}><X aria-hidden="true" /></button>
         </header>
@@ -699,32 +703,40 @@ function VehicleTemperatureDialog({
         {!loading && !error && history ? (
           <>
             {temperatureBands.length ? (
-              <section className="temperature-condition-picker" aria-label="운영 상태 온도 기준">
-                <div className="temperature-condition-picker-heading">
+              <details
+                aria-label="운영 상태 온도 기준"
+                className="temperature-condition-picker"
+                onToggle={(event) => setTemperaturePickerOpen(event.currentTarget.open)}
+                open={temperaturePickerOpen}
+              >
+                <summary>
                   <strong>운영 상태 온도 기준</strong>
                   <span>{temperatureWindowLabel}</span>
-                </div>
-                <div className="temperature-condition-options">
-                  {temperatureBands.map((band) => {
-                    const selected = selectedTemperatureBandCodes.includes(band.code);
-                    return (
-                      <button
-                        aria-pressed={selected}
-                        key={band.code}
-                        onClick={() => toggleTemperatureBand(band.code)}
-                        style={{ '--temperature-condition-color': band.color } as CSSProperties}
-                        type="button"
-                      >
-                        <span>
-                          <strong>{band.code}</strong>
-                          <small>{band.label}</small>
-                        </span>
-                        <b>{`${formatTemperatureValue(band.minimum)}℃ ~ ${formatTemperatureValue(band.maximum)}℃`}</b>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
+                  <ChevronDown aria-hidden="true" />
+                </summary>
+                <section>
+                  <div className="temperature-condition-options">
+                    {temperatureBands.map((band) => {
+                      const selected = selectedTemperatureBandCodes.includes(band.code);
+                      return (
+                        <button
+                          aria-pressed={selected}
+                          key={band.code}
+                          onClick={() => toggleTemperatureBand(band.code)}
+                          style={{ '--temperature-condition-color': band.color } as CSSProperties}
+                          type="button"
+                        >
+                          <span>
+                            <strong>{band.code}</strong>
+                            <small>{band.label}</small>
+                          </span>
+                          <b>{`${formatTemperatureValue(band.minimum)}℃ ~ ${formatTemperatureValue(band.maximum)}℃`}</b>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              </details>
             ) : null}
             <TemperatureChart samples={history.samples} temperatureBands={selectedTemperatureBands} />
           </>
@@ -741,6 +753,15 @@ function TemperatureChart({
   samples: VehicleTemperatureSample[];
   temperatureBands: TemperatureConditionBand[];
 }): ReactElement {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll || samples.length === 0) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      scroll.scrollLeft = scroll.scrollWidth - scroll.clientWidth;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [samples]);
   const channels = [
     { key: 'temperatureA' as const, label: 'A 채널', color: 'var(--color-primary)' },
     { key: 'temperatureB' as const, label: 'B 채널', color: 'var(--color-risk)' },
@@ -760,15 +781,15 @@ function TemperatureChart({
   }
   const fiveMinutes = 5 * 60 * 1000;
   const thirtyMinutes = 30 * 60 * 1000;
-  const height = 260;
-  const padding = { bottom: 34, left: 44, right: 18, top: 20 };
+  const height = 340;
+  const padding = { bottom: 38, left: 48, right: 20, top: 24 };
   const timestamps = samples.map((sample) => new Date(sample.observedAt).getTime()).filter((value) => !Number.isNaN(value));
   const firstTime = Math.min(...timestamps);
   const lastTime = Math.max(...timestamps);
   const minTime = Math.floor(firstTime / thirtyMinutes) * thirtyMinutes;
   const maxTime = Math.max(minTime + thirtyMinutes, Math.ceil(lastTime / thirtyMinutes) * thirtyMinutes);
   const halfHourCount = Math.max(1, Math.round((maxTime - minTime) / thirtyMinutes));
-  const width = Math.max(560, padding.left + padding.right + halfHourCount * 42);
+  const width = Math.max(860, padding.left + padding.right + halfHourCount * 108);
   const scaleValues = [...values, ...temperatureBands.flatMap((band) => [band.minimum, band.maximum])];
   let minValue = Math.floor(Math.min(...scaleValues) / 5) * 5;
   let maxValue = Math.ceil(Math.max(...scaleValues) / 5) * 5;
@@ -796,14 +817,14 @@ function TemperatureChart({
       <div className="temperature-legend" aria-hidden="true">
         {channels.map((channel) => <span key={channel.key}><i style={{ background: channel.color }} />{channel.label}</span>)}
       </div>
-      <div className="temperature-chart-scroll">
+      <div className="temperature-chart-scroll" ref={scrollRef}>
         <svg
-          aria-label="최근 24시간 차량 온도 A 채널과 B 채널 꺾은선 차트"
+          aria-label="전날부터 최근 수신까지 차량 온도 A 채널과 B 채널 꺾은선 차트"
           role="img"
           style={{ width: `${width}px` }}
           viewBox={`0 0 ${width} ${height}`}
         >
-          <title>최근 24시간 차량 온도 이력</title>
+          <title>전날부터 최근 수신까지 차량 온도 이력</title>
           <desc>A 채널과 B 채널을 5분 수집 포인트와 꺾은선으로 표시하고 운영 상태별 온도 범위를 투명 영역으로 구분합니다.</desc>
           {temperatureBands.map((band) => (
             <rect

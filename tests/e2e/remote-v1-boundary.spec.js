@@ -876,7 +876,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' }).getByRole('button', { name: '온도', exact: true }).click();
   const temperatureDialog = page.getByRole('dialog', { name: '99테 6006 온도' });
   await expect(temperatureDialog).toBeVisible();
-  await expect(temperatureDialog.getByRole('img', { name: '최근 24시간 차량 온도 A 채널과 B 채널 꺾은선 차트' })).toBeVisible();
+  await expect(temperatureDialog.getByRole('img', { name: '전날부터 최근 수신까지 차량 온도 A 채널과 B 채널 꺾은선 차트' })).toBeVisible();
   await expect(temperatureDialog).toContainText('A 채널');
   await expect(temperatureDialog).toContainText('B 채널');
   await expect(temperatureDialog.getByLabel('온도 수집 시간표')).toContainText('5분');
@@ -899,9 +899,15 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await expect(coldCondition).toHaveAttribute('aria-pressed', 'false');
   await expect(temperatureConditions).toContainText('단일 기준');
   await expect(temperatureDialog.locator('.temperature-condition-band')).toHaveCount(1);
+  await ambientCondition.click();
+  await expect(temperatureConditions).toContainText('기준 미적용');
+  await expect(temperatureDialog.locator('.temperature-condition-band')).toHaveCount(0);
   await coldCondition.click();
+  await ambientCondition.click();
   await expect(temperatureConditions).toContainText('2개 비교');
   await expect(temperatureDialog.locator('.temperature-condition-band')).toHaveCount(2);
+  await expect.poll(() => temperatureDialog.locator('.temperature-chart-scroll').evaluate((chart) => chart.scrollWidth / chart.clientWidth)).toBeGreaterThan(4);
+  await expect.poll(() => temperatureDialog.locator('.temperature-chart-scroll').evaluate((chart) => Math.round(chart.scrollLeft + chart.clientWidth - chart.scrollWidth))).toBe(0);
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/vehicles/vehicle-g006-scheduled/temperature-history');
   await temperatureDialog.getByRole('button', { name: '온도 이력 닫기' }).click();
   await scheduledFleet.locator('.control-vehicle-row', { hasText: '88테 5005' }).getByRole('button', { name: '온도', exact: true }).click();
