@@ -991,7 +991,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
       { coordinates: [126.9372235, 37.330948], label: '1대 예정', markerImageId: 'vehicle-marker-default', vehicleId: 'scheduled-vehicles' },
     ],
   });
-  await scheduledFleet.locator('.control-vehicle-visibility label', { hasText: '주문 있음' }).click();
+  await scheduledFleet.locator('.control-vehicle-visibility label', { hasText: '배정' }).click();
   await expect(scheduledFleet).not.toContainText('88테 5005');
   await expect.poll(() => page.evaluate(() => (
     window.dsvMap.getSource('operational-vehicles').serialize().data.features.map((feature) => feature.properties.vehicleId)
@@ -1002,7 +1002,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await noOrderVehicle.click();
   await expect(noOrderVehicle).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('region', { name: '배송지 리스트', exact: true })).toContainText('선택한 차량에 배정된 배송지가 없습니다.');
-  await scheduledFleet.locator('.control-vehicle-visibility label', { hasText: '주문 있음' }).click();
+  await scheduledFleet.locator('.control-vehicle-visibility label', { hasText: '배정' }).click();
   await expect(page.getByRole('region', { name: '배송지 리스트', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('고객사별 주문 리스트')).toBeVisible();
   await scheduledFleet.locator('.control-vehicle-visibility label', { hasText: '전체' }).click();
@@ -1014,8 +1014,17 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   const selectedVehicle = scheduledFleet.getByRole('button', { name: /99테 6006/ });
   const selectedVehicleRow = scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' });
   await expect(selectedVehicleRow.locator('.control-vehicle-details')).toHaveCount(0);
+  const zoomBeforeCentering = await page.evaluate(() => {
+    window.dsvMap.jumpTo({ center: [126.85, 37.42], zoom: 10.75 });
+    return window.dsvMap.getZoom();
+  });
   await selectedVehicle.click();
   await expect(selectedVehicle).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => page.evaluate(() => {
+    const center = window.dsvMap.getCenter();
+    return [Number(center.lng.toFixed(4)), Number(center.lat.toFixed(4))];
+  })).toEqual([127.0412, 37.5021]);
+  expect(await page.evaluate(() => window.dsvMap.getZoom())).toBeCloseTo(zoomBeforeCentering, 5);
   await expect(selectedVehicleRow.locator('.control-vehicle-details')).toHaveCount(0);
   const vehicleDetails = page.getByRole('region', { name: '차량 상세', exact: true });
   await expect(vehicleDetails).toBeVisible();
@@ -1032,16 +1041,9 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await expect(vehicleDetails).toContainText('AMBIENT');
   await expect(vehicleDetails).toContainText('오전 11시 배송 필수');
   await expect(vehicleDetails).not.toContainText('온도 이탈');
-  const zoomBeforeCentering = await page.evaluate(() => {
-    window.dsvMap.jumpTo({ center: [126.85, 37.42], zoom: 10.75 });
-    return window.dsvMap.getZoom();
-  });
-  await vehicleDetails.getByRole('button', { name: '차량 중앙정렬' }).click();
-  await expect.poll(() => page.evaluate(() => {
-    const center = window.dsvMap.getCenter();
-    return [Number(center.lng.toFixed(4)), Number(center.lat.toFixed(4))];
-  })).toEqual([127.0412, 37.5021]);
-  expect(await page.evaluate(() => window.dsvMap.getZoom())).toBeCloseTo(zoomBeforeCentering, 5);
+  await expect(vehicleDetails.getByLabel('차량 최근 조회 상태')).toContainText('최근 위치 조회');
+  await expect(vehicleDetails.getByLabel('차량 최근 조회 상태')).toContainText('최근 온도 조회');
+  await expect(vehicleDetails.getByRole('button', { name: '차량 중앙정렬' })).toHaveCount(0);
   await expect(page.locator('#destinationCard .control-destination-row')).toHaveCount(1);
   await expect(page.getByLabel('배송지 순서 1')).toHaveText('1');
   await expect(page.getByLabel('배송지 순서 1')).toHaveCSS('background-color', 'rgb(31, 139, 76)');

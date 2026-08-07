@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Crosshair, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { loadControlSummary, loadVehicleTemperatureHistory } from '../services/control';
 import type { ControlSummary, VehicleTemperatureHistory, VehicleTemperatureSample } from '../services/control';
@@ -289,6 +289,7 @@ function ControlPanels({
   const [temperatureHistory, setTemperatureHistory] = useState<VehicleTemperatureHistory>();
   const [temperatureLoading, setTemperatureLoading] = useState(false);
   const [temperatureError, setTemperatureError] = useState('');
+  const [telemetryClock, setTelemetryClock] = useState(() => Date.now());
   const controlServiceDate = selectedServiceDate ?? summary?.serviceDate ?? todayInSeoul();
   const selectedVehicleOrders = selectedVehicleId === undefined
     ? []
@@ -311,11 +312,6 @@ function ControlPanels({
   const selectedVehicleInstructions = selectedVehicle === undefined
     ? []
     : controlVehicleSpecialInstructions(selectedVehicle.id, orders);
-  const selectedVehicleHasPosition = selectedVehicle !== undefined
-    && typeof selectedVehicle.vehicleLatitude === 'number'
-    && Number.isFinite(selectedVehicle.vehicleLatitude)
-    && typeof selectedVehicle.vehicleLongitude === 'number'
-    && Number.isFinite(selectedVehicle.vehicleLongitude);
 
   useEffect(() => {
     const compactViewport = window.matchMedia(mobileControlQuery);
@@ -372,6 +368,13 @@ function ControlPanels({
     return () => controller.abort();
   }, [temperatureVehicle]);
 
+  useEffect(() => {
+    if (!selectedVehicle) return undefined;
+    setTelemetryClock(Date.now());
+    const timer = window.setInterval(() => setTelemetryClock(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, [selectedVehicle]);
+
   return (
     <aside className={`side control-side${mobilePanel ? ' mobile-panel-active' : ''}`} aria-label="관제 운영 패널">
       {onServiceDateChange ? (
@@ -386,25 +389,12 @@ function ControlPanels({
           <section className="card panel expand-card control-vehicle-detail-panel" aria-label="차량 상세">
             <div className="tab-line section-heading">
               <span>차량 상세</span>
-              <button
-                className="control-vehicle-center-button"
-                disabled={!selectedVehicleHasPosition}
-                onClick={() => {
-                  if (!selectedVehicleHasPosition) return;
-                  onVehicleCenter?.(selectedVehicle.vehicleLatitude as number, selectedVehicle.vehicleLongitude as number);
-                }}
-                title={selectedVehicleHasPosition ? '현재 줌을 유지하고 차량을 지도 중앙에 표시합니다.' : '확인된 차량 위치가 없습니다.'}
-                type="button"
-              >
-                <Crosshair aria-hidden="true" />
-                <span>차량 중앙정렬</span>
-              </button>
             </div>
             <div className="control-detail-card control-vehicle-detail-content">
-              <span><small>차량 번호</small><b className="control-detail-value">{selectedVehicle.plate || '차량 번호 미등록'}</b></span>
-              <span><small>차종</small><b className="control-detail-value">{selectedVehicle.type || '차종 미등록'}</b></span>
-              <span><small>운행</small><b className="control-detail-value">{controlVehicleMotionText(selectedVehicle)}</b></span>
-              <span><small>운전자</small><b className="control-detail-value">{selectedVehicleDrivers.join(', ')}</b></span>
+              <span className="control-vehicle-detail-compact"><small>차량 번호</small><b className="control-detail-value">{selectedVehicle.plate || '차량 번호 미등록'}</b></span>
+              <span className="control-vehicle-detail-primary"><small>차종</small><b className="control-detail-value">{selectedVehicle.type || '차종 미등록'}</b></span>
+              <span className="control-vehicle-detail-compact"><small>운행</small><b className="control-detail-value">{controlVehicleMotionText(selectedVehicle)}</b></span>
+              <span className="control-vehicle-detail-primary"><small>운전자</small><b className="control-detail-value">{selectedVehicleDrivers.join(', ')}</b></span>
               <span className="control-vehicle-detail-wide"><small>운송 조건</small><b className="control-detail-value">{selectedVehicleConditions.join(', ')}</b></span>
               <span className="control-vehicle-detail-wide">
                 <small>배송 특이사항</small>
@@ -416,6 +406,20 @@ function ControlPanels({
                   </ul>
                 ) : <b className="control-detail-value">특이사항 없음</b>}
               </span>
+              <div className="control-vehicle-recency" aria-label="차량 최근 조회 상태">
+                <TelemetryRecency
+                  label="최근 위치 조회"
+                  now={telemetryClock}
+                  observedAt={selectedVehicle.vehiclePositionObservedAt}
+                  stale={selectedVehicle.vehiclePositionStale === true}
+                />
+                <TelemetryRecency
+                  label="최근 온도 조회"
+                  now={telemetryClock}
+                  observedAt={selectedVehicle.temperatureObservedAt}
+                  stale={selectedVehicle.temperatureStale === true}
+                />
+              </div>
             </div>
           </section>
         ) : null}
@@ -423,38 +427,36 @@ function ControlPanels({
           <div className="tab-line section-heading">
             <span className="desktop-panel-title">차량 리스트</span>
             <button className="mobile-panel-toggle" type="button" aria-expanded={mobilePanel === 'vehicles'} aria-label={`차량 리스트 ${mobilePanel === 'vehicles' ? '닫기' : '펼치기'}`} onClick={() => setMobilePanel((current) => current === 'vehicles' ? undefined : 'vehicles')}>
-              <span>차량 리스트</span><span className="chip mini">{vehicles.length}대</span><span className="mobile-panel-action">{mobilePanel === 'vehicles' ? '닫기' : '펼치기'}</span>
+              <span>차량 리스트</span><span className="mobile-panel-action">{mobilePanel === 'vehicles' ? '닫기' : '펼치기'}</span>
             </button>
-            <span className="card-tools desktop-panel-tools">
+            <div className="card-tools desktop-panel-tools">
               {summary && !loading && !error ? (
                 <span className="control-vehicle-heading-summary" role="status" aria-label="지원되는 관제 요약">
                   <span>주문 수 <b>{summary.totalDispatchCount}</b></span>
-                  <span>미배정 <b>{summary.unassignedCount}</b></span>
                 </span>
               ) : null}
-              <span className="chip mini">{visibleVehicles.length}대</span>
-            </span>
+              <fieldset className="control-vehicle-visibility" aria-label="차량 표시 범위">
+                <label>
+                  <input
+                    checked={vehicleVisibility === 'ALL'}
+                    name="controlVehicleVisibility"
+                    onChange={() => onVehicleVisibilityChange?.('ALL')}
+                    type="radio"
+                  />
+                  <span>전체 <b>{vehicles.length}</b></span>
+                </label>
+                <label>
+                  <input
+                    checked={vehicleVisibility === 'WITH_ORDERS'}
+                    name="controlVehicleVisibility"
+                    onChange={() => onVehicleVisibilityChange?.('WITH_ORDERS')}
+                    type="radio"
+                  />
+                  <span>배정 <b>{orderedVehicleCount}</b></span>
+                </label>
+              </fieldset>
+            </div>
           </div>
-          <fieldset className="control-vehicle-visibility" aria-label="차량 표시 범위">
-            <label>
-              <input
-                checked={vehicleVisibility === 'ALL'}
-                name="controlVehicleVisibility"
-                onChange={() => onVehicleVisibilityChange?.('ALL')}
-                type="radio"
-              />
-              <span>전체 <b>{vehicles.length}</b></span>
-            </label>
-            <label>
-              <input
-                checked={vehicleVisibility === 'WITH_ORDERS'}
-                name="controlVehicleVisibility"
-                onChange={() => onVehicleVisibilityChange?.('WITH_ORDERS')}
-                type="radio"
-              />
-              <span>주문 있음 <b>{orderedVehicleCount}</b></span>
-            </label>
-          </fieldset>
           {loading ? <div className="panel-state" role="status">차량을 불러오는 중입니다.</div> : null}
           {error ? <div className="panel-state error" role="alert">{error}</div> : null}
           {!loading && !error ? (
@@ -469,7 +471,17 @@ function ControlPanels({
                   <button
                     aria-pressed={selectedVehicleId === vehicle.id}
                     className="control-vehicle-select"
-                    onClick={() => onVehicleSelect?.(vehicle.id)}
+                    onClick={() => {
+                      onVehicleSelect?.(vehicle.id);
+                      if (
+                        typeof vehicle.vehicleLatitude === 'number'
+                        && Number.isFinite(vehicle.vehicleLatitude)
+                        && typeof vehicle.vehicleLongitude === 'number'
+                        && Number.isFinite(vehicle.vehicleLongitude)
+                      ) {
+                        onVehicleCenter?.(vehicle.vehicleLatitude, vehicle.vehicleLongitude);
+                      }
+                    }}
                     type="button"
                   >
                     <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong></span>
@@ -594,6 +606,45 @@ function ControlPanels({
       ) : null}
     </aside>
   );
+}
+
+function TelemetryRecency({
+  label,
+  now,
+  observedAt,
+  stale,
+}: {
+  label: string;
+  now: number;
+  observedAt?: string | null;
+  stale: boolean;
+}): ReactElement {
+  const value = formatTelemetryRecency(observedAt, now);
+  return (
+    <span className={`control-telemetry-recency${stale ? ' stale' : ''}`} title={telemetryObservedAtTitle(label, observedAt)}>
+      <small>{label}</small>
+      <time dateTime={observedAt ?? undefined}>{value}</time>
+    </span>
+  );
+}
+
+function formatTelemetryRecency(observedAt: string | null | undefined, now: number): string {
+  if (!observedAt) return '수신 없음';
+  const timestamp = Date.parse(observedAt);
+  if (Number.isNaN(timestamp)) return '수신 없음';
+  const elapsedMinutes = Math.max(0, Math.floor((now - timestamp) / 60_000));
+  if (elapsedMinutes < 1) return '방금 전';
+  if (elapsedMinutes < 60) return `${elapsedMinutes}분 전`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours}시간 전`;
+  return `${Math.floor(elapsedHours / 24)}일 전`;
+}
+
+function telemetryObservedAtTitle(label: string, observedAt: string | null | undefined): string {
+  if (!observedAt) return `${label}: 수신 기록 없음`;
+  const timestamp = new Date(observedAt);
+  if (Number.isNaN(timestamp.getTime())) return `${label}: 수신 기록 없음`;
+  return `${label}: ${timestamp.toLocaleString('ko-KR', { hour12: false })}`;
 }
 
 function VehicleTemperatureDialog({
