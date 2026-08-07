@@ -625,9 +625,12 @@ function TelemetryRecency({
   stale: boolean;
 }): ReactElement {
   const value = formatTelemetryRecency(observedAt, now);
+  const observedTimestamp = observedAt ? Date.parse(observedAt) : Number.NaN;
+  const state = Number.isNaN(observedTimestamp) ? 'missing' : stale ? 'delayed' : 'recent';
+  const stateLabel = state === 'missing' ? '최근 수신 없음' : state === 'delayed' ? '수신 간격 지연' : '최근 수신';
   return (
-    <span className={`control-telemetry-recency${stale ? ' stale' : ''}`} title={telemetryObservedAtTitle(label, observedAt)}>
-      <small>{label}</small>
+    <span className={`control-telemetry-recency ${state}`} title={telemetryObservedAtTitle(label, observedAt)} aria-label={`${label}: ${value}, ${stateLabel}`}>
+      <small>{label}<i className="control-telemetry-status-dot" aria-hidden="true" /></small>
       <time dateTime={observedAt ?? undefined}>{value}</time>
     </span>
   );

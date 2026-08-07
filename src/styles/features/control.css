@@ -134,17 +134,21 @@
 .control-vehicle-detail-content { grid-template-columns:86px minmax(0, 1fr); gap:8px; padding:9px 10px; }
 .control-vehicle-detail-primary .control-detail-value { white-space:nowrap; }
 .control-vehicle-detail-section {
-  grid-column:1 / -1; min-width:0; display:grid; grid-template-columns:minmax(0, 1fr) 96px; gap:8px; align-items:end;
+  grid-column:1 / -1; min-width:0; display:grid; grid-template-columns:86px minmax(0, 1fr); gap:8px; align-items:end;
 }
 .control-vehicle-detail-section > span { min-width:0; }
 .control-telemetry-recency {
   min-width:0; display:grid; gap:1px; align-self:end; padding:5px 7px; border:1px solid var(--color-border); border-radius:8px;
-  background:var(--color-white); box-shadow:inset 3px 0 0 var(--color-primary);
+  background:var(--color-white);
 }
-.control-telemetry-recency.stale { box-shadow:inset 3px 0 0 var(--color-muted); }
-.control-telemetry-recency small { margin:0; font-size:8px; white-space:nowrap; }
+.control-telemetry-recency small { margin:0; display:flex; align-items:center; gap:5px; font-size:8px; white-space:nowrap; }
+.control-telemetry-status-dot {
+  width:6px; height:6px; flex:0 0 auto; border-radius:50%; background:currentColor; box-shadow:0 0 5px currentColor;
+}
+.control-telemetry-recency.missing .control-telemetry-status-dot { color:var(--color-muted); }
+.control-telemetry-recency.recent .control-telemetry-status-dot { color:var(--color-primary); }
+.control-telemetry-recency.delayed .control-telemetry-status-dot { color:var(--color-warning); }
 .control-telemetry-recency time { color:var(--color-ink); font-size:11px; font-weight:900; font-variant-numeric:tabular-nums; line-height:1.2; white-space:nowrap; }
-.control-telemetry-recency.stale time { color:var(--color-muted); }
 .control-detail-list { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
 .control-detail-list li { min-width:0; display:grid; grid-template-columns:minmax(72px, auto) minmax(0, 1fr); gap:8px; align-items:start; }
 .control-detail-list strong,
