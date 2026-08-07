@@ -223,6 +223,8 @@
 .temperature-chart-frame { display:grid; grid-template-columns:52px minmax(0, 1fr); }
 .temperature-y-axis { width:52px; height:340px; display:block; background:var(--color-white); }
 .temperature-chart-scroll { min-width:0; overflow-x:auto; overscroll-behavior-x:contain; }
+.temperature-chart-plot { position:relative; height:340px; }
+.temperature-chart-plot > svg { width:100%; height:340px; }
 .temperature-chart svg { height:auto; max-width:none; display:block; }
 .temperature-condition-band { pointer-events:none; }
 .temperature-grid-line { stroke:var(--color-border); stroke-width:1; }
@@ -232,6 +234,35 @@
 .temperature-axis-label { fill:var(--color-muted); font:750 10px/1 var(--font-sans); }
 .temperature-line { stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
 .temperature-point { stroke:var(--color-white); stroke-width:1.6; }
+.temperature-point:hover, .temperature-point:focus { stroke:var(--color-ink); stroke-width:2.4; outline:none; }
+.temperature-hover-guide { pointer-events:none; stroke:var(--color-ink); stroke-width:1; stroke-dasharray:3 4; opacity:.45; }
+.temperature-sample-tooltip {
+  --temperature-tooltip-offset:12px;
+  position:absolute; top:14px; z-index:2; width:286px; display:grid; gap:10px; padding:12px;
+  border:1px solid var(--color-control-border); border-radius:12px; background:rgba(255,255,255,.97); color:var(--color-ink);
+  pointer-events:none; transform:translateX(var(--temperature-tooltip-offset));
+}
+.temperature-sample-tooltip.align-end { --temperature-tooltip-offset:calc(-100% - 12px); }
+.temperature-sample-tooltip-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.temperature-sample-tooltip-header span { color:var(--color-muted); font-size:11px; font-weight:800; }
+.temperature-sample-tooltip-header strong { font-size:12px; font-weight:900; font-variant-numeric:tabular-nums; }
+.temperature-sample-readings { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+.temperature-sample-readings span { display:grid; gap:3px; padding:8px 9px; border-radius:9px; background:var(--color-row-hover); }
+.temperature-sample-readings small { color:var(--color-muted); font-size:10px; font-weight:800; }
+.temperature-sample-readings b { font-size:15px; font-weight:950; font-variant-numeric:tabular-nums; }
+.temperature-sample-tooltip > section { display:grid; gap:7px; }
+.temperature-sample-tooltip > section > strong { font-size:11px; font-weight:900; }
+.temperature-sample-tooltip ul { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
+.temperature-sample-tooltip li {
+  display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; gap:10px; padding:7px 8px;
+  border-left:3px solid var(--temperature-condition-color); border-radius:7px; background:var(--color-row-hover);
+}
+.temperature-sample-tooltip li > span { min-width:0; display:grid; gap:2px; }
+.temperature-sample-tooltip li > span:last-child { text-align:right; }
+.temperature-sample-tooltip li b { font-size:10px; font-weight:900; font-variant-numeric:tabular-nums; }
+.temperature-sample-tooltip li small { color:var(--color-muted); font-size:9px; font-weight:800; }
+.temperature-sample-tooltip li small.risk { color:var(--color-risk); }
+.temperature-sample-tooltip p { margin:0; color:var(--color-muted); font-size:11px; font-weight:750; }
 @media (max-width:560px) {
   .temperature-condition-options { grid-template-columns:1fr; }
 }

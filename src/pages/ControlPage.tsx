@@ -738,7 +738,11 @@ function VehicleTemperatureDialog({
                 </section>
               </details>
             ) : null}
-            <TemperatureChart samples={history.samples} temperatureBands={selectedTemperatureBands} />
+            <TemperatureChart
+              availableTemperatureBands={temperatureBands}
+              samples={history.samples}
+              temperatureBands={selectedTemperatureBands}
+            />
           </>
         ) : null}
       </section>
@@ -747,13 +751,16 @@ function VehicleTemperatureDialog({
 }
 
 function TemperatureChart({
+  availableTemperatureBands,
   samples,
   temperatureBands,
 }: {
+  availableTemperatureBands: TemperatureConditionBand[];
   samples: VehicleTemperatureSample[];
   temperatureBands: TemperatureConditionBand[];
 }): ReactElement {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [hoveredSample, setHoveredSample] = useState<VehicleTemperatureSample>();
   useEffect(() => {
     const scroll = scrollRef.current;
     if (!scroll || samples.length === 0) return undefined;
@@ -809,6 +816,7 @@ function TemperatureChart({
   };
   const yTicks = numberTicks(minValue, maxValue, 1);
   const xTicks = numberTicks(minTime, maxTime, fiveMinutes);
+  const hoveredX = hoveredSample ? xFor(hoveredSample.observedAt) : 0;
   return (
     <div className="temperature-chart">
       <div className="temperature-timeframe" aria-label="온도 수집 시간표">
@@ -829,14 +837,14 @@ function TemperatureChart({
           <line className="temperature-axis-line" x1={axisWidth - 1} x2={axisWidth - 1} y1={padding.top} y2={height - padding.bottom} />
         </svg>
         <div className="temperature-chart-scroll" ref={scrollRef}>
-          <svg
-            aria-label="전날부터 최근 수신까지 차량 온도 A 채널과 B 채널 꺾은선 차트"
-            role="img"
-            style={{ width: `${width}px` }}
-            viewBox={`0 0 ${width} ${height}`}
-          >
-          <title>전날부터 최근 수신까지 차량 온도 이력</title>
-          <desc>A 채널과 B 채널을 5분 수집 포인트와 꺾은선으로 표시하고 운영 상태별 온도 범위를 투명 영역으로 구분합니다.</desc>
+          <div className="temperature-chart-plot" style={{ width: `${width}px` }}>
+            <svg
+              aria-label="전날부터 최근 수신까지 차량 온도 A 채널과 B 채널 꺾은선 차트"
+              role="img"
+              viewBox={`0 0 ${width} ${height}`}
+            >
+            <title>전날부터 최근 수신까지 차량 온도 이력</title>
+            <desc>A 채널과 B 채널을 5분 수집 포인트와 꺾은선으로 표시하고 운영 상태별 온도 범위를 투명 영역으로 구분합니다.</desc>
           {temperatureBands.map((band) => (
             <rect
               className="temperature-condition-band"
@@ -879,6 +887,9 @@ function TemperatureChart({
             );
           })}
           <line className="temperature-axis-line" x1="0" x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom} />
+          {hoveredSample ? (
+            <line className="temperature-hover-guide" x1={hoveredX} x2={hoveredX} y1={padding.top} y2={height - padding.bottom} />
+          ) : null}
           {channels.map((channel) => {
             const points = samples
               .filter((sample) => typeof sample[channel.key] === 'number' && Number.isFinite(sample[channel.key]))
@@ -888,17 +899,82 @@ function TemperatureChart({
               <g key={channel.key}>
                 {points.length > 1 ? <polyline className="temperature-line" fill="none" points={line} stroke={channel.color} /> : null}
                 {points.map((point) => (
-                  <circle className="temperature-point" cx={point.x} cy={point.y} fill={channel.color} key={`${channel.key}-${point.sample.observedAt}`} r="3.2">
-                    <title>{`${formatTemperatureTooltipTime(point.sample.observedAt)} ${channel.label} ${point.value.toFixed(1)}℃`}</title>
-                  </circle>
+                  <circle
+                    aria-label={`${formatTemperatureTooltipTime(point.sample.observedAt)} ${channel.label} ${point.value.toFixed(1)}℃`}
+                    className="temperature-point"
+                    cx={point.x}
+                    cy={point.y}
+                    fill={channel.color}
+                    key={`${channel.key}-${point.sample.observedAt}`}
+                    onBlur={() => setHoveredSample(undefined)}
+                    onFocus={() => setHoveredSample(point.sample)}
+                    onMouseEnter={() => setHoveredSample(point.sample)}
+                    onMouseLeave={() => setHoveredSample(undefined)}
+                    r="3.2"
+                    tabIndex={0}
+                  />
                 ))}
               </g>
             );
           })}
-          </svg>
+            </svg>
+            {hoveredSample ? (
+              <TemperatureSampleTooltip
+                alignEnd={hoveredX > width / 2}
+                availableTemperatureBands={availableTemperatureBands}
+                sample={hoveredSample}
+                x={hoveredX}
+              />
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function TemperatureSampleTooltip({
+  alignEnd,
+  availableTemperatureBands,
+  sample,
+  x,
+}: {
+  alignEnd: boolean;
+  availableTemperatureBands: TemperatureConditionBand[];
+  sample: VehicleTemperatureSample;
+  x: number;
+}): ReactElement {
+  return (
+    <aside
+      className={`temperature-sample-tooltip${alignEnd ? ' align-end' : ''}`}
+      role="tooltip"
+      style={{ left: `${x}px` }}
+    >
+      <div className="temperature-sample-tooltip-header">
+        <span>수집 시각</span>
+        <strong>{formatTemperatureTooltipTime(sample.observedAt)}</strong>
+      </div>
+      <div className="temperature-sample-readings">
+        <span><small>A 채널</small><b>{formatTemperatureReading(sample.temperatureA)}</b></span>
+        <span><small>B 채널</small><b>{formatTemperatureReading(sample.temperatureB)}</b></span>
+      </div>
+      <section>
+        <strong>이 시점 배송 온도 기준</strong>
+        {availableTemperatureBands.length ? (
+          <ul>
+            {availableTemperatureBands.map((band) => {
+              const assessment = assessTemperatureSample(sample, band);
+              return (
+                <li key={band.code} style={{ '--temperature-condition-color': band.color } as CSSProperties}>
+                  <span><b>{band.code}</b><small>{band.label}</small></span>
+                  <span><b>{`${formatTemperatureValue(band.minimum)}℃ ~ ${formatTemperatureValue(band.maximum)}℃`}</b><small className={assessment.risk ? 'risk' : ''}>{assessment.label}</small></span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : <p>적용된 온도 기준이 없습니다.</p>}
+      </section>
+    </aside>
   );
 }
 
@@ -1073,6 +1149,30 @@ function formatTemperatureTooltipTime(value: string): string {
 
 function formatTemperatureValue(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function formatTemperatureReading(value: number | null): string {
+  return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}℃` : '미수신';
+}
+
+function assessTemperatureSample(
+  sample: VehicleTemperatureSample,
+  band: TemperatureConditionBand,
+): { label: string; risk: boolean } {
+  const assessments = [
+    ['A', sample.temperatureA],
+    ['B', sample.temperatureB],
+  ].map(([channel, rawValue]) => {
+    const value = rawValue as number | null;
+    if (typeof value !== 'number' || !Number.isFinite(value)) return `${channel} 미수신`;
+    if (value < band.minimum) return `${channel} ${(band.minimum - value).toFixed(1)}℃ 미달`;
+    if (value > band.maximum) return `${channel} ${(value - band.maximum).toFixed(1)}℃ 초과`;
+    return `${channel} 기준 내`;
+  });
+  return {
+    label: assessments.join(' · '),
+    risk: assessments.some((assessment) => assessment.includes('미달') || assessment.includes('초과')),
+  };
 }
 
 function controlVehicleMotionText(vehicle: ManagementData['vehicles'][number]): string {

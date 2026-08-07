@@ -892,6 +892,15 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await expect(ambientCondition).toHaveAttribute('aria-pressed', 'false');
   await expect(temperatureConditions).toContainText('기준 미적용');
   await expect(temperatureDialog.locator('.temperature-condition-band')).toHaveCount(0);
+  await temperatureDialog.locator('.temperature-point').last().hover();
+  const temperatureTooltip = temperatureDialog.getByRole('tooltip');
+  await expect(temperatureTooltip).toBeVisible();
+  await expect(temperatureTooltip).toContainText('수집 시각');
+  await expect(temperatureTooltip).toContainText('A 채널');
+  await expect(temperatureTooltip).toContainText('B 채널');
+  await expect(temperatureTooltip).toContainText('이 시점 배송 온도 기준');
+  await expect(temperatureTooltip).toContainText('COLD');
+  await expect(temperatureTooltip).toContainText('AMBIENT');
   await coldCondition.click();
   await expect(coldCondition).toHaveAttribute('aria-pressed', 'true');
   await expect(temperatureConditions).toContainText('단일 기준');
