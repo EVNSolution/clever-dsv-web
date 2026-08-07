@@ -98,11 +98,11 @@ test('customer map does not depend on seeded vehicle identity', () => {
   expect(customerPage).not.toMatch(/mapMode|ShellControlsState|defaultShellControls/);
 });
 
-test('assigned control vehicles keep their latest valid coordinates even when telemetry is stale', () => {
+test('control vehicles keep their latest valid coordinates even when telemetry is stale', () => {
   const adminShell = readFileSync(new URL('../../src/components/AdminShell.tsx', import.meta.url), 'utf8');
-  const scheduledPoints = adminShell.match(/function scheduledControlVehiclePoints[\s\S]*?\n\}/u)?.[0] ?? '';
-  expect(scheduledPoints).toContain("order.assignmentStatus === 'ASSIGNED'");
-  expect(scheduledPoints).not.toContain('vehicle.vehiclePositionStale');
+  const vehiclePoints = adminShell.match(/function controlVehicleMapPoints[\s\S]*?\n\}/u)?.[0] ?? '';
+  expect(vehiclePoints).toContain('visibleControlVehicles');
+  expect(vehiclePoints).not.toContain('vehicle.vehiclePositionStale');
 });
 
 test('service and page imports follow dependency rules', () => {

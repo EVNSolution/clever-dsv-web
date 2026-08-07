@@ -11,6 +11,12 @@ import type { ManagementData } from '../demo/management';
 import { adminCustomerDeliveryPath } from '../app-routes';
 import { assignControlDestinationProgress } from '../features/control/control-progress';
 import { ServiceDateSelector, todayInSeoul } from '../components/ServiceDateSelector';
+import {
+  controlVehicleDisplayColor,
+  controlVehicleOrderCounts,
+  visibleControlVehicles,
+} from '../features/control/control-vehicles';
+import type { ControlVehicleVisibility } from '../features/control/control-vehicles';
 
 type MobileControlPanel = 'customers' | 'destinations' | 'vehicles';
 type CustomerOrderGroup = {
@@ -49,6 +55,8 @@ export function ControlPage({
   selectedDestinationId,
   selectedVehicleId,
   vehicleColors = new Map(),
+  vehicleVisibility = 'ALL',
+  onVehicleVisibilityChange,
 }: {
   estimatedArrivalByOrderId?: ReadonlyMap<string, string>;
   onManagementChange?: (management: ManagementData | undefined) => void;
@@ -58,6 +66,8 @@ export function ControlPage({
   selectedDestinationId?: string;
   selectedVehicleId?: string;
   vehicleColors?: ReadonlyMap<string, string>;
+  vehicleVisibility?: ControlVehicleVisibility;
+  onVehicleVisibilityChange?: (visibility: ControlVehicleVisibility) => void;
 } = {}): ReactElement {
   if (apiConfig.mode === 'remote') {
     return (
@@ -70,6 +80,8 @@ export function ControlPage({
         selectedDestinationId={selectedDestinationId}
         selectedVehicleId={selectedVehicleId}
         vehicleColors={vehicleColors}
+        vehicleVisibility={vehicleVisibility}
+        onVehicleVisibilityChange={onVehicleVisibilityChange}
       />
     );
   }
@@ -105,6 +117,8 @@ function RemoteControlPage({
   selectedDestinationId,
   selectedVehicleId,
   vehicleColors,
+  vehicleVisibility,
+  onVehicleVisibilityChange,
 }: {
   estimatedArrivalByOrderId: ReadonlyMap<string, string>;
   onManagementChange?: (management: ManagementData | undefined) => void;
@@ -114,6 +128,8 @@ function RemoteControlPage({
   selectedDestinationId?: string;
   selectedVehicleId?: string;
   vehicleColors: ReadonlyMap<string, string>;
+  vehicleVisibility: ControlVehicleVisibility;
+  onVehicleVisibilityChange?: (visibility: ControlVehicleVisibility) => void;
 }): ReactElement {
   const [summary, setSummary] = useState<ControlSummary>();
   const [management, setManagement] = useState<ManagementData>();
@@ -183,7 +199,7 @@ function RemoteControlPage({
       orders={orders}
       ordersCount={orders.length}
       summary={summary}
-      vehicles={scheduledControlVehicles(orders, management)}
+      vehicles={management?.vehicles ?? []}
       assignments={management?.assignments ?? []}
       conditions={management?.conditions ?? []}
       drivers={management?.drivers ?? []}
@@ -194,6 +210,8 @@ function RemoteControlPage({
       selectedServiceDate={serviceDateFilter}
       selectedVehicleId={selectedVehicleId}
       vehicleColors={vehicleColors}
+      vehicleVisibility={vehicleVisibility}
+      onVehicleVisibilityChange={onVehicleVisibilityChange}
     />
   );
 }
@@ -229,6 +247,8 @@ function ControlPanels({
   selectedServiceDate,
   selectedVehicleId,
   vehicleColors = new Map(),
+  vehicleVisibility = 'ALL',
+  onVehicleVisibilityChange,
 }: {
   assignments?: ManagementData['assignments'];
   conditions?: ManagementData['conditions'];
@@ -248,6 +268,8 @@ function ControlPanels({
   selectedServiceDate?: string;
   selectedVehicleId?: string;
   vehicleColors?: ReadonlyMap<string, string>;
+  vehicleVisibility?: ControlVehicleVisibility;
+  onVehicleVisibilityChange?: (visibility: ControlVehicleVisibility) => void;
 }): ReactElement {
   const [mobilePanel, setMobilePanel] = useState<MobileControlPanel>();
   const [temperatureVehicle, setTemperatureVehicle] = useState<ManagementData['vehicles'][number]>();
@@ -261,7 +283,9 @@ function ControlPanels({
       .filter((order) => order.vehicleId === selectedVehicleId)
       .sort(compareControlStops);
   const selectedVehicleDestinations = assignControlDestinationProgress(groupControlDestinations(selectedVehicleOrders));
-  const vehicleOrderCounts = assignedOrderCountsByVehicle(orders);
+  const vehicleOrderCounts = controlVehicleOrderCounts(orders);
+  const visibleVehicles = visibleControlVehicles(vehicles, vehicleOrderCounts, vehicleVisibility);
+  const orderedVehicleCount = vehicles.filter((vehicle) => (vehicleOrderCounts.get(vehicle.id) ?? 0) > 0).length;
 
   useEffect(() => {
     const compactViewport = window.matchMedia(mobileControlQuery);
@@ -341,21 +365,41 @@ function ControlPanels({
                   <span>미배정 <b>{summary.unassignedCount}</b></span>
                 </span>
               ) : null}
-              <span className="chip mini">{vehicles.length}대</span>
+              <span className="chip mini">{visibleVehicles.length}대</span>
             </span>
           </div>
+          <fieldset className="control-vehicle-visibility" aria-label="차량 표시 범위">
+            <label>
+              <input
+                checked={vehicleVisibility === 'ALL'}
+                name="controlVehicleVisibility"
+                onChange={() => onVehicleVisibilityChange?.('ALL')}
+                type="radio"
+              />
+              <span>전체 <b>{vehicles.length}</b></span>
+            </label>
+            <label>
+              <input
+                checked={vehicleVisibility === 'WITH_ORDERS'}
+                name="controlVehicleVisibility"
+                onChange={() => onVehicleVisibilityChange?.('WITH_ORDERS')}
+                type="radio"
+              />
+              <span>주문 있음 <b>{orderedVehicleCount}</b></span>
+            </label>
+          </fieldset>
           {loading ? <div className="panel-state" role="status">차량을 불러오는 중입니다.</div> : null}
           {error ? <div className="panel-state error" role="alert">{error}</div> : null}
           {!loading && !error ? (
             <div className="control-vehicle-list fleet overlay-scroll" id="fleetList">
-              {vehicles.map((vehicle) => {
+              {visibleVehicles.map((vehicle) => {
                 const driverNames = controlVehicleDriverNames(vehicle.id, orders, drivers, assignments);
                 const conditionLabels = controlVehicleConditionLabels(vehicle.id, orders, conditions);
                 const specialInstructions = controlVehicleSpecialInstructions(vehicle.id, orders);
                 return <div
                   className={`control-vehicle-row${selectedVehicleId === vehicle.id ? ' selected' : ''}`}
                   key={vehicle.id}
-                  style={{ '--control-route-color': vehicleColors.get(vehicle.id) ?? '#0066cc' } as CSSProperties}
+                  style={{ '--control-route-color': controlVehicleDisplayColor(vehicle.id, vehicleOrderCounts, vehicleColors) } as CSSProperties}
                 >
                   <i aria-hidden="true" />
                   <button
@@ -368,7 +412,7 @@ function ControlPanels({
                     <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong></span>
                     <ChevronDown aria-hidden="true" className="control-row-chevron" />
                   </button>
-                  <em>{vehicleOrderCounts.get(vehicle.id) ?? 0}건</em>
+                  <em>{(vehicleOrderCounts.get(vehicle.id) ?? 0) > 0 ? `${vehicleOrderCounts.get(vehicle.id)}건` : '주문 없음'}</em>
                   <button className="control-temperature-button" type="button" onClick={() => setTemperatureVehicle(vehicle)}>온도</button>
                   {selectedVehicleId === vehicle.id ? (
                     <div className="control-detail-card control-vehicle-details" id={`control-vehicle-details-${vehicle.id}`}>
@@ -390,7 +434,7 @@ function ControlPanels({
                   ) : null}
                 </div>
               })}
-              {!vehicles.length ? <div className="panel-state">차량이 없습니다.</div> : null}
+              {!visibleVehicles.length ? <div className="panel-state">표시할 차량이 없습니다.</div> : null}
             </div>
           ) : null}
         </section>
@@ -672,25 +716,6 @@ function groupControlDestinations(orders: DispatchListItem[]): ControlDestinatio
     })
     .sort((left, right) => compareControlStops(left.anchor, right.anchor))
     .map((destination, index) => ({ ...destination, sequence: index + 1 }));
-}
-
-function scheduledControlVehicles(orders: DispatchListItem[], management?: ManagementData): ManagementData['vehicles'] {
-  if (!management || orders.length === 0) return [];
-  const scheduledVehicleIds = new Set(
-    orders
-      .filter((order) => order.assignmentStatus === 'ASSIGNED' && order.vehicleId !== null)
-      .map((order) => order.vehicleId),
-  );
-  return management.vehicles.filter((vehicle) => scheduledVehicleIds.has(vehicle.id));
-}
-
-function assignedOrderCountsByVehicle(orders: DispatchListItem[]): ReadonlyMap<string, number> {
-  const counts = new Map<string, number>();
-  for (const order of orders) {
-    if (order.assignmentStatus !== 'ASSIGNED' || order.vehicleId === null) continue;
-    counts.set(order.vehicleId, (counts.get(order.vehicleId) ?? 0) + 1);
-  }
-  return counts;
 }
 
 function controlVehicleDriverNames(

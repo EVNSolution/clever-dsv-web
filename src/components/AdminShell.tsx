@@ -27,27 +27,17 @@ import {
   splitControlRouteByProgress,
 } from '../features/control/control-progress';
 import type { ControlProgressStatus } from '../features/control/control-progress';
+import {
+  controlVehicleColor,
+  controlVehicleColorMap,
+  controlVehicleDisplayColor,
+  controlVehicleOrderCounts,
+  visibleControlVehicles,
+} from '../features/control/control-vehicles';
+import type { ControlVehicleVisibility } from '../features/control/control-vehicles';
 
 const MapCanvas = lazy(() => import('./MapCanvas').then((module) => ({ default: module.MapCanvas })));
 const compactNavigationQuery = '(max-width: 768px)';
-const controlVehiclePalette = [
-  '#0066cc',
-  '#c4458f',
-  '#d56b1d',
-  '#6f52b5',
-  '#007f78',
-  '#c4493d',
-  '#8a5a44',
-  '#2b7a9b',
-  '#7a7f00',
-  '#b33f62',
-  '#4b6cb7',
-  '#aa5a00',
-  '#008f5a',
-  '#7b4fa3',
-  '#b84c8a',
-  '#4e7d2a',
-] as const;
 type ControlRouteRequest = {
   color: string;
   id: string;
@@ -79,11 +69,15 @@ export function AdminShell({
   const [controlManagement, setControlManagement] = useState<ManagementData>();
   const [controlOrders, setControlOrders] = useState<DispatchListItem[]>([]);
   const [controlServiceDate, setControlServiceDate] = useState<string>();
+  const [controlVehicleVisibility, setControlVehicleVisibility] = useState<ControlVehicleVisibility>('ALL');
   const [selectedControlVehicleId, setSelectedControlVehicleId] = useState<string>();
   const [selectedControlDestinationId, setSelectedControlDestinationId] = useState<string>();
   const [controlRouteResults, setControlRouteResults] = useState<ReadonlyMap<string, ControlRouteResult>>(new Map());
   const [controlVehicleTrail, setControlVehicleTrail] = useState<VehicleGpsTrailHistory>();
-  const vehicleColors = useMemo(() => controlVehicleColors(controlOrders), [controlOrders]);
+  const vehicleColors = useMemo(
+    () => controlVehicleColorMap(controlManagement?.vehicles ?? [], controlOrders),
+    [controlManagement, controlOrders],
+  );
   const controlMapPoints = useMemo(
     () => assignedControlMapPoints(controlOrders, vehicleColors, selectedControlVehicleId),
     [controlOrders, selectedControlVehicleId, vehicleColors],
@@ -117,9 +111,9 @@ export function AdminShell({
   );
   const controlVehiclePoints = useMemo(
     () => isTodayInSeoul(controlServiceDate)
-      ? scheduledControlVehiclePoints(controlOrders, departureLocation, vehicleColors, controlManagement)
+      ? controlVehicleMapPoints(controlOrders, departureLocation, vehicleColors, controlVehicleVisibility, controlManagement)
       : [],
-    [controlManagement, controlOrders, controlServiceDate, departureLocation, vehicleColors],
+    [controlManagement, controlOrders, controlServiceDate, controlVehicleVisibility, departureLocation, vehicleColors],
   );
   const handleControlOrdersChange = useCallback((orders: DispatchListItem[], serviceDate?: string) => {
     setControlOrders(orders);
@@ -161,12 +155,18 @@ export function AdminShell({
   useEffect(() => {
     if (
       selectedControlVehicleId !== undefined
-      && !controlOrders.some((order) => order.vehicleId === selectedControlVehicleId)
+      && (
+        !controlManagement?.vehicles.some((vehicle) => vehicle.id === selectedControlVehicleId)
+        || (
+          controlVehicleVisibility === 'WITH_ORDERS'
+          && !controlOrders.some((order) => order.assignmentStatus === 'ASSIGNED' && order.vehicleId === selectedControlVehicleId)
+        )
+      )
     ) {
       setSelectedControlVehicleId(undefined);
       setSelectedControlDestinationId(undefined);
     }
-  }, [controlOrders, selectedControlVehicleId]);
+  }, [controlManagement, controlOrders, controlVehicleVisibility, selectedControlVehicleId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -337,6 +337,8 @@ export function AdminShell({
                   selectedDestinationId={selectedControlDestinationId}
                   selectedVehicleId={selectedControlVehicleId}
                   vehicleColors={vehicleColors}
+                  vehicleVisibility={controlVehicleVisibility}
+                  onVehicleVisibilityChange={setControlVehicleVisibility}
                 />
               ))
           : <AdminContent activePath={activePath} title={activeTab.title} description={activeTab.description} />}
@@ -381,7 +383,7 @@ function assignedControlMapPoints(
     if (anchor === undefined || anchor.latitude === null || anchor.longitude === null || anchor.vehicleId === null) return [];
     return [{
       color: selectedVehicleId === undefined
-        ? vehicleColors.get(anchor.vehicleId) ?? controlVehiclePalette[0]
+        ? vehicleColors.get(anchor.vehicleId) ?? controlVehicleColor(anchor.vehicleId)
         : CONTROL_PROGRESS_COLORS[progressStatus],
       id: anchor.destinationId,
       label: String(sequence),
@@ -428,8 +430,8 @@ function assignedControlRouteRequests(
     const vehicleId = orderedStops[0]?.orders[0]?.vehicleId;
     return {
       color: vehicleId === null || vehicleId === undefined
-        ? controlVehiclePalette[0]
-        : vehicleColors.get(vehicleId) ?? controlVehiclePalette[0],
+        ? '#0066cc'
+        : vehicleColors.get(vehicleId) ?? controlVehicleColor(vehicleId),
       id: routeId,
       stops: progressStops.flatMap((stop) => {
         const anchor = stop.orders.find((order) => order.latitude !== null && order.longitude !== null);
@@ -575,32 +577,16 @@ function compareControlRouteStops(left: DispatchListItem, right: DispatchListIte
   return left.sellerOrderKey.localeCompare(right.sellerOrderKey, 'ko');
 }
 
-function controlVehicleColors(orders: DispatchListItem[]): ReadonlyMap<string, string> {
-  const vehicleIds = [...new Set(orders.flatMap((order) => (
-    order.assignmentStatus === 'ASSIGNED' && order.vehicleId !== null ? [order.vehicleId] : []
-  )))].sort();
-  return new Map(vehicleIds.map((vehicleId, index) => [
-    vehicleId,
-    controlVehiclePalette[index % controlVehiclePalette.length],
-  ]));
-}
-
-function scheduledControlVehiclePoints(
+function controlVehicleMapPoints(
   orders: DispatchListItem[],
   departureLocation: DepartureLocation | null,
   vehicleColors: ReadonlyMap<string, string>,
+  visibility: ControlVehicleVisibility,
   management?: ManagementData,
 ): MapCanvasVehiclePoint[] {
-  const vehicleIds = new Set(
-    orders.flatMap((order) => (
-      order.assignmentStatus === 'ASSIGNED' && order.vehicleId !== null
-        ? [order.vehicleId]
-        : []
-    )),
-  );
-  if (vehicleIds.size === 0) return [];
-  const scheduledVehicles = management?.vehicles.filter((vehicle) => vehicleIds.has(vehicle.id)) ?? [];
-  const positionedVehicles = scheduledVehicles.flatMap((vehicle) => {
+  const orderCounts = controlVehicleOrderCounts(orders);
+  const vehicles = visibleControlVehicles(management?.vehicles ?? [], orderCounts, visibility);
+  const positionedVehicles = vehicles.flatMap((vehicle) => {
     const { vehicleLatitude: latitude, vehicleLongitude: longitude } = vehicle;
     if (
       typeof latitude !== 'number'
@@ -612,16 +598,19 @@ function scheduledControlVehiclePoints(
       || longitude < -180
       || longitude > 180
     ) return [];
+    const orderCount = orderCounts.get(vehicle.id) ?? 0;
     return [{
-      color: vehicleColors.get(vehicle.id) ?? controlVehiclePalette[0],
+      color: controlVehicleDisplayColor(vehicle.id, orderCounts, vehicleColors),
       id: vehicle.id,
-      label: vehicle.plate || vehicle.type || '차량 위치',
+      label: `${vehicle.plate || vehicle.type || '차량 위치'}${orderCount === 0 ? ' · 주문 없음' : ''}`,
       latitude,
       longitude,
     }];
   });
   const positionedVehicleIds = new Set(positionedVehicles.map((vehicle) => vehicle.id));
-  const fallbackCount = [...vehicleIds].filter((vehicleId) => !positionedVehicleIds.has(vehicleId)).length;
+  const fallbackCount = vehicles.filter((vehicle) => (
+    (orderCounts.get(vehicle.id) ?? 0) > 0 && !positionedVehicleIds.has(vehicle.id)
+  )).length;
   if (departureLocation === null || fallbackCount === 0) return positionedVehicles;
   return [
     ...positionedVehicles,
