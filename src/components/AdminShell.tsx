@@ -602,7 +602,7 @@ function controlVehicleMapPoints(
     return [{
       color: controlVehicleDisplayColor(vehicle.id, orderCounts, vehicleColors),
       id: vehicle.id,
-      label: `${vehicle.plate || vehicle.type || '차량 위치'}${orderCount === 0 ? ' · 주문 없음' : ''}`,
+      label: vehicle.plate || vehicle.type || '차량 위치',
       latitude,
       longitude,
     }];
