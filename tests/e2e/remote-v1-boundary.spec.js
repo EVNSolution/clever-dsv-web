@@ -757,6 +757,13 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
         { observedAt: '2026-07-23T00:10:00.000Z', temperatureA: 4.3, temperatureB: 4.5 },
       ],
     }),
+    'GET /api/dsv/v1/vehicles/vehicle-g006-unscheduled/temperature-history': v1Envelope({
+      vehicleId: 'vehicle-g006-unscheduled',
+      samples: [
+        { observedAt: '2026-07-23T00:00:00.000Z', temperatureA: -18.4, temperatureB: -18.1 },
+        { observedAt: '2026-07-23T00:05:00.000Z', temperatureA: -18.2, temperatureB: -17.9 },
+      ],
+    }),
     'GET /api/dsv/v1/vehicles/vehicle-g006-scheduled/gps-trail-history': v1Envelope({
       serviceDate: currentSummary.serviceDate,
       sessions: [],
@@ -873,6 +880,11 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await expect(temperatureDialog).toContainText('A 채널');
   await expect(temperatureDialog).toContainText('B 채널');
   await expect(temperatureDialog.getByLabel('온도 수집 시간표')).toContainText('5분');
+  await expect(temperatureDialog.locator('.temperature-grid-x.temperature-grid-minor').first()).toBeAttached();
+  await expect(temperatureDialog.locator('.temperature-grid-x.temperature-grid-major').first()).toBeAttached();
+  await expect(temperatureDialog.locator('.temperature-grid-y.temperature-grid-minor').first()).toBeAttached();
+  await expect(temperatureDialog.locator('.temperature-grid-y.temperature-grid-major').first()).toBeAttached();
+  expect(await temperatureDialog.locator('.temperature-axis-label').allTextContents()).toEqual(expect.arrayContaining(['09:00', '09:30', '0℃', '5℃', '25℃']));
   const temperatureConditions = temperatureDialog.getByLabel('운영 상태 온도 기준');
   const coldCondition = temperatureConditions.getByRole('button', { name: 'COLD 냉장 2℃ ~ 4℃' });
   const ambientCondition = temperatureConditions.getByRole('button', { name: 'AMBIENT 상온 15℃ ~ 25℃' });
@@ -892,6 +904,12 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await expect(temperatureDialog.locator('.temperature-condition-band')).toHaveCount(2);
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/vehicles/vehicle-g006-scheduled/temperature-history');
   await temperatureDialog.getByRole('button', { name: '온도 이력 닫기' }).click();
+  await scheduledFleet.locator('.control-vehicle-row', { hasText: '88테 5005' }).getByRole('button', { name: '온도', exact: true }).click();
+  const unscheduledTemperatureDialog = page.getByRole('dialog', { name: '88테 5005 온도' });
+  await expect(unscheduledTemperatureDialog.getByLabel('운영 상태 온도 기준')).toContainText('COLD');
+  await expect(unscheduledTemperatureDialog.getByLabel('운영 상태 온도 기준')).toContainText('AMBIENT');
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/vehicles/vehicle-g006-unscheduled/temperature-history');
+  await unscheduledTemperatureDialog.getByRole('button', { name: '온도 이력 닫기' }).click();
   const customerInquiryLink = page.getByRole('link', { name: 'Canonical Customer 고객사 조회 화면으로 이동' });
   await expect(customerInquiryLink).toBeVisible();
   await expect(customerInquiryLink).toHaveAttribute('href', `/customer/delivery-inquiry/admin?customer=customer-g006-control&serviceDate=${currentSummary.serviceDate}`);
@@ -1041,8 +1059,8 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await expect(vehicleDetails).toContainText('AMBIENT');
   await expect(vehicleDetails).toContainText('오전 11시 배송 필수');
   await expect(vehicleDetails).not.toContainText('온도 이탈');
-  await expect(vehicleDetails.getByLabel('차량 최근 조회 상태')).toContainText('최근 위치 조회');
-  await expect(vehicleDetails.getByLabel('차량 최근 조회 상태')).toContainText('최근 온도 조회');
+  await expect(vehicleDetails.getByLabel(/^최근 위치 조회:/u)).toContainText('최근 위치 조회');
+  await expect(vehicleDetails.getByLabel(/^최근 온도 조회:/u)).toContainText('최근 온도 조회');
   await expect(vehicleDetails.getByRole('button', { name: '차량 중앙정렬' })).toHaveCount(0);
   await expect(page.locator('#destinationCard .control-destination-row')).toHaveCount(1);
   await expect(page.getByLabel('배송지 순서 1')).toHaveText('1');
