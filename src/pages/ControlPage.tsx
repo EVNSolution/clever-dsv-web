@@ -759,22 +759,67 @@ function TemperatureChart({
   temperatureBands: TemperatureConditionBand[];
 }): ReactElement {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const xAxisRef = useRef<SVGSVGElement>(null);
+  const yAxisRef = useRef<SVGSVGElement>(null);
   const [hoveredSample, setHoveredSample] = useState<VehicleTemperatureSample>();
-  useEffect(() => {
-    const scroll = scrollRef.current;
-    if (!scroll || samples.length === 0) return undefined;
-    const frame = window.requestAnimationFrame(() => {
-      scroll.scrollLeft = scroll.scrollWidth - scroll.clientWidth;
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [samples]);
   const channels = [
     { key: 'temperatureA' as const, label: 'A 채널', color: 'var(--color-primary)' },
     { key: 'temperatureB' as const, label: 'B 채널', color: 'var(--color-risk)' },
   ];
   const values = samples.flatMap((sample) => [sample.temperatureA, sample.temperatureB]).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
   const timeframe = samples.length ? `${formatTemperatureTooltipTime(samples[0].observedAt)} ~ ${formatTemperatureTooltipTime(samples[samples.length - 1].observedAt)}` : '수집 기록 없음';
-  if (!samples.length || !values.length) {
+  const hasTemperatureData = samples.length > 0 && values.length > 0;
+  const fiveMinutes = 5 * 60 * 1000;
+  const thirtyMinutes = 30 * 60 * 1000;
+  const viewportHeight = 302;
+  const axisHeight = 38;
+  const axisWidth = 52;
+  const padding = { bottom: 16, right: 20, top: 16 };
+  const parsedTimestamps = samples.map((sample) => new Date(sample.observedAt).getTime()).filter((value) => !Number.isNaN(value));
+  const timestamps = parsedTimestamps.length ? parsedTimestamps : [Date.now()];
+  const firstTime = Math.min(...timestamps);
+  const lastTime = Math.max(...timestamps);
+  const minTime = Math.floor(firstTime / thirtyMinutes) * thirtyMinutes;
+  const maxTime = Math.max(minTime + thirtyMinutes, Math.ceil(lastTime / thirtyMinutes) * thirtyMinutes);
+  const halfHourCount = Math.max(1, Math.round((maxTime - minTime) / thirtyMinutes));
+  const width = Math.max(808, padding.right + halfHourCount * 108);
+  const averageValue = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  const valueDistance = values.length ? Math.max(...values.map((value) => Math.abs(value - averageValue))) : 0;
+  const visibleHalfRange = Math.max(5, Math.ceil(valueDistance / 5) * 5);
+  const visibleMinValue = averageValue - visibleHalfRange;
+  const visibleMaxValue = averageValue + visibleHalfRange;
+  const minValue = Math.min(visibleMinValue, ...temperatureBands.map((band) => band.minimum));
+  const maxValue = Math.max(visibleMaxValue, ...temperatureBands.map((band) => band.maximum));
+  const pixelsPerDegree = (viewportHeight - padding.top - padding.bottom) / (visibleHalfRange * 2);
+  const height = padding.top + padding.bottom + ((maxValue - minValue) * pixelsPerDegree);
+  const xFor = (observedAt: string): number => {
+    const timestamp = new Date(observedAt).getTime();
+    if (maxTime === minTime || Number.isNaN(timestamp)) return 0;
+    return ((timestamp - minTime) / (maxTime - minTime)) * (width - padding.right);
+  };
+  const yFor = (value: number): number => {
+    return padding.top + ((maxValue - value) * pixelsPerDegree);
+  };
+  const yTicks = numberTicks(Math.ceil(minValue), Math.floor(maxValue), 1);
+  const xTicks = numberTicks(minTime, maxTime, fiveMinutes);
+  const hoveredX = hoveredSample ? xFor(hoveredSample.observedAt) : 0;
+  const syncTemperatureAxes = (): void => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    if (xAxisRef.current) xAxisRef.current.style.transform = `translateX(${-scroll.scrollLeft}px)`;
+    if (yAxisRef.current) yAxisRef.current.style.transform = `translateY(${-scroll.scrollTop}px)`;
+  };
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll || !hasTemperatureData) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      scroll.scrollLeft = scroll.scrollWidth - scroll.clientWidth;
+      scroll.scrollTop = Math.max(0, yFor(averageValue) - (scroll.clientHeight / 2));
+      syncTemperatureAxes();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [averageValue, hasTemperatureData, height, samples, width]);
+  if (!hasTemperatureData) {
     return (
       <div className="temperature-chart">
         <div className="temperature-timeframe" aria-label="온도 수집 시간표">
@@ -785,37 +830,6 @@ function TemperatureChart({
       </div>
     );
   }
-  const fiveMinutes = 5 * 60 * 1000;
-  const thirtyMinutes = 30 * 60 * 1000;
-  const height = 340;
-  const axisWidth = 52;
-  const padding = { bottom: 38, right: 20, top: 24 };
-  const timestamps = samples.map((sample) => new Date(sample.observedAt).getTime()).filter((value) => !Number.isNaN(value));
-  const firstTime = Math.min(...timestamps);
-  const lastTime = Math.max(...timestamps);
-  const minTime = Math.floor(firstTime / thirtyMinutes) * thirtyMinutes;
-  const maxTime = Math.max(minTime + thirtyMinutes, Math.ceil(lastTime / thirtyMinutes) * thirtyMinutes);
-  const halfHourCount = Math.max(1, Math.round((maxTime - minTime) / thirtyMinutes));
-  const width = Math.max(808, padding.right + halfHourCount * 108);
-  const scaleValues = [...values, ...temperatureBands.flatMap((band) => [band.minimum, band.maximum])];
-  let minValue = Math.floor(Math.min(...scaleValues) / 5) * 5;
-  let maxValue = Math.ceil(Math.max(...scaleValues) / 5) * 5;
-  if (minValue === maxValue) {
-    minValue -= 5;
-    maxValue += 5;
-  }
-  const xFor = (observedAt: string): number => {
-    const timestamp = new Date(observedAt).getTime();
-    if (maxTime === minTime || Number.isNaN(timestamp)) return 0;
-    return ((timestamp - minTime) / (maxTime - minTime)) * (width - padding.right);
-  };
-  const yFor = (value: number): number => {
-    if (maxValue === minValue) return height / 2;
-    return padding.top + ((maxValue - value) / (maxValue - minValue)) * (height - padding.top - padding.bottom);
-  };
-  const yTicks = numberTicks(minValue, maxValue, 1);
-  const xTicks = numberTicks(minTime, maxTime, fiveMinutes);
-  const hoveredX = hoveredSample ? xFor(hoveredSample.observedAt) : 0;
   return (
     <div className="temperature-chart">
       <div className="temperature-timeframe" aria-label="온도 수집 시간표">
@@ -826,17 +840,19 @@ function TemperatureChart({
         {channels.map((channel) => <span key={channel.key}><i style={{ background: channel.color }} />{channel.label}</span>)}
       </div>
       <div className="temperature-chart-frame">
-        <svg aria-hidden="true" className="temperature-y-axis" viewBox={`0 0 ${axisWidth} ${height}`}>
-          {yTicks.map((tick) => {
-            const major = tick % 5 === 0;
-            return major ? (
-              <text className="temperature-axis-label" key={tick} x={axisWidth - 10} y={yFor(tick) + 4} textAnchor="end">{tick}℃</text>
-            ) : null;
-          })}
-          <line className="temperature-axis-line" x1={axisWidth - 1} x2={axisWidth - 1} y1={padding.top} y2={height - padding.bottom} />
-        </svg>
-        <div className="temperature-chart-scroll" ref={scrollRef}>
-          <div className="temperature-chart-plot" style={{ width: `${width}px` }}>
+        <div className="temperature-y-axis-window">
+          <svg aria-hidden="true" className="temperature-y-axis" height={height} ref={yAxisRef} viewBox={`0 0 ${axisWidth} ${height}`}>
+            {yTicks.map((tick) => {
+              const major = tick % 5 === 0;
+              return major ? (
+                <text className="temperature-axis-label" key={tick} x={axisWidth - 10} y={yFor(tick) + 4} textAnchor="end">{tick}℃</text>
+              ) : null;
+            })}
+            <line className="temperature-axis-line" x1={axisWidth - 1} x2={axisWidth - 1} y1={padding.top} y2={height - padding.bottom} />
+          </svg>
+        </div>
+        <div className="temperature-chart-scroll" onScroll={syncTemperatureAxes} ref={scrollRef}>
+          <div className="temperature-chart-plot" style={{ height: `${height}px`, width: `${width}px` }}>
             <svg
               aria-label="전날부터 최근 수신까지 차량 온도 A 채널과 B 채널 꺾은선 차트"
               role="img"
@@ -868,11 +884,6 @@ function TemperatureChart({
                   y1={padding.top}
                   y2={height - padding.bottom}
                 />
-                {major ? (
-                  <text className="temperature-axis-label" x={xForTimestamp(tick, minTime, maxTime, width, { ...padding, left: 0 })} y={height - 10} textAnchor="middle">
-                    {formatTemperatureAxisTime(new Date(tick).toISOString())}
-                  </text>
-                ) : null}
               </g>
             );
           })}
@@ -925,6 +936,26 @@ function TemperatureChart({
               />
             ) : null}
           </div>
+        </div>
+        <div aria-hidden="true" className="temperature-axis-corner" />
+        <div className="temperature-x-axis-window">
+          <svg aria-hidden="true" className="temperature-x-axis" height={axisHeight} ref={xAxisRef} viewBox={`0 0 ${width} ${axisHeight}`} width={width}>
+            {xTicks.map((tick) => {
+              const major = (tick - minTime) % thirtyMinutes === 0;
+              return major ? (
+                <text
+                  className="temperature-axis-label"
+                  key={tick}
+                  textAnchor="middle"
+                  x={xForTimestamp(tick, minTime, maxTime, width, { ...padding, left: 0 })}
+                  y={24}
+                >
+                  {formatTemperatureAxisTime(new Date(tick).toISOString())}
+                </text>
+              ) : null;
+            })}
+            <line className="temperature-axis-line" x1="0" x2={width - padding.right} y1="1" y2="1" />
+          </svg>
         </div>
       </div>
     </div>

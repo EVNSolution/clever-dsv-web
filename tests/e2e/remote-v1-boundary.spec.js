@@ -913,7 +913,13 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   ))).toBe(2);
   await expect(temperatureDialog.locator('.temperature-y-axis')).toContainText('25℃');
   await expect.poll(() => temperatureDialog.locator('.temperature-chart-scroll').evaluate((chart) => chart.scrollWidth / chart.clientWidth)).toBeGreaterThan(4);
+  await expect.poll(() => temperatureDialog.locator('.temperature-chart-scroll').evaluate((chart) => chart.scrollHeight / chart.clientHeight)).toBeGreaterThan(2);
   await expect.poll(() => temperatureDialog.locator('.temperature-chart-scroll').evaluate((chart) => Math.round(chart.scrollLeft + chart.clientWidth - chart.scrollWidth))).toBe(0);
+  await expect.poll(() => temperatureDialog.locator('.temperature-chart-scroll').evaluate((chart) => {
+    const points = [...chart.querySelectorAll('.temperature-point')];
+    const averageY = points.reduce((sum, point) => sum + Number(point.getAttribute('cy')), 0) / points.length;
+    return Math.round(Math.abs((averageY - chart.scrollTop) - (chart.clientHeight / 2)));
+  })).toBeLessThanOrEqual(1);
   const fixedAxisX = await temperatureDialog.locator('.temperature-y-axis').evaluate((axis) => axis.getBoundingClientRect().x);
   await temperatureDialog.locator('.temperature-chart-scroll').evaluate((chart) => { chart.scrollLeft = 0; });
   await expect.poll(() => temperatureDialog.locator('.temperature-y-axis').evaluate((axis) => axis.getBoundingClientRect().x)).toBe(fixedAxisX);
