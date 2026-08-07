@@ -873,12 +873,23 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await expect(temperatureDialog).toContainText('A 채널');
   await expect(temperatureDialog).toContainText('B 채널');
   await expect(temperatureDialog.getByLabel('온도 수집 시간표')).toContainText('5분');
-  await expect(temperatureDialog.getByLabel('운영 상태 온도 기준')).toContainText('COLD 냉장 2℃ ~ 4℃');
-  await expect(temperatureDialog.getByLabel('운영 상태 온도 기준')).toContainText('AMBIENT 상온 15℃ ~ 25℃');
+  const temperatureConditions = temperatureDialog.getByLabel('운영 상태 온도 기준');
+  const coldCondition = temperatureConditions.getByRole('button', { name: 'COLD 냉장 2℃ ~ 4℃' });
+  const ambientCondition = temperatureConditions.getByRole('button', { name: 'AMBIENT 상온 15℃ ~ 25℃' });
+  await expect(coldCondition).toHaveAttribute('aria-pressed', 'true');
+  await expect(ambientCondition).toHaveAttribute('aria-pressed', 'true');
+  await expect(temperatureConditions).toContainText('2개 비교');
   await expect(temperatureDialog.locator('.temperature-condition-band')).toHaveCount(2);
   await expect.poll(() => temperatureDialog.locator('.temperature-condition-band').evaluateAll((bands) => (
     new Set(bands.map((band) => band.getAttribute('fill'))).size
   ))).toBe(2);
+  await coldCondition.click();
+  await expect(coldCondition).toHaveAttribute('aria-pressed', 'false');
+  await expect(temperatureConditions).toContainText('단일 기준');
+  await expect(temperatureDialog.locator('.temperature-condition-band')).toHaveCount(1);
+  await coldCondition.click();
+  await expect(temperatureConditions).toContainText('2개 비교');
+  await expect(temperatureDialog.locator('.temperature-condition-band')).toHaveCount(2);
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/vehicles/vehicle-g006-scheduled/temperature-history');
   await temperatureDialog.getByRole('button', { name: '온도 이력 닫기' }).click();
   const customerInquiryLink = page.getByRole('link', { name: 'Canonical Customer 고객사 조회 화면으로 이동' });

@@ -611,6 +611,20 @@ function VehicleTemperatureDialog({
   temperatureBands: TemperatureConditionBand[];
   vehicle: ManagementData['vehicles'][number];
 }): ReactElement {
+  const temperatureBandCodes = temperatureBands.map((band) => band.code).join('\u0000');
+  const [selectedTemperatureBandCodes, setSelectedTemperatureBandCodes] = useState<string[]>(() => temperatureBands.map((band) => band.code));
+  useEffect(() => {
+    setSelectedTemperatureBandCodes(temperatureBands.map((band) => band.code));
+  }, [temperatureBandCodes]);
+  const selectedTemperatureBands = temperatureBands.filter((band) => selectedTemperatureBandCodes.includes(band.code));
+  const temperatureWindowLabel = selectedTemperatureBands.length > 1 ? `${selectedTemperatureBands.length}개 비교` : '단일 기준';
+  const toggleTemperatureBand = (code: string): void => {
+    setSelectedTemperatureBandCodes((current) => {
+      if (!current.includes(code)) return [...current, code];
+      if (current.length === 1) return current;
+      return current.filter((currentCode) => currentCode !== code);
+    });
+  };
   return (
     <div className="temperature-dialog-backdrop" role="presentation">
       <section className="temperature-dialog" role="dialog" aria-modal="true" aria-labelledby="temperatureDialogTitle">
@@ -623,7 +637,39 @@ function VehicleTemperatureDialog({
         </header>
         {loading ? <div className="temperature-dialog-state" role="status">온도 이력을 불러오는 중입니다.</div> : null}
         {error ? <div className="temperature-dialog-state error" role="alert">{error}</div> : null}
-        {!loading && !error && history ? <TemperatureChart samples={history.samples} temperatureBands={temperatureBands} /> : null}
+        {!loading && !error && history ? (
+          <>
+            {temperatureBands.length ? (
+              <section className="temperature-condition-picker" aria-label="운영 상태 온도 기준">
+                <div className="temperature-condition-picker-heading">
+                  <strong>운영 상태 온도 기준</strong>
+                  <span>{temperatureWindowLabel}</span>
+                </div>
+                <div className="temperature-condition-options">
+                  {temperatureBands.map((band) => {
+                    const selected = selectedTemperatureBandCodes.includes(band.code);
+                    return (
+                      <button
+                        aria-pressed={selected}
+                        key={band.code}
+                        onClick={() => toggleTemperatureBand(band.code)}
+                        style={{ '--temperature-condition-color': band.color } as CSSProperties}
+                        type="button"
+                      >
+                        <span>
+                          <strong>{band.code}</strong>
+                          <small>{band.label}</small>
+                        </span>
+                        <b>{`${formatTemperatureValue(band.minimum)}℃ ~ ${formatTemperatureValue(band.maximum)}℃`}</b>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+            <TemperatureChart samples={history.samples} temperatureBands={selectedTemperatureBands} />
+          </>
+        ) : null}
       </section>
     </div>
   );
@@ -642,16 +688,6 @@ function TemperatureChart({
   ];
   const values = samples.flatMap((sample) => [sample.temperatureA, sample.temperatureB]).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
   const timeframe = samples.length ? `${formatTemperatureTooltipTime(samples[0].observedAt)} ~ ${formatTemperatureTooltipTime(samples[samples.length - 1].observedAt)}` : '수집 기록 없음';
-  const conditionLegend = temperatureBands.length ? (
-    <div className="temperature-condition-legend" aria-label="운영 상태 온도 기준">
-      {temperatureBands.map((band) => (
-        <span key={band.code}>
-          <i aria-hidden="true" style={{ background: band.color }} />
-          {`${band.code} ${band.label} ${formatTemperatureValue(band.minimum)}℃ ~ ${formatTemperatureValue(band.maximum)}℃`}
-        </span>
-      ))}
-    </div>
-  ) : null;
   if (!samples.length || !values.length) {
     return (
       <div className="temperature-chart">
@@ -659,7 +695,6 @@ function TemperatureChart({
           <span>조회 시간 <b>{timeframe}</b></span>
           <span>수집 주기 <b>5분</b></span>
         </div>
-        {conditionLegend}
         <div className="temperature-dialog-state">표시할 온도 데이터가 없습니다.</div>
       </div>
     );
@@ -690,7 +725,6 @@ function TemperatureChart({
         <span>조회 시간 <b>{timeframe}</b></span>
         <span>수집 주기 <b>5분</b></span>
       </div>
-      {conditionLegend}
       <div className="temperature-legend" aria-hidden="true">
         {channels.map((channel) => <span key={channel.key}><i style={{ background: channel.color }} />{channel.label}</span>)}
       </div>
