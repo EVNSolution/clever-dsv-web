@@ -194,7 +194,7 @@ function RemoteCustomerDeliveryInquiryPage({
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>();
   const [searchValue, setSearchValue] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchDestinationId, setSearchDestinationId] = useState<string>();
+  const [searchDestinationIds, setSearchDestinationIds] = useState<string[]>([]);
   const [serviceDate, setServiceDate] = useState(() => (
     new URLSearchParams(window.location.search).get('serviceDate') ?? todayInSeoul()
   ));
@@ -268,11 +268,15 @@ function RemoteCustomerDeliveryInquiryPage({
     : viewDeliveries.filter((delivery) => customerVehicleGroupId(delivery) === activeVehicleId);
   const destinationGroups = customerDestinationGroups(visibleDeliveries);
   const selected = destinationGroups.find((group) => group.destinationId === selectedKey);
-  const searchResult = destinationGroups.find((group) => group.destinationId === searchDestinationId);
-  const displayedDestinationGroups = searchResult === undefined
+  const searchDestinationIdSet = new Set(searchDestinationIds);
+  const displayedDestinationGroups = searchDestinationIds.length === 0
     ? destinationGroups
-    : [searchResult, ...destinationGroups.filter((group) => group.destinationId !== searchResult.destinationId)];
-  const searchCandidates = customerSearchCandidates(viewDeliveries, searchValue);
+    : [
+        ...destinationGroups.filter((group) => searchDestinationIdSet.has(group.destinationId)),
+        ...destinationGroups.filter((group) => !searchDestinationIdSet.has(group.destinationId)),
+      ];
+  const searchMatches = customerSearchCandidates(viewDeliveries, searchValue);
+  const searchCandidates = searchMatches.slice(0, 10);
   const points = customerMapPoints(destinationGroups);
   const vehicles = customerVehiclePoints(visibleDeliveries);
   const visibleRoutes = view === 'history'
@@ -295,14 +299,14 @@ function RemoteCustomerDeliveryInquiryPage({
     setView(nextView);
     setSelectedVehicleId(undefined);
     setSelectedKey(undefined);
-    setSearchDestinationId(undefined);
+    setSearchDestinationIds([]);
   };
 
   const selectVehicle = (vehicleId: string) => {
     const nextVehicleId = activeVehicleId === vehicleId ? undefined : vehicleId;
     setSelectedVehicleId(nextVehicleId);
     setSelectedKey(undefined);
-    setSearchDestinationId(undefined);
+    setSearchDestinationIds([]);
   };
 
   const selectServiceDate = (nextServiceDate: string) => {
@@ -311,7 +315,7 @@ function RemoteCustomerDeliveryInquiryPage({
     window.history.replaceState({}, '', `${url.pathname}${url.search}`);
     setSelectedVehicleId(undefined);
     setSelectedKey(undefined);
-    setSearchDestinationId(undefined);
+    setSearchDestinationIds([]);
     setSearchValue('');
     setSearchOpen(false);
     setServiceDate(nextServiceDate);
@@ -320,8 +324,17 @@ function RemoteCustomerDeliveryInquiryPage({
   const selectSearchCandidate = (candidate: CustomerSearchCandidate) => {
     setSelectedVehicleId(candidate.vehicleId);
     setSelectedKey(candidate.destinationId);
-    setSearchDestinationId(candidate.destinationId);
+    setSearchDestinationIds([candidate.destinationId]);
     setSearchValue(candidate.label);
+    setSearchOpen(false);
+  };
+
+  const selectSearchResults = () => {
+    const destinationIds = [...new Set(searchMatches.map((candidate) => candidate.destinationId))];
+    if (destinationIds.length === 0) return;
+    setSelectedVehicleId(undefined);
+    setSelectedKey(undefined);
+    setSearchDestinationIds(destinationIds);
     setSearchOpen(false);
   };
 
@@ -336,7 +349,7 @@ function RemoteCustomerDeliveryInquiryPage({
             onPointSelect={(destinationId) => {
               const group = destinationGroups.find((item) => item.destinationId === destinationId);
               if (group !== undefined) {
-                setSearchDestinationId(undefined);
+                setSearchDestinationIds([]);
                 setSelectedKey(group.destinationId);
               }
             }}
@@ -367,8 +380,13 @@ function RemoteCustomerDeliveryInquiryPage({
                 autoComplete="off"
                 onChange={(event) => {
                   setSearchValue(event.target.value);
-                  setSearchDestinationId(undefined);
+                  setSearchDestinationIds([]);
                   setSearchOpen(true);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+                  event.preventDefault();
+                  selectSearchResults();
                 }}
                 onFocus={() => setSearchOpen(true)}
                 placeholder="주문 번호, 배송처 이름, 주소 검색"
@@ -431,7 +449,7 @@ function RemoteCustomerDeliveryInquiryPage({
                 </div>
                 {displayedDestinationGroups.map((group) => {
                   const active = group.destinationId === selected?.destinationId;
-                  const searchMatch = group.destinationId === searchDestinationId;
+                  const searchMatch = searchDestinationIdSet.has(group.destinationId);
                   return (
                     <button
                       key={group.destinationId}
@@ -439,7 +457,6 @@ function RemoteCustomerDeliveryInquiryPage({
                       className={`customer-destination-card${active ? ' active' : ''}${searchMatch ? ' search-match' : ''}`}
                       aria-expanded={active}
                       onClick={() => {
-                        setSearchDestinationId(undefined);
                         setSelectedKey((current) => current === group.destinationId ? undefined : group.destinationId);
                       }}
                     >
@@ -591,8 +608,7 @@ function customerSearchCandidates(deliveries: CustomerDeliveryItem[], query: str
     }
   }
   return [...candidates.values()]
-    .filter((candidate) => normalizeCustomerSearch(candidate.label).includes(normalizedQuery))
-    .slice(0, 10);
+    .filter((candidate) => normalizeCustomerSearch(candidate.label).includes(normalizedQuery));
 }
 
 function addCustomerSearchCandidate(

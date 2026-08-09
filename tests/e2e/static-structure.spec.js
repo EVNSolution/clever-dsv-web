@@ -213,12 +213,16 @@ test('dispatch keeps customer grouping as an explicit list view', () => {
   expect(settingsCss).toMatch(/\.settings-view-tabs\s*\{[\s\S]*?margin:0 0 var\(--space-4\)/);
 });
 
-test('customer search selection fills the field and promotes the matched destination', () => {
+test('customer search selection fills the field and enter promotes every matched destination', () => {
   const page = readSrc('pages/CustomerDeliveryInquiryPage.tsx');
   const customerCss = readSrc('styles/features/customer.css');
 
   expect(page).toContain('setSearchValue(candidate.label)');
-  expect(page).toContain('setSearchDestinationId(candidate.destinationId)');
+  expect(page).toContain('setSearchDestinationIds([candidate.destinationId])');
+  expect(page).toContain("event.key !== 'Enter' || event.nativeEvent.isComposing");
+  expect(page).toContain('new Set(searchMatches.map((candidate) => candidate.destinationId))');
+  expect(page).toContain('const searchCandidates = searchMatches.slice(0, 10)');
+  expect(page).toContain('searchDestinationIdSet.has(group.destinationId)');
   expect(page).toContain('displayedDestinationGroups.map');
   expect(page).toContain('onPointerDown={(event) => event.preventDefault()}');
   expect(page).toContain('<small>검색 결과</small>');
