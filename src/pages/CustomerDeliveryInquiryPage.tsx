@@ -19,9 +19,9 @@ type CustomerDeliveryInquiryPageProps = {
   principalDisplayName?: string;
 };
 
-export function CustomerDeliveryInquiryPage({ adminCustomerId, principalDisplayName }: CustomerDeliveryInquiryPageProps = {}): ReactElement {
+export function CustomerDeliveryInquiryPage({ adminCustomerId, onLogout, principalDisplayName }: CustomerDeliveryInquiryPageProps = {}): ReactElement {
   if (apiConfig.mode === 'remote') {
-    return <RemoteCustomerDeliveryInquiryPage adminCustomerId={adminCustomerId} principalDisplayName={principalDisplayName} />;
+    return <RemoteCustomerDeliveryInquiryPage adminCustomerId={adminCustomerId} onLogout={onLogout} principalDisplayName={principalDisplayName} />;
   }
   return <MockCustomerDeliveryInquiryPage />;
 }

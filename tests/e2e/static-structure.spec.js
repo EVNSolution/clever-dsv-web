@@ -186,6 +186,7 @@ test('public customer account pages keep invitation and login contract explicit'
   const app = readSrc('App.tsx');
   const setup = readSrc('pages/CustomerAccountSetupPage.tsx');
   const login = readSrc('pages/CustomerLoginPage.tsx');
+  const inquiry = readSrc('pages/CustomerDeliveryInquiryPage.tsx');
   const service = readSrc('services/customer-accounts.ts');
 
   expect(app).toContain('path === customerLoginPath || path === customerAccountSetupPath');
@@ -197,6 +198,7 @@ test('public customer account pages keep invitation and login contract explicit'
   expect(setup).not.toContain('URLSearchParams(window.location.search)');
   expect(login).toContain('loginCustomerAccount');
   expect(app).toContain('logoutCustomerAccount');
+  expect(inquiry).toContain('onLogout={onLogout}');
   expect(service).toContain("'customer/auth/invitations/validate'");
   expect(service).toContain("'customer/auth/complete'");
   expect(service).toContain("'customer/auth/login'");
