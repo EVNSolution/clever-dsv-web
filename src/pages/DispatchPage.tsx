@@ -1,5 +1,5 @@
 import type { DragEvent, KeyboardEvent, ReactElement } from 'react';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpRight, ChevronDown, LoaderCircle } from 'lucide-react';
 import { ApiError } from '../api/client';
 import { apiConfig } from '../api/config';
@@ -985,7 +985,7 @@ type DispatchFilter = 'ALL' | DispatchOperationStatus;
 type DispatchSortKey = 'address' | 'customer' | 'destination' | 'driver' | 'order' | 'status' | 'vehicle';
 type DispatchDriverSortKey = 'assigned' | 'driver' | 'vehicle';
 type DispatchSortDirection = 'asc' | 'desc';
-type DispatchWorkspaceView = 'LIST' | 'MAP';
+type DispatchWorkspaceView = 'CUSTOMER' | 'LIST' | 'MAP';
 
 function DispatchWorkspace({
   departureControl,
@@ -1044,6 +1044,11 @@ function DispatchWorkspace({
     const filteredRows = filter === 'ALL' ? rows : rows.filter((row) => row.operationStatus === filter);
     return sortDispatchRows(filteredRows, sort, rowOrder, references);
   }, [filter, references, rowOrder, rows, sort]);
+  const visibleCustomerGroups = useMemo(() => groupDispatchCustomers(visibleRows, references), [references, visibleRows]);
+  const tableRows = useMemo(
+    () => workspaceView === 'CUSTOMER' ? visibleCustomerGroups.flatMap((group) => group.orders) : visibleRows,
+    [visibleCustomerGroups, visibleRows, workspaceView],
+  );
   const visibleDestinationGroups = useMemo(() => groupDispatchDestinations(visibleRows), [visibleRows]);
   const visibleIds = useMemo(() => new Set(visibleRows.map((row) => row.sellerOrderId)), [visibleRows]);
   const selectableVisibleRows = useMemo(() => visibleRows.filter(isDispatchMutationSelectable), [visibleRows]);
@@ -1451,10 +1456,10 @@ function DispatchWorkspace({
         {departureControl}
       </div>
       <div className="dispatch-map-workspace">
-        <section className="dispatch-workspace-panel dispatch-map-panel" aria-label={workspaceView === 'MAP' ? '지도' : '목록'}>
+        <section className="dispatch-workspace-panel dispatch-map-panel" aria-label={workspaceView === 'MAP' ? '지도' : workspaceView === 'CUSTOMER' ? '고객사별 목록' : '목록'}>
           <div className="dispatch-map-header">
             <AdminSectionHeader
-              title={workspaceView === 'MAP' ? '배차 지도' : '배차 목록'}
+              title={workspaceView === 'MAP' ? '배차 지도' : workspaceView === 'CUSTOMER' ? '고객사별 배차' : '배차 목록'}
               side={workspaceView === 'MAP'
                 ? (
                     <span className="dispatch-map-counts" aria-label="배차 지도 집계">
@@ -1463,11 +1468,13 @@ function DispatchWorkspace({
                       {missingCoordinateCount > 0 ? <span>좌표 미확인 <b>{missingCoordinateCount}</b>곳</span> : null}
                     </span>
                   )
-                : <span className="section-meta">{visibleRows.length}건</span>}
+                : workspaceView === 'CUSTOMER'
+                  ? <span className="section-meta">고객사 {visibleCustomerGroups.length}곳 · 주문 {visibleRows.length}건</span>
+                  : <span className="section-meta">{visibleRows.length}건</span>}
             />
             <div className="dispatch-map-tools">
               <div className="dispatch-view-switch" aria-label="배차 보기">
-                {([['MAP', '지도'], ['LIST', '목록']] as const).map(([value, label]) => (
+                {([['MAP', '지도'], ['LIST', '목록'], ['CUSTOMER', '고객사']] as const).map(([value, label]) => (
                   <button
                     aria-pressed={workspaceView === value}
                     className={workspaceView === value ? 'active' : ''}
@@ -1607,26 +1614,44 @@ function DispatchWorkspace({
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleRows.map((row) => {
+                  {tableRows.map((row, index) => {
                     const destinationName = dispatchDestinationName(row, references);
                     const driverName = row.driverId === null ? '-' : referenceName(drivers, row.driverId);
                     const vehiclePlate = row.vehicleId === null ? '-' : vehicles.find((vehicle) => vehicle.id === row.vehicleId)?.plate ?? '정보 확인';
                     const disabledReason = dispatchMutationDisabledReason(row);
                     const rowFocused = focusedOrderId === row.sellerOrderId;
                     const actionOpen = openActionOrderId === row.sellerOrderId;
+                    const customerGroup = workspaceView === 'CUSTOMER'
+                      ? visibleCustomerGroups.find((group) => group.customerId === row.customerId) ?? null
+                      : null;
+                    const showCustomerHeader = customerGroup !== null
+                      && (index === 0 || tableRows[index - 1]?.customerId !== row.customerId);
                     return (
-                      <tr
-                        aria-selected={rowFocused}
-                        className={`${selectedIdSet.has(row.sellerOrderId) ? 'selected' : ''}${rowFocused ? ' focused' : ''}${disabledReason ? ' locked' : ''}`}
-                        key={row.sellerOrderId}
-                        tabIndex={0}
-                        onClick={() => setFocusedOrderId(row.sellerOrderId)}
-                        onKeyDown={(event) => {
-                          if (event.key !== 'Enter' && event.key !== ' ') return;
-                          event.preventDefault();
-                          setFocusedOrderId(row.sellerOrderId);
-                        }}
-                      >
+                      <Fragment key={row.sellerOrderId}>
+                        {showCustomerHeader ? (
+                          <tr className="dispatch-customer-group-row">
+                            <td colSpan={9}>
+                              <div className="dispatch-customer-group">
+                                <strong>{customerGroup.customerName}</strong>
+                                <span>주문 <b>{customerGroup.orders.length}</b>건</span>
+                                <span>배송지 <b>{customerGroup.destinationCount}</b>곳</span>
+                                <span>배정 <b>{customerGroup.assignedCount}</b>건</span>
+                                {customerGroup.unassignedCount > 0 ? <span>미배정 <b>{customerGroup.unassignedCount}</b>건</span> : null}
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
+                        <tr
+                          aria-selected={rowFocused}
+                          className={`${selectedIdSet.has(row.sellerOrderId) ? 'selected' : ''}${rowFocused ? ' focused' : ''}${disabledReason ? ' locked' : ''}`}
+                          tabIndex={0}
+                          onClick={() => setFocusedOrderId(row.sellerOrderId)}
+                          onKeyDown={(event) => {
+                            if (event.key !== 'Enter' && event.key !== ' ') return;
+                            event.preventDefault();
+                            setFocusedOrderId(row.sellerOrderId);
+                          }}
+                        >
                         <td onClick={(event) => event.stopPropagation()}>
                           <input
                             aria-label={`${destinationName} 선택`}
@@ -1692,7 +1717,8 @@ function DispatchWorkspace({
                             />
                           ) : null}
                         </td>
-                      </tr>
+                        </tr>
+                      </Fragment>
                     );
                   })}
                   {!loading && !error && visibleRows.length === 0 ? (
@@ -2165,6 +2191,28 @@ function dispatchDestinationName(row: DispatchListItem, references: ManagementDa
 
 function dispatchCustomerName(row: DispatchListItem, references: ManagementData | null): string {
   return references?.customers.find((customer) => customer.id === row.customerId)?.name ?? row.customerId;
+}
+
+function groupDispatchCustomers(rows: DispatchListItem[], references: ManagementData | null): Array<{
+  assignedCount: number;
+  customerId: string;
+  customerName: string;
+  destinationCount: number;
+  orders: DispatchListItem[];
+  unassignedCount: number;
+}> {
+  const groups = new Map<string, DispatchListItem[]>();
+  rows.forEach((row) => groups.set(row.customerId, [...(groups.get(row.customerId) ?? []), row]));
+  return [...groups.entries()]
+    .map(([customerId, orders]) => ({
+      assignedCount: orders.filter((order) => order.assignmentStatus === 'ASSIGNED').length,
+      customerId,
+      customerName: dispatchCustomerName(orders[0], references),
+      destinationCount: new Set(orders.map((order) => order.destinationId)).size,
+      orders,
+      unassignedCount: orders.filter((order) => order.assignmentStatus !== 'ASSIGNED').length,
+    }))
+    .sort((left, right) => left.customerName.localeCompare(right.customerName, 'ko', { numeric: true, sensitivity: 'base' }));
 }
 
 function isDispatchMutationSelectable(row: DispatchListItem): boolean {
