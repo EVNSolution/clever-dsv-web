@@ -41,6 +41,13 @@ export type CustomerDeliveryRoute = {
   vehicleId: string;
 };
 
+export type CustomerDeliveryTrail = {
+  segments: Array<{
+    coordinates: Array<[longitude: number, latitude: number]>;
+  }>;
+  vehicleId: string;
+};
+
 export type CustomerDepartureLocation = {
   address?: string;
   latitude: number;
@@ -54,6 +61,7 @@ export type RemoteCustomerDeliveries = {
   emptyReason?: string;
   page?: CustomerDeliveryPageInfo;
   routes: CustomerDeliveryRoute[];
+  trails: CustomerDeliveryTrail[];
 };
 
 type CustomerDeliveryPageInfo = {
@@ -79,19 +87,21 @@ async function loadCustomerScopedDeliveries(
 ): Promise<RemoteCustomerDeliveries> {
   const deliveries: CustomerDeliveryItem[] = [];
   const routes = new Map<string, CustomerDeliveryRoute>();
+  const trails = new Map<string, CustomerDeliveryTrail>();
   let cursor: string | undefined;
   let customerDisplayName: string | undefined;
   let departureLocation: CustomerDepartureLocation | undefined;
   let emptyReason: string | undefined;
   let page: CustomerDeliveryPageInfo | undefined;
   do {
-    const query = new URLSearchParams({ limit: '100' });
+    const query = new URLSearchParams({ includeGpsTrails: 'true', limit: '100' });
     if (options.serviceDate !== undefined) query.set('serviceDate', options.serviceDate);
     if (cursor !== undefined) query.set('cursor', cursor);
     const data = await requestV1ReadJson<unknown>(`customer/deliveries?${query.toString()}`, { signal: options.signal });
     const response = customerDeliveriesResponse(data);
     deliveries.push(...response.items.map(customerDeliveryFrom));
     for (const route of response.routes.map(customerDeliveryRouteFrom)) routes.set(route.vehicleId, route);
+    for (const trail of response.trails.map(customerDeliveryTrailFrom)) trails.set(trail.vehicleId, trail);
     customerDisplayName ??= response.customerDisplayName;
     departureLocation ??= response.departureLocation;
     emptyReason = response.emptyReason;
@@ -99,7 +109,7 @@ async function loadCustomerScopedDeliveries(
     cursor = page?.hasMore === true ? page.nextCursor : undefined;
     if (page?.hasMore === true && cursor === undefined) throw new Error('고객 배송 조회 페이지 정보가 올바르지 않습니다.');
   } while (cursor !== undefined);
-  return { customerDisplayName, deliveries, departureLocation, emptyReason, page, routes: [...routes.values()] };
+  return { customerDisplayName, deliveries, departureLocation, emptyReason, page, routes: [...routes.values()], trails: [...trails.values()] };
 }
 
 async function loadAdminCustomerDeliveries(
@@ -109,6 +119,7 @@ async function loadAdminCustomerDeliveries(
   if (!customerId) throw new Error('조회할 고객사를 선택해야 합니다.');
   const deliveries: CustomerDeliveryItem[] = [];
   const routes = new Map<string, CustomerDeliveryRoute>();
+  const trails = new Map<string, CustomerDeliveryTrail>();
   let cursor: string | undefined;
   let customerDisplayName: string | undefined;
   let departureLocation: CustomerDepartureLocation | undefined;
@@ -117,6 +128,7 @@ async function loadAdminCustomerDeliveries(
   do {
     const query = new URLSearchParams({
       customerId,
+      includeGpsTrails: 'true',
       limit: '100',
     });
     if (options.serviceDate !== undefined) query.set('serviceDate', options.serviceDate);
@@ -125,6 +137,7 @@ async function loadAdminCustomerDeliveries(
     const response = customerDeliveriesResponse(data);
     deliveries.push(...response.items.map(customerDeliveryFrom));
     for (const route of response.routes.map(customerDeliveryRouteFrom)) routes.set(route.vehicleId, route);
+    for (const trail of response.trails.map(customerDeliveryTrailFrom)) trails.set(trail.vehicleId, trail);
     customerDisplayName ??= response.customerDisplayName;
     departureLocation ??= response.departureLocation;
     emptyReason = response.emptyReason;
@@ -132,7 +145,7 @@ async function loadAdminCustomerDeliveries(
     cursor = page?.hasMore === true ? page.nextCursor : undefined;
     if (page?.hasMore === true && cursor === undefined) throw new Error('고객사 배송 조회 페이지 정보가 올바르지 않습니다.');
   } while (cursor !== undefined);
-  return { customerDisplayName, deliveries, departureLocation, emptyReason, page, routes: [...routes.values()] };
+  return { customerDisplayName, deliveries, departureLocation, emptyReason, page, routes: [...routes.values()], trails: [...trails.values()] };
 }
 
 function customerDeliveriesResponse(data: unknown): {
@@ -142,11 +155,13 @@ function customerDeliveriesResponse(data: unknown): {
   items: unknown[];
   page?: CustomerDeliveryPageInfo;
   routes: unknown[];
+  trails: unknown[];
 } {
-  if (!hasOnlyKeys(data, ['customerDisplayName', 'departureLocation', 'items', 'page', 'emptyReason', 'routes']) || !Array.isArray(data.items)) {
+  if (!hasOnlyKeys(data, ['customerDisplayName', 'departureLocation', 'items', 'page', 'emptyReason', 'routes', 'trails']) || !Array.isArray(data.items)) {
     throw new Error('고객 배송 조회 응답 형식이 올바르지 않습니다.');
   }
   if (data.routes !== undefined && !Array.isArray(data.routes)) throw new Error('고객 배송 경로 응답 형식이 올바르지 않습니다.');
+  if (data.trails !== undefined && !Array.isArray(data.trails)) throw new Error('고객 차량 자취 응답 형식이 올바르지 않습니다.');
   return {
     customerDisplayName: optionalString(data, 'customerDisplayName'),
     departureLocation: customerDepartureLocationFrom(data.departureLocation),
@@ -154,6 +169,7 @@ function customerDeliveriesResponse(data: unknown): {
     items: data.items,
     page: pageInfoFrom(data.page),
     routes: data.routes ?? [],
+    trails: data.trails ?? [],
   };
 }
 
@@ -182,6 +198,28 @@ function customerDeliveryRouteFrom(value: unknown): CustomerDeliveryRoute {
     coordinates,
     vehicleId: requiredString(value, 'vehicleId'),
   };
+}
+
+function customerDeliveryTrailFrom(value: unknown): CustomerDeliveryTrail {
+  if (!hasOnlyKeys(value, ['segments', 'vehicleId'])) throw new Error('고객 차량 자취 응답 형식이 올바르지 않습니다.');
+  return {
+    segments: requiredArray(value, 'segments').map((segment) => {
+      if (!hasOnlyKeys(segment, ['coordinates'])) throw new Error('고객 차량 자취 구간 형식이 올바르지 않습니다.');
+      const coordinates = requiredArray(segment, 'coordinates').map(customerMapCoordinateFrom);
+      if (coordinates.length < 2) throw new Error('고객 차량 자취 좌표가 부족합니다.');
+      return { coordinates };
+    }),
+    vehicleId: requiredString(value, 'vehicleId'),
+  };
+}
+
+function customerMapCoordinateFrom(value: unknown): [number, number] {
+  if (!Array.isArray(value) || value.length !== 2) throw new Error('고객 지도 좌표 형식이 올바르지 않습니다.');
+  const [longitude, latitude] = value;
+  if (typeof longitude !== 'number' || !Number.isFinite(longitude) || typeof latitude !== 'number' || !Number.isFinite(latitude)) {
+    throw new Error('고객 지도 좌표 형식이 올바르지 않습니다.');
+  }
+  return [longitude, latitude];
 }
 
 function customerDeliveryFrom(value: unknown): CustomerDeliveryItem {

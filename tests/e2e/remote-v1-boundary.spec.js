@@ -938,7 +938,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await unscheduledTemperatureDialog.getByRole('button', { name: '온도 이력 닫기' }).click();
   const customerInquiryLink = page.getByRole('link', { name: 'Canonical Customer 고객사 조회 화면으로 이동' });
   await expect(customerInquiryLink).toBeVisible();
-  await expect(customerInquiryLink).toHaveAttribute('href', `/customer/delivery-inquiry/admin?customer=customer-g006-control&serviceDate=${currentSummary.serviceDate}`);
+  await expect(customerInquiryLink).toHaveAttribute('href', '/customer/delivery-inquiry/admin?customer=customer-g006-control');
   await expect(customerInquiryLink).toContainText('클릭하여 고객사 조회 화면으로 이동');
   await expect(customerInquiryLink).toHaveCSS('display', 'grid');
   await expect(page.getByLabel('고객사별 주문 리스트')).not.toContainText('destination-g006-control');
@@ -1444,6 +1444,7 @@ test('requests customer deliveries only after a valid customer v1 session', asyn
     'GET /api/dsv/v1/session': v1Envelope(customerSession),
     'GET /api/dsv/v1/customer/deliveries': ({ url }) => {
       for (const param of forbiddenCustomerAuthorityParams) expect(url.searchParams.has(param), `${param} cannot become authority`).toBe(false);
+      expect(url.searchParams.get('includeGpsTrails')).toBe('true');
       return v1Envelope({
         items: [
           {
@@ -1475,11 +1476,13 @@ test('requests customer deliveries only after a valid customer v1 session', asyn
 });
 
 test('loads the administrator customer map through the customer-scoped contract', async ({ page }) => {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
   const requestedServiceDates = [];
   const api = await installApiFixtures(page, {
     'GET /api/dsv/v1/session': v1Envelope(fullAdminSession),
     'GET /api/dsv/v1/customers/deliveries': ({ url }) => {
       expect(url.searchParams.get('customerId')).toBe('customer-g006-map');
+      expect(url.searchParams.get('includeGpsTrails')).toBe('true');
       requestedServiceDates.push(url.searchParams.get('serviceDate'));
       return v1Envelope({
         customerDisplayName: 'G006 Healthcare',
@@ -1513,6 +1516,10 @@ test('loads the administrator customer map through the customer-scoped contract'
           vehicleId: 'vehicle-g006-map',
           coordinates: [[126.982, 37.564], [126.98, 37.565], [126.9779, 37.5663]],
         }],
+        trails: [{
+          vehicleId: 'vehicle-g006-map',
+          segments: [{ coordinates: [[126.982, 37.564], [126.981, 37.5645], [126.98, 37.565]] }],
+        }],
       });
     },
   });
@@ -1522,7 +1529,9 @@ test('loads the administrator customer map through the customer-scoped contract'
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customers/deliveries');
   await expect(page.getByRole('article', { name: '고객사 배송지 지도' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: '고객사 메뉴' })).toContainText('G006 Healthcare');
-  await expect(page.getByRole('button', { name: '조회 기준일 날짜 변경' })).toContainText('2026. 08. 03.');
+  await expect.poll(() => requestedServiceDates[0]).toBe(today);
+  await expect(page).not.toHaveURL(/serviceDate=/u);
+  await expect(page.getByRole('button', { name: '이력 기준일 날짜 변경' })).toHaveCount(0);
   await expect(page.getByLabel('차량 목록')).toContainText('서울86바3800');
   await expect.poll(() => page.getByLabel('차량 목록').locator('.customer-vehicle-list').evaluate((element) => element.clientHeight)).toBe(56);
   await expect(page.getByLabel('배송지 리스트')).toBeVisible();
@@ -1548,7 +1557,18 @@ test('loads the administrator customer map through the customer-scoped contract'
   await expect(addressCandidate).toBeVisible();
   await addressCandidate.click();
   await expect(destination).toHaveAttribute('aria-expanded', 'true');
-  await page.getByRole('button', { name: '조회 기준일 날짜 변경' }).click();
+  await expect.poll(() => page.evaluate(() => {
+    const routeSource = window.dsvMap?.getSource('operational-routes');
+    const routeData = routeSource && 'serialize' in routeSource ? routeSource.serialize().data : undefined;
+    return routeData?.features
+      ?.filter((feature) => feature.geometry.type === 'LineString')
+      .map((feature) => ({ color: feature.properties?.color, dashed: feature.properties?.dashed, routeId: feature.properties?.routeId }));
+  })).toEqual([
+    { color: '#0066cc', dashed: false, routeId: 'planned:vehicle-g006-map' },
+    { color: '#d92d20', dashed: true, routeId: 'trail:vehicle-g006-map:0' },
+  ]);
+  await page.getByRole('button', { name: /이력 완료 배송 확인/u }).click();
+  await page.getByRole('button', { name: '이력 기준일 날짜 변경' }).click();
   await page.locator('.customer-map-tools .rdp-day_button').filter({ hasText: /^2$/u }).click();
   await expect.poll(() => requestedServiceDates.includes('2026-08-02')).toBe(true);
   expect(api.unexpected).toEqual([]);
@@ -1789,13 +1809,15 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
     routeCoordinates: [[127.02, 37.49], [127.01, 37.51], [126.99, 37.54], [126.9779, 37.5663]],
   });
   await page.getByRole('navigation', { name: '고객사 메뉴' }).getByRole('button', { name: /이력/ }).click();
-  await expect(page.getByLabel('배송지 리스트')).toContainText('1곳');
-  await expect(page.getByLabel('배송지 리스트')).not.toContainText('G006 Other Clinic');
+  await expect(page.getByLabel('배송지 리스트')).toContainText('2곳');
+  await expect(page.getByLabel('배송지 리스트')).toContainText('G006 Other Clinic');
   await expect.poll(() => page.evaluate(() => {
     const routeSource = window.dsvMap?.getSource('operational-routes');
     const routeData = routeSource && 'serialize' in routeSource ? routeSource.serialize().data : undefined;
-    return routeData?.features?.length ?? 0;
-  })).toBe(0);
+    return routeData?.features
+      ?.filter((feature) => feature.geometry.type === 'LineString')
+      .map((feature) => feature.properties?.color);
+  })).toEqual(['#8e8e93']);
   expect(api.unexpected).toEqual([]);
 });
 

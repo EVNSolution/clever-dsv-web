@@ -581,7 +581,7 @@ function ControlPanels({
               <a
                 aria-label={`${group.name} 고객사 조회 화면으로 이동`}
                 className="control-customer-order-group"
-                href={customerInquiryHref(group.id, summary?.serviceDate)}
+                href={customerInquiryHref(group.id)}
                 key={group.id}
               >
                 <span className="control-customer-order-name">
@@ -1289,8 +1289,7 @@ function compareControlStops(left: DispatchListItem, right: DispatchListItem): n
   return left.sellerOrderKey.localeCompare(right.sellerOrderKey, 'ko');
 }
 
-function customerInquiryHref(customerId: string, serviceDate?: string): string {
+function customerInquiryHref(customerId: string): string {
   const query = new URLSearchParams({ customer: customerId });
-  if (serviceDate !== undefined) query.set('serviceDate', serviceDate);
   return `${adminCustomerDeliveryPath}?${query.toString()}`;
 }
