@@ -101,10 +101,10 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
     <div className="settings-account-layout">
       <section className="page-panel settings-account-panel wide">
         <AdminSectionHeader
-          title="운영 계정"
+          title="관리자 계정"
           side={canWrite ? <button className="btn" type="button" onClick={() => setShowCreate((current) => !current)}>{showCreate ? '취소' : '계정 등록'}</button> : null}
         />
-        <p className="settings-account-description">관리자 계정은 데이터베이스에 유지됩니다. 새 계정은 일반 운영 권한으로 발급되며 계정 관리는 최고 관리자만 사용할 수 있습니다.</p>
+        <p className="settings-account-description">이 화면은 CLEVER 개발 관리자만 사용합니다. 새 계정은 관제 고객의 운영 계정으로 발급되며 개발 관리 권한은 부여되지 않습니다.</p>
         {showCreate ? (
           <form className="settings-account-form" onSubmit={(event) => void createAccount(event)}>
             <label><span>아이디</span><input autoComplete="off" required maxLength={80} value={loginId} onChange={(event) => setLoginId(event.target.value)} /></label>
@@ -124,19 +124,21 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
           </div>
         ) : null}
         {error ? <p className="settings-account-error" role="alert">{error}</p> : null}
-        {viewState === 'loading' ? <p className="settings-account-state" role="status">운영 계정을 불러오는 중입니다.</p> : null}
-        {viewState === 'error' ? <p className="settings-account-state">운영 계정을 불러오지 못했습니다.</p> : null}
+        {viewState === 'loading' ? <p className="settings-account-state" role="status">관리자 계정을 불러오는 중입니다.</p> : null}
+        {viewState === 'error' ? <p className="settings-account-state">관리자 계정을 불러오지 못했습니다.</p> : null}
         {viewState === 'ready' ? (
           <div className="admin-table-frame overlay-scroll settings-account-table-wrap">
             <table className="page-table settings-account-table">
-              <thead><tr><th>계정</th><th>상태</th><th>마지막 로그인</th><th aria-label="계정 작업" /></tr></thead>
+              <thead><tr><th>계정</th><th>권한</th><th>상태</th><th>마지막 로그인</th><th aria-label="계정 작업" /></tr></thead>
               <tbody>
                 {accounts.map((account) => {
                   const isCurrent = account.id === currentAccountId;
                   const pending = pendingAccountId === account.id;
+                  const authority = account.scopes.includes('dsv:accounts:write') ? '개발 관리' : '관제 운영';
                   return (
                     <tr key={account.id}>
                       <td><strong>{account.displayName ?? account.loginId}</strong><small>{account.loginId}{isCurrent ? ' · 현재 계정' : ''}</small></td>
+                      <td>{authority}</td>
                       <td><span className={`settings-account-status ${account.status.toLowerCase()}`}>{account.status === 'ACTIVE' ? '사용 중' : '비활성'}</span>{account.lockedUntil ? <small>로그인 잠김</small> : null}</td>
                       <td>{formatDateTime(account.lastAuthenticatedAt)}</td>
                       <td>
@@ -155,9 +157,9 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
       </section>
       <section className="page-panel settings-onboarding-panel">
         <AdminSectionHeader title="고객 계정" />
-        <p>고객은 공개 회원가입을 받지 않고, 운영진이 등록된 고객사에 초대 메일을 보내는 방식으로 관리합니다.</p>
+        <p>운송 고객은 공개 회원가입을 받지 않고, 관제 고객 운영자가 등록된 고객사에 초대 메일을 보내는 방식으로 관리합니다.</p>
         <ol>
-          <li>관리에서 고객사를 선택합니다.</li>
+          <li>관제 고객 운영자가 관리에서 고객사를 선택합니다.</li>
           <li>담당자 이메일로 일회성 초대를 발송합니다.</li>
           <li>고객이 본인 아이디와 비밀번호를 설정합니다.</li>
           <li>계정은 해당 고객사의 배송만 조회합니다.</li>
