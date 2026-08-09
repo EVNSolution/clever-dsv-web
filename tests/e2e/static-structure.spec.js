@@ -201,6 +201,18 @@ test('public customer account pages keep invitation and login contract explicit'
   expect(service).toContain("'customer/auth/login'");
 });
 
+test('dispatch keeps customer grouping as an explicit list view', () => {
+  const dispatch = readSrc('pages/DispatchPage.tsx');
+  const dispatchCss = readSrc('styles/features/dispatch.css');
+  const settingsCss = readSrc('styles/features/settings.css');
+
+  expect(dispatch).toContain("['CUSTOMER', '고객사']");
+  expect(dispatch).toContain('groupDispatchCustomers(visibleRows, references)');
+  expect(dispatch).toContain('className="dispatch-customer-group-row"');
+  expect(dispatchCss).toContain('.dispatch-customer-group');
+  expect(settingsCss).toMatch(/\.settings-view-tabs\s*\{[\s\S]*?margin:0 0 var\(--space-4\)/);
+});
+
 test('CSS ownership manifest matches source usage', () => {
   const ownership = [
     { selector: '.auth-page', owner: 'src/styles/features/auth.css' },
