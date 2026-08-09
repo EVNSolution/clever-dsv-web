@@ -54,11 +54,15 @@ export function AdminShell({
   activePath,
   onNavigate,
   onLogout,
+  principalId = null,
+  principalScopes = [],
   previewOnly = false,
 }: {
   activePath: AdminPath;
   onNavigate: (path: AdminPath) => void;
   onLogout: () => void;
+  principalId?: string | null;
+  principalScopes?: readonly string[];
   previewOnly?: boolean;
 }): ReactElement {
   const activeTab = adminTabs.find((tab) => tab.path === activePath) ?? adminTabs[0];
@@ -354,7 +358,7 @@ export function AdminShell({
                   onVehicleVisibilityChange={setControlVehicleVisibility}
                 />
               ))
-          : <AdminContent activePath={activePath} title={activeTab.title} description={activeTab.description} />}
+          : <AdminContent activePath={activePath} title={activeTab.title} description={activeTab.description} principalId={principalId} principalScopes={principalScopes} />}
       </section>
     </main>
   );

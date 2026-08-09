@@ -1996,6 +1996,10 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'POST settings/operations/geocode',
     'GET manual-email',
     'POST manual-email',
+    'GET admin-accounts',
+    'POST admin-accounts',
+    'POST admin-accounts/[^/]+/password-reset',
+    'PATCH admin-accounts/[^/]+/status',
     'POST drivers',
     'POST drivers/signup-invite',
     'PATCH drivers/[^/]+',
@@ -2015,6 +2019,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'src/services/dispatch-imports.ts',
     'src/services/management.ts',
     'src/services/manual-email.ts',
+    'src/services/admin-accounts.ts',
     'src/services/settings.ts',
   ].map((path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')).join('\n');
 

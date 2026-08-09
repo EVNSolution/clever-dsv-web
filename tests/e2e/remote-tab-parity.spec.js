@@ -1627,6 +1627,56 @@ test('settings renders the complete backend defaults', async ({ page }) => {
   await expect(page.getByLabel('도착 후 대기시간')).toHaveValue('5');
   await expect(page.getByRole('checkbox', { name: '배송원에게 전달' })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: '기록 페이지에 표시' })).toBeChecked();
+  await expect(page.getByRole('tab', { name: '계정' })).toHaveCount(0);
+  expectOnlyFixtureCalls(api);
+});
+
+test('super admin manages persistent operation accounts from settings', async ({ page }) => {
+  const existingAccount = {
+    createdAt: '2026-08-01T00:00:00.000Z',
+    displayName: '기존 운영 관리자',
+    failedLoginAttempts: 0,
+    id: adminSession.actorId,
+    lastAuthenticatedAt: '2026-08-09T00:00:00.000Z',
+    lockedUntil: null,
+    loginId: 'operator',
+    scopes: ['dsv:accounts:read', 'dsv:accounts:write'],
+    status: 'ACTIVE',
+    updatedAt: '2026-08-09T00:00:00.000Z',
+  };
+  const createdAccount = {
+    ...existingAccount,
+    createdAt: '2026-08-09T01:00:00.000Z',
+    displayName: 'DSV 운영 관리자',
+    id: '4c571998-e519-4bf0-af87-d25309a12133',
+    lastAuthenticatedAt: null,
+    loginId: 'dsv-admin',
+  };
+  let createBody;
+  const api = await installApiFixtures(page, adminFixtures({
+    'GET /api/dsv/v1/session': v1Envelope({
+      ...adminSession,
+      scopes: [...adminSession.scopes, 'dsv:accounts:read', 'dsv:accounts:write'],
+    }, 'g006-account-session'),
+    'GET /api/dsv/admin-accounts': legacyEnvelope({ accounts: [existingAccount] }),
+    'POST /api/dsv/admin-accounts': ({ request }) => {
+      createBody = request.postDataJSON();
+      return { ...legacyEnvelope({ account: createdAccount, temporaryPassword: 'temporary-account-password' }), status: 201 };
+    },
+  }));
+
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: '계정' }).click();
+  await expect(page.getByText('기존 운영 관리자')).toBeVisible();
+  await page.getByRole('button', { name: '계정 등록' }).click();
+  await page.getByLabel('아이디').fill('dsv-admin');
+  await page.getByLabel('표시 이름').fill('DSV 운영 관리자');
+  await page.getByRole('button', { name: '등록', exact: true }).click();
+
+  await expect(page.getByText('임시 로그인 정보')).toBeVisible();
+  await expect(page.getByText('temporary-account-password')).toBeVisible();
+  await expect(page.getByText('DSV 운영 관리자')).toBeVisible();
+  expect(createBody).toEqual({ displayName: 'DSV 운영 관리자', loginId: 'dsv-admin' });
   expectOnlyFixtureCalls(api);
 });
 
