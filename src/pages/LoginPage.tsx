@@ -1,5 +1,6 @@
 import type { FormEvent, ReactElement } from 'react';
 import { useState } from 'react';
+import { customerLoginPath } from '../app-routes';
 import { login } from '../services/auth';
 
 export function LoginPage({ onLogin }: { onLogin: () => void }): ReactElement {
@@ -34,6 +35,7 @@ export function LoginPage({ onLogin }: { onLogin: () => void }): ReactElement {
           <h1 id="auth-title">로그인</h1>
           <p>관리자 계정으로 배송 운영 화면에 접속합니다.</p>
         </div>
+        <a className="auth-alt-link" href={customerLoginPath}>고객 배송조회 로그인</a>
         <form className="auth-form" aria-label="Login" onSubmit={submit}>
           <label className="auth-field" htmlFor="auth-id">아이디</label>
           <div className="auth-control">

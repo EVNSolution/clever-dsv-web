@@ -1,6 +1,7 @@
 import type { FormEvent, ReactElement } from 'react';
-import { useEffect, useState } from 'react';
-import { adminCustomerDeliveryPath, customerDeliveryPath } from '../app-routes';
+import { useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
+import { adminCustomerDeliveryPath, customerLoginPath } from '../app-routes';
 import { apiConfig } from '../api/config';
 import {
   AdminSectionHeader,
@@ -14,9 +15,9 @@ import {
 import type { ManagementData } from '../demo/management';
 import { addressSimilarity, loadManagementData, managementId } from '../demo/management';
 import { getCustomerOrders } from '../demo/selectors/customer';
+import type { CustomerAccount, CustomerAccountLoginIdMode, CustomerAccountStatus } from '../services/customer-accounts';
+import { inviteCustomerAccount, loadCustomerAccounts, reinviteCustomerAccount, sendCustomerAccountPasswordReset, setCustomerAccountStatus } from '../services/customer-accounts';
 import { emptyManagementData, loadManagementSnapshot, persistManagementChange } from '../services/management';
-import { loadManualEmailConfig, sendManualEmail } from '../services/manual-email';
-import type { ManualEmailConfig } from '../services/manual-email';
 import { ResourcesPage } from './ResourcesPage';
 
 type MasterScope = 'resources' | 'network' | 'conditions';
@@ -186,7 +187,7 @@ function NetworkMaster({ data, onChange }: { data: ManagementData; onChange: (da
               title="고객사 상세"
               side={customer ? <span className="management-heading-side"><span className="section-meta">{customerOrderCount}건 Order</span><ManagementDetailAction name="고객사" onEdit={() => setEditor({ kind: 'customer', id: customer.id })} /><ManagementSelectionClear onClick={() => selectCustomer(customer.id)} /></span> : undefined}
             />
-            {customer ? <><div className="master-detail-grid"><dl><dt>고객사</dt><dd>{customer.name}</dd><dt>고객 코드</dt><dd>{customer.billingCode || unavailable(isRemote)}</dd><dt>이메일 알림</dt><dd>{customer.notificationEmailEnabled ? '사용' : '사용 안 함'}</dd><dt>대표 수신자</dt><dd>{customer.notificationEmailRecipient || unavailable(isRemote)}</dd></dl><div><strong>배송지</strong><p>{destinations.length}곳 등록</p></div></div><CustomerInvitationEmailPanel customerName={customer.name} /></> : <EmptyState label="고객사를 선택하면 상세 정보를 확인할 수 있습니다." />}
+            {customer ? <><div className="master-detail-grid"><dl><dt>고객사</dt><dd>{customer.name}</dd><dt>고객 코드</dt><dd>{customer.billingCode || unavailable(isRemote)}</dd><dt>이메일 알림</dt><dd>{customer.notificationEmailEnabled ? '사용' : '사용 안 함'}</dd><dt>대표 수신자</dt><dd>{customer.notificationEmailRecipient || unavailable(isRemote)}</dd></dl><div><strong>배송지</strong><p>{destinations.length}곳 등록</p></div></div><CustomerAccountPanel customerId={customer.id} /></> : <EmptyState label="고객사를 선택하면 상세 정보를 확인할 수 있습니다." />}
           </>}
         </section>
       </div>
@@ -217,75 +218,211 @@ function NetworkMaster({ data, onChange }: { data: ManagementData; onChange: (da
   );
 }
 
-function CustomerInvitationEmailPanel({ customerName }: { customerName: string }): ReactElement {
-  const [config, setConfig] = useState<ManualEmailConfig | null>(null);
-  const [recipient, setRecipient] = useState('');
-  const [confirmed, setConfirmed] = useState(false);
-  const [state, setState] = useState<{ error: string | null; loading: boolean; message: string | null; sending: boolean }>({ error: null, loading: true, message: null, sending: false });
-  const inquiryUrl = `${window.location.origin}${customerDeliveryPath}`;
-  const body = customerEmailBody(config?.defaultTextContent ?? '', customerName, inquiryUrl);
-  const canSend = !!config?.configured && !!recipient.trim() && confirmed && !state.loading && !state.sending;
+function CustomerAccountPanel({ customerId }: { customerId: string }): ReactElement {
+  const [accounts, setAccounts] = useState<CustomerAccount[]>([]);
+  const [state, setState] = useState<{ busyId: string | null; error: string | null; loading: boolean; message: string | null }>({ busyId: null, error: null, loading: true, message: null });
+  const [inviteOpen, setInviteOpen] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    setRecipient('');
-    setConfirmed(false);
-    setState({ error: null, loading: true, message: null, sending: false });
-    loadManualEmailConfig()
-      .then((value) => {
-        if (!active) return;
-        setConfig(value);
-        setState({ error: null, loading: false, message: null, sending: false });
+  const refresh = () => {
+    if (apiConfig.mode === 'mock') {
+      setAccounts([]);
+      setState({ busyId: null, error: null, loading: false, message: null });
+      return;
+    }
+    setState({ busyId: null, error: null, loading: true, message: null });
+    loadCustomerAccounts(customerId)
+      .then((items) => {
+        setAccounts(items);
+        setState({ busyId: null, error: null, loading: false, message: null });
       })
-      .catch((error) => {
-        if (!active) return;
-        setConfig(null);
-        setState({ error: errorMessage(error), loading: false, message: null, sending: false });
-      });
-    return () => { active = false; };
-  }, [customerName]);
+      .catch((error) => setState({ busyId: null, error: errorMessage(error), loading: false, message: null }));
+  };
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!config || !canSend) return;
-    setState({ error: null, loading: false, message: null, sending: true });
+  useEffect(refresh, [customerId]);
+
+  const submitInvite = async (input: { displayName: string; email: string; loginId: string; loginIdMode: CustomerAccountLoginIdMode }) => {
+    const email = input.email.toLowerCase();
+    if (!email || !validEmailInput(email)) {
+      setState((current) => ({ ...current, error: '올바른 수신자 이메일을 입력하세요.', message: null }));
+      return;
+    }
+    if (input.loginIdMode === 'DIRECT' && !input.loginId) {
+      setState((current) => ({ ...current, error: '직접 지정할 로그인 아이디를 입력하세요.', message: null }));
+      return;
+    }
+    setState({ busyId: 'invite', error: null, loading: false, message: null });
     try {
-      const result = await sendManualEmail({ recipients: [recipient.trim().toLowerCase()], subject: config.defaultSubject, textContent: body });
-      setConfirmed(false);
-      setState({ error: null, loading: false, message: `${result.recipientCount}명에게 안내 메일을 전송했습니다.`, sending: false });
+      const account = await inviteCustomerAccount(customerId, input.loginIdMode === 'DIRECT'
+        ? { email, displayName: input.displayName, loginId: input.loginId, loginIdMode: input.loginIdMode }
+        : { email, displayName: input.displayName, loginIdMode: input.loginIdMode });
+      setAccounts((current) => upsertAccount(current, account));
+      setInviteOpen(false);
+      setState({ busyId: null, error: null, loading: false, message: '초대 이메일 발송을 요청했습니다.' });
     } catch (error) {
-      setState({ error: errorMessage(error), loading: false, message: null, sending: false });
+      setState({ busyId: null, error: errorMessage(error), loading: false, message: null });
     }
   };
 
-  return <form className="customer-email-panel" aria-label="계정 안내" onSubmit={submit}>
-    <div className="customer-email-heading"><strong>계정 안내</strong><span>저장된 안내문을 확인한 뒤 한 번 전송합니다.</span></div>
-    <div className="customer-email-fields">
-      <label>수신자 이메일<input type="email" required autoComplete="off" value={recipient} onChange={(event) => { setRecipient(event.target.value); setConfirmed(false); setState((current) => ({ ...current, error: null, message: null })); }} placeholder="customer@example.com" /></label>
-      <label>발신자<input readOnly value={config?.senderEmail ?? ''} placeholder={state.loading ? '설정을 불러오는 중입니다.' : '설정에서 발신자를 저장하세요.'} /></label>
+  const accountAction = async (account: CustomerAccount, action: 'reinvite' | 'password-reset' | 'disable' | 'enable') => {
+    setState({ busyId: `${action}:${account.id}`, error: null, loading: false, message: null });
+    try {
+      const updated = action === 'reinvite'
+        ? await reinviteCustomerAccount(account.id)
+        : action === 'password-reset'
+          ? await sendCustomerAccountPasswordReset(account.id)
+          : await setCustomerAccountStatus(account.id, action === 'disable' ? 'DISABLED' : 'ACTIVE');
+      setAccounts((current) => upsertAccount(current, updated));
+      setState({ busyId: null, error: null, loading: false, message: customerAccountActionMessage(action) });
+    } catch (error) {
+      setState({ busyId: null, error: errorMessage(error), loading: false, message: null });
+    }
+  };
+
+  return <section className="customer-account-panel" aria-label="고객 계정 관리">
+    <div className="customer-account-heading">
+      <span><strong>고객 계정</strong><small>{accounts.length}개 계정</small></span>
+      <button className="customer-account-issue-button" type="button" disabled={state.busyId === 'invite'} onClick={() => setInviteOpen(true)}>{state.busyId === 'invite' ? '요청 중' : '계정 발급'}</button>
     </div>
-    <div className="customer-email-subject"><span>제목</span><strong>{config?.defaultSubject || '-'}</strong></div>
-    <pre className="customer-email-preview" aria-label="메일 본문 미리보기">{body || '설정에서 이메일 안내문을 저장하세요.'}</pre>
-    <div className="customer-email-footer">
-      <label className="customer-email-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />수신자와 메일 내용을 확인했습니다.</label>
-      <button type="submit" disabled={!canSend}>{state.sending ? '전송 중' : '안내 메일 보내기'}</button>
-    </div>
-    {state.loading ? <p className="customer-email-status" role="status">이메일 설정을 불러오는 중입니다.</p> : null}
-    {!state.loading && config && !config.configured ? <p className="customer-email-status" role="status">설정에서 Brevo API와 발신자 이메일을 먼저 등록하세요.</p> : null}
-    {state.message ? <p className="customer-email-status success" role="status">{state.message}</p> : null}
-    {state.error ? <p className="customer-email-status error" role="alert">{state.error}</p> : null}
-  </form>;
+    {inviteOpen ? <CustomerAccountInviteDialog busy={state.busyId === 'invite'} onClose={() => setInviteOpen(false)} onSubmit={submitInvite} /> : null}
+    {state.loading ? <p className="customer-account-status" role="status">고객 계정을 불러오는 중입니다.</p> : null}
+    {!state.loading && !accounts.length ? <p className="customer-account-status" role="status">등록된 고객 계정이 없습니다.</p> : null}
+    {accounts.length ? <AdminTableFrame>
+      <table className="page-table customer-account-table">
+        <thead><tr><th>계정</th><th>상태</th><th>초대</th><th>최근 인증</th><th>작업</th></tr></thead>
+        <tbody>{accounts.map((account) => {
+          const isBusy = state.busyId?.endsWith(`:${account.id}`) ?? false;
+          const canReinvite = account.status === 'INVITED' || account.status === 'EXPIRED';
+          const canDisable = account.status === 'ACTIVE';
+          const canEnable = account.status === 'DISABLED';
+          return <tr key={account.id}>
+            <td><strong>{account.displayName || account.email || account.loginId || '고객 계정'}</strong><small>{account.loginId || account.email || '-'}</small></td>
+            <td><span className={`customer-account-status-pill ${account.status.toLowerCase()}`}>{customerAccountStatusLabel(account.status)}</span></td>
+            <td>{formatDate(account.invitedAt)}<small>{account.inviteExpiresAt ? `만료 ${formatDate(account.inviteExpiresAt)}` : ''}</small></td>
+            <td>{formatDate(account.lastAuthenticatedAt)}</td>
+            <td><span className="management-actions">
+              <button type="button" disabled={isBusy || !canReinvite} onClick={() => accountAction(account, 'reinvite')}>재초대</button>
+              <button type="button" disabled={isBusy || account.status !== 'ACTIVE'} onClick={() => accountAction(account, 'password-reset')}>재설정</button>
+              <button type="button" className={canDisable ? 'danger' : undefined} disabled={isBusy || (!canDisable && !canEnable)} onClick={() => accountAction(account, canDisable ? 'disable' : 'enable')}>{canEnable ? '활성화' : '비활성화'}</button>
+            </span></td>
+          </tr>;
+        })}</tbody>
+      </table>
+    </AdminTableFrame> : null}
+    {state.message ? <p className="customer-account-status success" role="status">{state.message}</p> : null}
+    {state.error ? <p className="customer-account-status error" role="alert">{state.error}</p> : null}
+  </section>;
 }
 
-function customerEmailBody(template: string, customerName: string, inquiryUrl: string): string {
-  const body = template.trim();
-  if (!body) return '';
-  const withCustomer = /^고객사:[^\r\n]*$/mu.test(body)
-    ? body.replace(/^고객사:[^\r\n]*$/mu, `고객사: ${customerName}`)
-    : `고객사: ${customerName}\n${body}`;
-  return /^배송조회 페이지:[^\r\n]*$/mu.test(withCustomer)
-    ? withCustomer.replace(/^배송조회 페이지:[^\r\n]*$/mu, `배송조회 페이지: ${inquiryUrl}`)
-    : `${withCustomer}\n\n배송조회 페이지: ${inquiryUrl}`;
+function CustomerAccountInviteDialog({
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  busy: boolean;
+  onClose: () => void;
+  onSubmit: (input: { displayName: string; email: string; loginId: string; loginIdMode: CustomerAccountLoginIdMode }) => Promise<void>;
+}): ReactElement {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [email, setEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [loginIdMode, setLoginIdMode] = useState<CustomerAccountLoginIdMode>('AUTOMATIC');
+  const [loginId, setLoginId] = useState('');
+  const permanentLoginUrl = new URL(customerLoginPath, window.location.origin).toString();
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+    return () => {
+      if (dialog?.open) dialog.close();
+    };
+  }, []);
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void onSubmit({ displayName: displayName.trim(), email: email.trim(), loginId: loginId.trim(), loginIdMode });
+  };
+
+  const previewLoginId = loginIdMode === 'DIRECT'
+    ? loginId.trim() || '입력한 로그인 아이디'
+    : '서버가 자동 예약한 로그인 아이디';
+  const previewName = displayName.trim() || '고객 담당자';
+
+  return (
+    <dialog
+      aria-describedby="customer-account-invite-preview"
+      aria-labelledby="customer-account-invite-title"
+      className="driver-invite-dialog customer-account-invite-dialog"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      ref={dialogRef}
+    >
+      <header className="driver-invite-header">
+        <span>
+          <strong id="customer-account-invite-title">고객 계정 발급</strong>
+          <small>고객 담당자에게 계정 설정 이메일을 보냅니다.</small>
+        </span>
+        <button aria-label="고객 계정 발급 닫기" type="button" onClick={onClose}><X aria-hidden="true" /></button>
+      </header>
+      <form className="customer-account-invite-form" id="customer-account-invite-form" aria-label="고객 계정 발급" onSubmit={submit}>
+        <label>수신자 이메일
+          <input name="email" type="email" required autoComplete="email" placeholder="customer@example.com" disabled={busy} value={email} onChange={(event) => setEmail(event.target.value)} />
+        </label>
+        <label>표시 이름
+          <input name="displayName" maxLength={120} autoComplete="name" placeholder="선택 입력" disabled={busy} value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+        </label>
+        <fieldset>
+          <legend>로그인 아이디 방식</legend>
+          <label><input checked={loginIdMode === 'AUTOMATIC'} disabled={busy} name="loginIdMode" type="radio" value="AUTOMATIC" onChange={() => setLoginIdMode('AUTOMATIC')} /> 자동</label>
+          <label><input checked={loginIdMode === 'DIRECT'} disabled={busy} name="loginIdMode" type="radio" value="DIRECT" onChange={() => setLoginIdMode('DIRECT')} /> 직접 지정</label>
+        </fieldset>
+        {loginIdMode === 'DIRECT' ? <label>직접 로그인 아이디
+          <input name="loginId" required autoComplete="off" autoCapitalize="none" spellCheck={false} minLength={3} maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,63}" disabled={busy} value={loginId} onChange={(event) => setLoginId(event.target.value)} />
+        </label> : null}
+      </form>
+      <section className="customer-account-invite-preview" id="customer-account-invite-preview" aria-label="발급 이메일 미리보기">
+        <strong>발급 이메일 미리보기</strong>
+        <p>{previewName}님에게 1회용 계정 설정 링크가 발송됩니다. 링크는 48시간 동안 한 번만 사용할 수 있습니다.</p>
+        <dl>
+          <div><dt>예약 로그인 아이디</dt><dd>{previewLoginId}</dd></div>
+          <div><dt>상시 로그인 주소</dt><dd>{permanentLoginUrl}</dd></div>
+          <div><dt>비밀번호</dt><dd>고객이 설정 화면에서 직접 만듭니다.</dd></div>
+        </dl>
+      </section>
+      <footer className="driver-invite-footer">
+        <button type="button" onClick={onClose}>취소</button>
+        <button className="primary" disabled={busy} form="customer-account-invite-form" type="submit">{busy ? '발급 중' : '발급 이메일 보내기'}</button>
+      </footer>
+    </dialog>
+  );
+}
+
+function upsertAccount(accounts: CustomerAccount[], account: CustomerAccount): CustomerAccount[] {
+  return accounts.some((item) => item.id === account.id)
+    ? accounts.map((item) => item.id === account.id ? account : item)
+    : [account, ...accounts];
+}
+
+function customerAccountStatusLabel(status: CustomerAccountStatus): string {
+  if (status === 'INVITED') return '초대됨';
+  if (status === 'ACTIVE') return '활성';
+  if (status === 'DISABLED') return '비활성';
+  return '만료';
+}
+
+function customerAccountActionMessage(action: 'reinvite' | 'password-reset' | 'disable' | 'enable'): string {
+  if (action === 'reinvite') return '재초대 이메일 발송을 요청했습니다.';
+  if (action === 'password-reset') return '비밀번호 재설정 이메일 발송을 요청했습니다.';
+  if (action === 'disable') return '고객 계정을 비활성화했습니다.';
+  return '고객 계정을 활성화했습니다.';
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
 
 function ConditionMaster({ data, onChange }: { data: ManagementData; onChange: (data: ManagementData) => Promise<void> }): ReactElement {

@@ -488,6 +488,11 @@ test('renders selected control progress without letting a future destination cli
       }],
       page: { hasMore: false },
     }),
+    'GET /api/dsv/v1/vehicles/vehicle-progress/gps-trail-history': v1Envelope({
+      serviceDate: controlSummary.serviceDate,
+      segments: [],
+      vehicleId,
+    }),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({ items: [], page: { hasMore: false } }),
     'GET /api/dsv/v1/dispatches': v1Envelope({
       items: routeCoordinates.slice(1).map((coordinate, index) => ({
@@ -1347,6 +1352,7 @@ test('edits only customer notification settings in remote master data', async ({
     }),
     'GET /api/dsv/v1/destinations?limit=100': emptyV1List(),
     'GET /api/dsv/v1/conditions?limit=100': emptyV1List(),
+    'GET /api/dsv/customers/customer-notification-settings/accounts': { data: { accounts: [] }, error: null },
     'PATCH /api/dsv/v1/customers/customer-notification-settings/notification-settings': ({ request }) => {
       const body = JSON.parse(request.postData() ?? '{}');
       commandBodies.push(body);
@@ -1801,7 +1807,7 @@ test('blocks remote customer inquiry when query params are present without a ses
 
   await page.goto('/customer/delivery-inquiry?customer=customer-dsv&customerId=customer-dsv&accountId=customer-dsv');
 
-  await expectBlockedStateVisible(page);
+  await expect(page).toHaveURL(/\/customer\/login$/u);
   await expectNoDemoVisible(page);
   await expectCanonicalSentinelsUntouched(page);
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries')).toBe(false);
@@ -1831,7 +1837,7 @@ test('blocks unauthenticated remote customer with no demo-visible content', asyn
 
   await page.goto('/customer/delivery-inquiry');
 
-  await expectBlockedStateVisible(page);
+  await expect(page).toHaveURL(/\/customer\/login$/u);
   await expectNoDemoVisible(page);
   await expectCanonicalSentinelsUntouched(page);
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session')).toBe(true);
@@ -2000,6 +2006,14 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'POST admin-accounts',
     'POST admin-accounts/[^/]+/password-reset',
     'PATCH admin-accounts/[^/]+/status',
+    'GET customers/[^/]+/accounts',
+    'POST customers/[^/]+/accounts/invitations',
+    'POST customer-accounts/[^/]+/reinvite',
+    'POST customer-accounts/[^/]+/password-reset',
+    'PATCH customer-accounts/[^/]+/status',
+    'POST customer/auth/invitations/validate',
+    'POST customer/auth/complete',
+    'POST customer/auth/login',
     'POST drivers',
     'POST drivers/signup-invite',
     'PATCH drivers/[^/]+',
@@ -2020,6 +2034,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'src/services/management.ts',
     'src/services/manual-email.ts',
     'src/services/admin-accounts.ts',
+    'src/services/customer-accounts.ts',
     'src/services/settings.ts',
   ].map((path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')).join('\n');
 
@@ -2040,6 +2055,7 @@ test('pins the exact normalized G005 v1 read allowlist', () => {
     'GET records',
     'GET drivers',
     'GET vehicles',
+    'GET vehicles/[^/]+/gps-trail-history',
     'GET vehicles/[^/]+/temperature-history',
     'GET customers',
     'GET destinations',

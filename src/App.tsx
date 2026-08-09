@@ -1,8 +1,10 @@
 import type { ReactElement } from 'react';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { adminCustomerDeliveryPath, adminTabs, customerDeliveryPath, defaultPath, legacyPathMap } from './app-routes';
+import { adminCustomerDeliveryPath, adminTabs, customerAccountSetupPath, customerDeliveryPath, customerLoginPath, defaultPath, legacyPathMap } from './app-routes';
 import type { AppPath } from './app-routes';
 import { AdminShell } from './components/AdminShell';
+import { CustomerAccountSetupPage } from './pages/CustomerAccountSetupPage';
+import { CustomerLoginPage } from './pages/CustomerLoginPage';
 import { LoginPage } from './pages/LoginPage';
 import { apiConfig } from './api/config';
 import { AUTH_EXPIRED_EVENT } from './api/auth-session';
@@ -21,12 +23,16 @@ type SessionGate = {
 function readPath(): AppPath {
   const decodedPath = decodeURI(window.location.pathname);
   const path: string = legacyPathMap[decodedPath as keyof typeof legacyPathMap] ?? decodedPath;
-  if (path === '/login' || path === adminCustomerDeliveryPath || path === customerDeliveryPath || adminTabs.some((tab) => tab.path === path)) return path as AppPath;
+  if (path === '/login' || path === customerLoginPath || path === customerAccountSetupPath || path === adminCustomerDeliveryPath || path === customerDeliveryPath || adminTabs.some((tab) => tab.path === path)) return path as AppPath;
   return defaultPath;
 }
 
 function navigate(path: AppPath): void {
   if (decodeURI(window.location.pathname) !== path) window.history.pushState({}, '', path);
+}
+
+function isPublicPath(path: AppPath): boolean {
+  return path === '/login' || path === customerLoginPath || path === customerAccountSetupPath;
 }
 
 export function App(): ReactElement {
@@ -51,14 +57,16 @@ export function App(): ReactElement {
         setSessionGate({ status: 'ready' });
         return;
       }
-      setSessionGate({ status: 'blocked', message: '고객 세션이 만료되어 배송 조회를 표시하지 않습니다.' });
+      navigate(customerLoginPath);
+      setPath(customerLoginPath);
+      setSessionGate({ status: 'ready' });
     };
     window.addEventListener(AUTH_EXPIRED_EVENT, expire);
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, expire);
   }, []);
 
   useEffect(() => {
-    if (apiConfig.mode === 'mock' || path === '/login') {
+    if (apiConfig.mode === 'mock' || isPublicPath(path)) {
       setSessionGate({ status: 'ready' });
       return;
     }
@@ -85,9 +93,10 @@ export function App(): ReactElement {
       })
       .catch((error: unknown) => {
         if (!active) return;
-        if (requiredRole === 'DSV_ADMIN' && error instanceof ApiError && error.status === 401) {
-          navigate('/login');
-          setPath('/login');
+        if (error instanceof ApiError && error.status === 401) {
+          const loginPath = requiredRole === 'CUSTOMER_USER' ? customerLoginPath : '/login';
+          navigate(loginPath);
+          setPath(loginPath);
           setSessionGate({ status: 'ready' });
           return;
         }
@@ -109,11 +118,13 @@ export function App(): ReactElement {
     });
   }
 
-  const effectiveSessionGate = apiConfig.mode === 'remote' && path !== '/login' && principal
+  const effectiveSessionGate = apiConfig.mode === 'remote' && !isPublicPath(path) && principal
     ? accessGateFor(principal, path)
     : sessionGate;
 
   if (path === '/login') return <LoginPage onLogin={() => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(defaultPath); }} />;
+  if (path === customerLoginPath) return <CustomerLoginPage onLogin={(nextPath) => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(nextPath); }} />;
+  if (path === customerAccountSetupPath) return <CustomerAccountSetupPage onComplete={(nextPath) => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(nextPath); }} />;
   if (effectiveSessionGate.status === 'checking') {
     if (path === '/control') {
       return (
@@ -191,6 +202,8 @@ const requiredScopesByPath: Record<AppPath, string[]> = {
   [adminCustomerDeliveryPath]: ['dsv:customers:read', 'dsv:dispatches:read'],
   [customerDeliveryPath]: ['dsv:customer-deliveries:read'],
   '/login': [],
+  [customerLoginPath]: [],
+  [customerAccountSetupPath]: [],
 };
 
 function hasRequiredScopes(principal: Principal, path: AppPath): boolean {
