@@ -196,9 +196,12 @@ test('public customer account pages keep invitation and login contract explicit'
   expect(setup).toContain('completeCustomerInvitation');
   expect(setup).not.toContain('URLSearchParams(window.location.search)');
   expect(login).toContain('loginCustomerAccount');
+  expect(app).toContain('logoutCustomerAccount');
   expect(service).toContain("'customer/auth/invitations/validate'");
   expect(service).toContain("'customer/auth/complete'");
   expect(service).toContain("'customer/auth/login'");
+  expect(service).toContain("'session/logout'");
+  expect(readSrc('api/client.ts')).toContain('!isPublicCustomerAuthPath(target.path)');
 });
 
 test('dispatch keeps customer grouping as an explicit list view', () => {

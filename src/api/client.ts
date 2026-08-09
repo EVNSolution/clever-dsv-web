@@ -80,6 +80,7 @@ const legacyAllowlist: Array<{ method: string; pattern: RegExp }> = [
 
 const v1ReadAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'GET', pattern: /^session$/u },
+  { method: 'POST', pattern: /^session\/logout$/u },
   { method: 'GET', pattern: /^map\/profile$/u },
   { method: 'GET', pattern: /^control$/u },
   { method: 'GET', pattern: /^control\/routes$/u },
@@ -166,15 +167,19 @@ export async function requestLegacyJson<ResponseBody>(path: string, init: JsonRe
   const target = requestTarget(path, init.method);
   assertAllowed('legacy API', target, legacyAllowlist);
   let response = await fetchJson(apiConfig.legacyBaseUrl, path, { ...init, method: target.method });
-  if (response.status === 401) expireTransportSession();
+  if (response.status === 401 && !isPublicCustomerAuthPath(target.path)) expireTransportSession();
   let body = await readResponseBody(response);
   if (isCsrfFailure(response.status, body) && await refreshCsrfToken()) {
     response = await fetchJson(apiConfig.legacyBaseUrl, path, { ...init, method: target.method });
-    if (response.status === 401) expireTransportSession();
+    if (response.status === 401 && !isPublicCustomerAuthPath(target.path)) expireTransportSession();
     body = await readResponseBody(response);
   }
   if (!response.ok) throw new ApiError(response.status, errorMessage(body, response.status), body);
   return legacyData<ResponseBody>(body);
+}
+
+function isPublicCustomerAuthPath(path: string): boolean {
+  return /^customer\/auth\/(?:invitations\/validate|complete|login)$/u.test(path);
 }
 
 export const requestJson = requestLegacyJson;

@@ -12,6 +12,7 @@ import { ApiError } from './api/client';
 import { hasRole, logout, restoreSession } from './services/auth';
 import type { Principal, PrincipalRole } from './services/auth';
 import { MapPreview } from './components/MapPreview';
+import { logoutCustomerAccount } from './services/customer-accounts';
 
 const CustomerDeliveryInquiryPage = lazy(() => import('./pages/CustomerDeliveryInquiryPage').then((module) => ({ default: module.CustomerDeliveryInquiryPage })));
 
@@ -118,6 +119,14 @@ export function App(): ReactElement {
     });
   }
 
+  function handleCustomerLogout(): void {
+    void logoutCustomerAccount().catch(() => undefined).then(() => {
+      setPrincipal(null);
+      setSessionGate({ status: 'ready' });
+      go(customerLoginPath);
+    });
+  }
+
   const effectiveSessionGate = apiConfig.mode === 'remote' && !isPublicPath(path) && principal
     ? accessGateFor(principal, path)
     : sessionGate;
@@ -161,7 +170,7 @@ export function App(): ReactElement {
   if (path === customerDeliveryPath) {
     return (
       <Suspense fallback={<CustomerDeliveryFallback />}>
-        <CustomerDeliveryInquiryPage principalDisplayName={principal?.displayName ?? undefined} />
+        <CustomerDeliveryInquiryPage onLogout={handleCustomerLogout} principalDisplayName={principal?.displayName ?? undefined} />
       </Suspense>
     );
   }

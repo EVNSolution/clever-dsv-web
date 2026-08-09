@@ -1,4 +1,4 @@
-import { requestLegacyJson } from '../api/client';
+import { requestLegacyJson, requestV1ReadJson } from '../api/client';
 import { clearTransportSession, storeAuthToken, storeCsrfToken } from '../api/auth-session';
 import { apiConfig } from '../api/config';
 
@@ -100,6 +100,14 @@ export async function loginCustomerAccount(input: { id: string; password: string
   } catch (error) {
     clearTransportSession();
     throw error;
+  }
+}
+
+export async function logoutCustomerAccount(): Promise<void> {
+  try {
+    await requestV1ReadJson<{ ok: boolean }>('session/logout', { method: 'POST' });
+  } finally {
+    clearTransportSession();
   }
 }
 

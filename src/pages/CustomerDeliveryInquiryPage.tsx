@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { Search } from 'lucide-react';
+import { LogOut, Search } from 'lucide-react';
 import { getCustomerInquiryPage } from '../dev-db/queries';
 import type { OrderDetailViewModel } from '../dev-db/queries';
 import { ProductHeader } from '../components/MapControls';
@@ -15,6 +15,7 @@ const locationRefreshIntervalMs = 60_000;
 
 type CustomerDeliveryInquiryPageProps = {
   adminCustomerId?: string;
+  onLogout?: () => void;
   principalDisplayName?: string;
 };
 
@@ -187,6 +188,7 @@ type CustomerInquiryView = 'control' | 'history';
 
 function RemoteCustomerDeliveryInquiryPage({
   adminCustomerId,
+  onLogout,
   principalDisplayName,
 }: CustomerDeliveryInquiryPageProps): ReactElement {
   const initialQuery = new URLSearchParams(window.location.search);
@@ -357,7 +359,7 @@ function RemoteCustomerDeliveryInquiryPage({
 
   return (
     <main className="page customer-delivery-demo nav-expanded">
-      <CustomerNavigation customerName={customerName} onSelect={selectView} view={view} />
+      <CustomerNavigation customerName={customerName} onLogout={onLogout} onSelect={selectView} view={view} />
       <section className="grid" aria-label="고객사 배송 조회">
         <Suspense fallback={<article className="card map-card" aria-label="지도 불러오는 중" />}>
           <MapCanvas
@@ -502,10 +504,12 @@ function RemoteCustomerDeliveryInquiryPage({
 
 function CustomerNavigation({
   customerName,
+  onLogout,
   onSelect,
   view,
 }: {
   customerName: string;
+  onLogout?: () => void;
   onSelect: (view: CustomerInquiryView) => void;
   view: CustomerInquiryView;
 }): ReactElement {
@@ -522,6 +526,10 @@ function CustomerNavigation({
       <button type="button" className={`main-tab${view === 'history' ? ' active' : ''}`} aria-current={view === 'history' ? 'page' : undefined} onClick={() => onSelect('history')}>
         <span className="main-tab-copy"><strong>이력</strong><small>완료 배송 확인</small></span>
       </button>
+      {onLogout ? <button type="button" className="sidebar-logout" aria-label="로그아웃" onClick={onLogout}>
+        <LogOut aria-hidden="true" />
+        <span>로그아웃</span>
+      </button> : null}
     </nav>
   );
 }
