@@ -172,6 +172,7 @@ function managementListFixtures(overrides = {}) {
       items: [{ customerId: 'customer-g006', displayName: 'Canonical Customer G006', externalCustomerCode: 'CUSTOMER-G006', orderCount: 4, status: 'ACTIVE' }],
       page: { hasMore: false },
     }, 'g006-customers'),
+    'GET /api/dsv/customers/customer-g006/accounts': legacyEnvelope({ accounts: [] }),
     'GET /api/dsv/v1/destinations?limit=100': v1Envelope({
       items: [{ address: 'Seoul Canonical Address 6006', destinationId: 'destination-g006', displayName: 'Canonical Destination G006' }],
       page: { hasMore: false },
@@ -1429,22 +1430,41 @@ test('management issues a driver signup invite without an existing driver', asyn
   expectOnlyFixtureCalls(api);
 });
 
-test('customer detail previews and explicitly sends the saved customer guide email', async ({ page }) => {
-  let sentBody;
+test('customer detail manages customer accounts without exposing passwords', async ({ page }) => {
+  let inviteBody;
+  let statusBody;
+  const invitedAccount = {
+    displayName: '초대 담당자',
+    email: 'customer@example.com',
+    id: 'customer-account-invited',
+    invitedAt: '2026-08-03T08:00:00.000Z',
+    inviteExpiresAt: '2026-08-10T08:00:00.000Z',
+    lastAuthenticatedAt: null,
+    loginId: null,
+    status: 'INVITED',
+  };
+  const activeAccount = {
+    displayName: '기존 담당자',
+    email: 'active@example.com',
+    id: 'customer-account-active',
+    invitedAt: '2026-08-01T08:00:00.000Z',
+    inviteExpiresAt: '2026-08-08T08:00:00.000Z',
+    lastAuthenticatedAt: '2026-08-03T09:00:00.000Z',
+    loginId: 'active-login',
+    status: 'ACTIVE',
+  };
   const api = await installApiFixtures(page, adminFixtures({
     ...managementListFixtures(),
-    'GET /api/dsv/manual-email': legacyEnvelope({
-      apiConfigured: true,
-      configured: true,
-      defaultRecipients: [],
-      defaultSubject: operationSettings().manualEmailSubject,
-      defaultTextContent: operationSettings().manualEmailBody,
-      senderEmail: 'noreply@example.com',
-      senderName: 'CLEVER DSV',
-    }),
-    'POST /api/dsv/manual-email': ({ request }) => {
-      sentBody = request.postDataJSON();
-      return legacyEnvelope({ recipientCount: 1, sentAt: '2026-08-03T08:00:00.000Z' });
+    'GET /api/dsv/customers/customer-g006/accounts': legacyEnvelope({ accounts: [activeAccount] }),
+    'POST /api/dsv/customers/customer-g006/accounts/invitations': ({ request }) => {
+      inviteBody = request.postDataJSON();
+      return { ...legacyEnvelope({ account: invitedAccount }), status: 201 };
+    },
+    'POST /api/dsv/customer-accounts/customer-account-invited/reinvite': legacyEnvelope({ account: { ...invitedAccount, inviteExpiresAt: '2026-08-11T08:00:00.000Z' } }),
+    'POST /api/dsv/customer-accounts/customer-account-active/password-reset': legacyEnvelope({ account: activeAccount }),
+    'PATCH /api/dsv/customer-accounts/customer-account-active/status': ({ request }) => {
+      statusBody = request.postDataJSON();
+      return legacyEnvelope({ account: { ...activeAccount, status: 'DISABLED' } });
     },
   }));
 
@@ -1452,27 +1472,28 @@ test('customer detail previews and explicitly sends the saved customer guide ema
   await page.getByRole('button', { name: '고객사', exact: true }).click();
   await page.getByRole('row').filter({ hasText: 'Canonical Customer G006' }).click();
 
-  const panel = page.getByLabel('계정 안내');
-  await expect(panel.getByLabel('발신자')).toHaveValue('noreply@example.com');
-  await expect(panel.getByLabel('메일 본문 미리보기')).toContainText('고객사: Canonical Customer G006');
-  await expect(panel.getByLabel('메일 본문 미리보기')).toContainText('배송조회 페이지: http://127.0.0.1:4174/customer/delivery-inquiry');
-  await expect(panel.getByLabel('메일 본문 미리보기')).not.toContainText('customer-g006');
+  const panel = page.getByLabel('고객 계정 관리');
+  await expect(panel.getByText('기존 담당자')).toBeVisible();
+  await expect(panel.getByText('active-login')).toBeVisible();
+  await expect(panel).not.toContainText('temporary');
+  await expect(panel).not.toContainText('password');
 
-  const sendButton = panel.getByRole('button', { name: '안내 메일 보내기', exact: true });
-  await expect(sendButton).toBeDisabled();
   await panel.getByLabel('수신자 이메일').fill('customer@example.com');
-  await panel.getByRole('checkbox', { name: '수신자와 메일 내용을 확인했습니다.' }).check();
-  await sendButton.click();
+  await panel.getByLabel('표시 이름').fill('초대 담당자');
+  await panel.getByRole('button', { name: '초대 보내기', exact: true }).click();
+  await expect(panel.getByRole('status').filter({ hasText: '초대 이메일 발송을 요청했습니다.' })).toBeVisible();
+  await expect(panel.getByText('초대 담당자')).toBeVisible();
+  expect(inviteBody).toEqual({ email: 'customer@example.com', displayName: '초대 담당자' });
 
-  await expect(panel.getByRole('status').filter({ hasText: '1명에게 안내 메일을 전송했습니다.' })).toBeVisible();
-  expect(sentBody).toMatchObject({
-    confirmed: true,
-    recipients: ['customer@example.com'],
-    subject: operationSettings().manualEmailSubject,
-  });
-  expect(sentBody.textContent).toContain('고객사: Canonical Customer G006');
-  expect(sentBody.textContent).toContain('배송조회 페이지: http://127.0.0.1:4174/customer/delivery-inquiry');
-  expect(sentBody.textContent).not.toContain('customer-g006');
+  await panel.getByRole('row').filter({ hasText: '초대 담당자' }).getByRole('button', { name: '재초대', exact: true }).click();
+  await expect(panel.getByRole('status').filter({ hasText: '재초대 이메일 발송을 요청했습니다.' })).toBeVisible();
+
+  await panel.getByRole('row').filter({ hasText: '기존 담당자' }).getByRole('button', { name: '재설정', exact: true }).click();
+  await expect(panel.getByRole('status').filter({ hasText: '비밀번호 재설정 이메일 발송을 요청했습니다.' })).toBeVisible();
+
+  await panel.getByRole('row').filter({ hasText: '기존 담당자' }).getByRole('button', { name: '비활성화', exact: true }).click();
+  await expect(panel.getByRole('row').filter({ hasText: '기존 담당자' }).getByText('비활성', { exact: true })).toBeVisible();
+  expect(statusBody).toEqual({ status: 'DISABLED' });
   expectOnlyFixtureCalls(api);
 });
 

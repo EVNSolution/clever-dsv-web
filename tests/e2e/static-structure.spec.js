@@ -166,6 +166,8 @@ test('manual router, local state, layered plain CSS, and lazy map loading remain
     expect(routes).toContain(label);
   }
   expect(routes).toContain("export const customerDeliveryPath = '/customer/delivery-inquiry'");
+  expect(routes).toContain("export const customerLoginPath = '/customer/login'");
+  expect(routes).toContain("export const customerAccountSetupPath = '/customer/account/setup'");
 });
 
 test('single-concept labels remain', () => {
@@ -178,6 +180,25 @@ test('single-concept labels remain', () => {
   const labels = [...readSrc('app-routes.ts').matchAll(/label: '([^']+)'/g)].map((match) => match[1]);
   expect(labels).toEqual(['관제', '배차', '이력', '관리', '설정']);
   expect(source).not.toMatch(/배송원·차량|고객·배송망|운영\/알림/);
+});
+
+test('public customer account pages keep invitation and login contract explicit', () => {
+  const app = readSrc('App.tsx');
+  const setup = readSrc('pages/CustomerAccountSetupPage.tsx');
+  const login = readSrc('pages/CustomerLoginPage.tsx');
+  const service = readSrc('services/customer-accounts.ts');
+
+  expect(app).toContain('path === customerLoginPath || path === customerAccountSetupPath');
+  expect(app).toContain("requiredRole === 'CUSTOMER_USER' ? customerLoginPath : '/login'");
+  expect(setup).toContain('window.location.hash');
+  expect(setup).toContain('window.history.replaceState');
+  expect(setup).toContain('validateCustomerInvitation');
+  expect(setup).toContain('completeCustomerInvitation');
+  expect(setup).not.toContain('URLSearchParams(window.location.search)');
+  expect(login).toContain('loginCustomerAccount');
+  expect(service).toContain("'customer/auth/invitations/validate'");
+  expect(service).toContain("'customer/auth/complete'");
+  expect(service).toContain("'customer/auth/login'");
 });
 
 test('CSS ownership manifest matches source usage', () => {

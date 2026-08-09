@@ -41,25 +41,24 @@
 .master-detail-grid strong { color:var(--color-ink); font-size:13px; }
 .master-detail-grid p { margin:8px 0 0; color:var(--color-muted); font-size:13px; font-weight:700; }
 .customer-detail-panel { display:flex; flex-direction:column; overflow:auto; }
-.customer-email-panel { margin:10px 10px 0; padding-top:12px; display:grid; gap:10px; border-top:1px solid var(--color-border); }
-.customer-email-heading { display:flex; align-items:baseline; gap:10px; }
-.customer-email-heading strong { color:var(--color-ink); font-size:13px; }
-.customer-email-heading span { color:var(--color-muted); font-size:12px; font-weight:700; }
-.customer-email-fields { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
-.customer-email-fields label { min-width:0; display:grid; gap:5px; color:var(--color-muted); font-size:11px; font-weight:800; }
-.customer-email-fields input { width:100%; min-height:34px; box-sizing:border-box; border:1px solid var(--color-control-border); border-radius:8px; padding:0 10px; background:var(--color-white); color:var(--color-ink); font:700 12px/1 var(--font-sans); }
-.customer-email-fields input[readonly] { background:var(--color-row-hover); }
-.customer-email-subject { display:grid; grid-template-columns:44px minmax(0, 1fr); align-items:center; min-height:32px; padding:0 10px; border:1px solid var(--color-border); border-radius:8px; color:var(--color-muted); font-size:11px; font-weight:800; }
-.customer-email-subject strong { min-width:0; color:var(--color-ink); font-size:12px; overflow-wrap:anywhere; }
-.customer-email-preview { min-height:118px; max-height:180px; margin:0; overflow:auto; box-sizing:border-box; border:1px solid var(--color-border); border-radius:8px; padding:10px; background:var(--color-white); color:var(--color-ink); font:600 12px/1.65 var(--font-sans); white-space:pre-wrap; overflow-wrap:anywhere; }
-.customer-email-footer { display:flex; align-items:center; gap:10px; }
-.customer-email-confirm { margin-right:auto; display:flex; align-items:center; gap:7px; color:var(--color-muted); font-size:11px; font-weight:800; }
-.customer-email-confirm input { margin:0; }
-.customer-email-footer button { min-height:32px; border:1px solid var(--color-black); border-radius:8px; padding:0 12px; background:var(--color-black); color:var(--color-white); font:800 11px/1 var(--font-sans); cursor:pointer; }
-.customer-email-footer button:disabled { opacity:.35; cursor:default; }
-.customer-email-status { margin:0; color:var(--color-muted); font-size:11px; font-weight:700; }
-.customer-email-status.success { color:var(--color-success); }
-.customer-email-status.error { color:var(--color-risk); }
+.customer-account-panel { margin:10px 10px 0; padding-top:12px; display:grid; gap:10px; border-top:1px solid var(--color-border); }
+.customer-account-heading { display:flex; align-items:baseline; gap:10px; }
+.customer-account-heading strong { color:var(--color-ink); font-size:13px; }
+.customer-account-heading span { color:var(--color-muted); font-size:12px; font-weight:700; }
+.customer-account-form { display:grid; grid-template-columns:minmax(0, 1.2fr) minmax(0, 1fr) auto; gap:10px; align-items:end; }
+.customer-account-form label { min-width:0; display:grid; gap:5px; color:var(--color-muted); font-size:11px; font-weight:800; }
+.customer-account-form input { width:100%; min-height:34px; box-sizing:border-box; border:1px solid var(--color-control-border); border-radius:8px; padding:0 10px; background:var(--color-white); color:var(--color-ink); font:700 12px/1 var(--font-sans); }
+.customer-account-form button { min-height:34px; border:1px solid var(--color-black); border-radius:8px; padding:0 12px; background:var(--color-black); color:var(--color-white); font:800 11px/1 var(--font-sans); cursor:pointer; }
+.customer-account-form button:disabled { opacity:.45; cursor:default; }
+.customer-account-table td small { display:block; margin-top:3px; color:var(--color-muted); font-size:11px; font-weight:700; overflow-wrap:anywhere; }
+.customer-account-status-pill { display:inline-flex; align-items:center; min-height:22px; border-radius:999px; padding:0 8px; background:var(--color-row-hover); color:var(--color-muted); font-size:11px; font-weight:900; }
+.customer-account-status-pill.active { background:var(--color-success-soft); color:var(--color-success); }
+.customer-account-status-pill.disabled { background:var(--color-risk-soft); color:var(--color-risk); }
+.customer-account-status-pill.invited { background:var(--color-primary-soft); color:var(--color-primary); }
+.customer-account-status-pill.expired { background:var(--color-warning-soft); color:#855900; }
+.customer-account-status { margin:0; color:var(--color-muted); font-size:11px; font-weight:700; }
+.customer-account-status.success { color:var(--color-success); }
+.customer-account-status.error { color:var(--color-risk); }
 .management-actions { display:inline-flex; align-items:center; gap:5px; margin-left:auto; }
 .management-heading-side { display:inline-flex; align-items:center; gap:8px; margin-left:auto; }
 .management-heading-side .management-actions { margin-left:0; }
