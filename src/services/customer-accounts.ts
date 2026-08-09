@@ -4,6 +4,7 @@ import { apiConfig } from '../api/config';
 
 export type CustomerAccountStatus = 'INVITED' | 'ACTIVE' | 'DISABLED' | 'EXPIRED';
 export type CustomerAccountInvitePurpose = 'SIGNUP' | 'PASSWORD_RESET';
+export type CustomerAccountLoginIdMode = 'AUTOMATIC' | 'DIRECT';
 
 export type CustomerAccount = {
   displayName: string | null;
@@ -35,12 +36,13 @@ export async function loadCustomerAccounts(customerId: string): Promise<Customer
   return accounts.map(parseCustomerAccount);
 }
 
-export async function inviteCustomerAccount(customerId: string, input: { displayName: string; email: string }): Promise<CustomerAccount> {
+export async function inviteCustomerAccount(customerId: string, input: { displayName: string; email: string; loginId?: string; loginIdMode: CustomerAccountLoginIdMode }): Promise<CustomerAccount> {
   const response = await requestLegacyJson<unknown>(`customers/${encodeURIComponent(customerId)}/accounts/invitations`, {
     method: 'POST',
     json: {
       email: input.email,
       ...(input.displayName ? { displayName: input.displayName } : {}),
+      ...(input.loginIdMode === 'AUTOMATIC' ? { generateLoginId: true } : { loginId: input.loginId }),
     },
   });
   return parseCustomerAccount(objectField(response, 'account'));
@@ -69,7 +71,7 @@ export async function validateCustomerInvitation(token: string): Promise<Custome
   return parseInvitationValidation(response);
 }
 
-export async function completeCustomerInvitation(input: { loginId?: string; password: string; token: string }): Promise<void> {
+export async function completeCustomerInvitation(input: { password: string; token: string }): Promise<void> {
   clearTransportSession();
   try {
     const session = await requestLegacyJson<SessionTokens>('customer/auth/complete', {
@@ -78,7 +80,6 @@ export async function completeCustomerInvitation(input: { loginId?: string; pass
         token: input.token,
         shopDomain: apiConfig.shopDomain,
         password: input.password,
-        ...(input.loginId ? { loginId: input.loginId } : {}),
       },
     });
     storeTransportSession(session);

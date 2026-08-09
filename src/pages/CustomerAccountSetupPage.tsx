@@ -38,19 +38,18 @@ export function CustomerAccountSetupPage({ onComplete }: { onComplete: (path: ty
     const form = new FormData(formElement);
     const password = String(form.get('password') ?? '');
     const passwordConfirm = String(form.get('passwordConfirm') ?? '');
-    const loginId = state.validation.purpose === 'SIGNUP' ? String(form.get('loginId') ?? '').trim() : state.validation.loginId ?? undefined;
     if (password !== passwordConfirm) {
       setSubmitError('비밀번호 확인이 일치하지 않습니다.');
       return;
     }
-    if (state.validation.purpose === 'SIGNUP' && !loginId) {
-      setSubmitError('로그인 아이디를 입력하세요.');
+    if (!state.validation.loginId) {
+      setSubmitError('예약된 로그인 아이디를 확인할 수 없습니다.');
       return;
     }
     setSubmitting(true);
     setSubmitError('');
     try {
-      await completeCustomerInvitation({ token: state.token, password, loginId });
+      await completeCustomerInvitation({ token: state.token, password });
       formElement.reset();
       onComplete(customerDeliveryPath);
     } catch (cause) {
@@ -80,18 +79,11 @@ export function CustomerAccountSetupPage({ onComplete }: { onComplete: (path: ty
             <div><dt>유형</dt><dd>{state.validation.purpose === 'SIGNUP' ? '계정 활성화' : '비밀번호 재설정'}</dd></div>
             <div><dt>만료</dt><dd>{state.validation.expiresAt}</dd></div>
           </dl>
-          {state.validation.purpose === 'SIGNUP' ? <>
-            <label className="auth-field" htmlFor="customer-setup-login-id">로그인 아이디</label>
-            <div className="auth-control">
-              <input id="customer-setup-login-id" aria-label="Login ID" name="loginId" autoComplete="username" autoCapitalize="none" spellCheck={false} minLength={3} maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,63}" defaultValue={state.validation.loginId ?? ''} required />
-            </div>
-            <p className="auth-help">영문, 숫자, 마침표, 밑줄, 하이픈으로 3자 이상 입력하세요.</p>
-          </> : <>
-            <label className="auth-field" htmlFor="customer-setup-login-id">로그인 아이디</label>
-            <div className="auth-control">
-              <input id="customer-setup-login-id" aria-label="Login ID" value={state.validation.loginId ?? ''} readOnly />
-            </div>
-          </>}
+          <label className="auth-field" htmlFor="customer-setup-login-id">로그인 아이디</label>
+          <div className="auth-control">
+            <input id="customer-setup-login-id" aria-label="Login ID" autoComplete="username" value={state.validation.loginId ?? ''} readOnly />
+          </div>
+          {state.validation.purpose === 'SIGNUP' ? <p className="auth-help">관리자가 발급할 때 예약한 로그인 아이디입니다.</p> : null}
           <label className="auth-field" htmlFor="customer-setup-password">새 비밀번호</label>
           <div className="auth-control">
             <input id="customer-setup-password" aria-label="Password" name="password" type="password" autoComplete="new-password" minLength={12} maxLength={256} required />

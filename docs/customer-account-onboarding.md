@@ -7,16 +7,17 @@
 ## 관리자 흐름
 
 1. 관리 > 고객사에서 고객사를 선택한다.
-2. 고객 계정 패널에서 수신자 이메일과 선택 표시 이름을 입력해 초대한다.
-3. 계정 목록은 `INVITED`, `ACTIVE`, `DISABLED`, `EXPIRED` 상태와 초대/만료/최근 인증 시각을 표시한다.
-4. 관리자는 계정별로 재초대, 비밀번호 재설정 이메일 발송, 비활성화, 활성화를 실행한다.
-5. 프런트는 초대 링크, 원문 토큰, 임시 비밀번호, 생성 비밀번호를 표시하거나 저장하지 않는다.
+2. 고객 계정 패널의 계정 발급 버튼으로 모달을 열고 수신자 이메일, 선택 표시 이름, 로그인 아이디 방식을 지정해 초대한다.
+3. 로그인 아이디는 서버 자동 예약 또는 관리자 직접 지정 중 하나를 선택한다. 서버 응답의 `account.loginId`가 고객에게 예약된 로그인 아이디다.
+4. 계정 목록은 `INVITED`, `ACTIVE`, `DISABLED`, `EXPIRED` 상태와 초대/만료/최근 인증 시각을 표시한다.
+5. 관리자는 계정별로 재초대, 비밀번호 재설정 이메일 발송, 비활성화, 활성화를 실행한다.
+6. 프런트는 초대 링크, 원문 토큰, 임시 비밀번호, 생성 비밀번호를 표시하거나 저장하지 않는다.
 
 ## 고객 흐름
 
 1. 이메일 링크는 `/customer/account/setup#token=...` 형식이다.
 2. 설정 화면은 URL fragment의 `token`만 읽고 즉시 fragment를 visible history에서 제거한다.
-3. `SIGNUP` 토큰은 고객사, 이메일, 만료 시각을 표시하고 고객이 로그인 아이디와 비밀번호를 설정한다.
+3. `SIGNUP` 토큰은 고객사, 이메일, 만료 시각, 예약된 로그인 아이디를 표시하고 고객은 비밀번호만 설정한다.
 4. `PASSWORD_RESET` 토큰은 서버가 검증한 `loginId`를 읽기 전용으로 표시하고 새 비밀번호만 받는다.
 5. 완료 요청이 성공하면 서버가 세션/CSRF를 발급하고 프런트는 `/customer/delivery-inquiry`로 이동한다.
 6. `/customer/login`은 기존 활성 고객 계정의 로그인 전용 화면이다. 공개 가입 경로는 없다.
@@ -38,10 +39,12 @@
 | Method | Path | 용도 |
 | --- | --- | --- |
 | POST | `invitations/validate` | `{ token, shopDomain }` 검증 |
-| POST | `complete` | `{ token, shopDomain, loginId?, password }` 완료 및 로그인 |
+| POST | `complete` | `{ token, shopDomain, password }` 완료 및 로그인 |
 | POST | `login` | `{ id, password, shopDomain }` 로그인 |
 
-`complete`의 `loginId`는 `SIGNUP`에만 필요하다. `PASSWORD_RESET`에서는 validate 응답의 `loginId`를 화면에 읽기 전용으로 표시한다.
+고객 계정 발급 요청은 직접 지정 시 `{ email, displayName?, loginId }`, 자동 생성 시 `{ email, displayName?, generateLoginId: true }`를 보낸다. 응답의 `account.loginId`는 고객에게 예약된 영구 로그인 아이디다.
+
+`complete`는 고객이 입력한 로그인 아이디를 받지 않는다. `SIGNUP`과 `PASSWORD_RESET` 모두 validate 응답의 `loginId`를 화면에 읽기 전용으로 표시한다.
 
 ## 세션 규칙
 

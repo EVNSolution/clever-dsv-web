@@ -1440,7 +1440,7 @@ test('customer detail manages customer accounts without exposing passwords', asy
     invitedAt: '2026-08-03T08:00:00.000Z',
     inviteExpiresAt: '2026-08-10T08:00:00.000Z',
     lastAuthenticatedAt: null,
-    loginId: null,
+    loginId: 'direct-login',
     status: 'INVITED',
   };
   const activeAccount = {
@@ -1478,12 +1478,22 @@ test('customer detail manages customer accounts without exposing passwords', asy
   await expect(panel).not.toContainText('temporary');
   await expect(panel).not.toContainText('password');
 
-  await panel.getByLabel('수신자 이메일').fill('customer@example.com');
-  await panel.getByLabel('표시 이름').fill('초대 담당자');
-  await panel.getByRole('button', { name: '초대 보내기', exact: true }).click();
+  await panel.getByRole('button', { name: '계정 발급', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '고객 계정 발급' });
+  await dialog.getByLabel('수신자 이메일').fill('customer@example.com');
+  await dialog.getByLabel('표시 이름').fill('초대 담당자');
+  await dialog.getByLabel('직접 지정').check();
+  await dialog.getByLabel('직접 로그인 아이디').fill('direct-login');
+  await expect(dialog.getByLabel('발급 이메일 미리보기')).toContainText('48시간 동안 한 번만 사용할 수 있습니다.');
+  await expect(dialog.getByLabel('발급 이메일 미리보기')).toContainText('direct-login');
+  await expect(dialog.getByLabel('발급 이메일 미리보기')).toContainText('/customer/login');
+  await expect(dialog.getByLabel('발급 이메일 미리보기')).toContainText('고객이 설정 화면에서 직접 만듭니다.');
+  await expect(dialog).not.toContainText('임시 비밀번호');
+  await dialog.getByRole('button', { name: '발급 이메일 보내기', exact: true }).click();
   await expect(panel.getByRole('status').filter({ hasText: '초대 이메일 발송을 요청했습니다.' })).toBeVisible();
   await expect(panel.getByText('초대 담당자')).toBeVisible();
-  expect(inviteBody).toEqual({ email: 'customer@example.com', displayName: '초대 담당자' });
+  await expect(panel.getByText('direct-login')).toBeVisible();
+  expect(inviteBody).toEqual({ email: 'customer@example.com', displayName: '초대 담당자', loginId: 'direct-login' });
 
   await panel.getByRole('row').filter({ hasText: '초대 담당자' }).getByRole('button', { name: '재초대', exact: true }).click();
   await expect(panel.getByRole('status').filter({ hasText: '재초대 이메일 발송을 요청했습니다.' })).toBeVisible();
@@ -1494,6 +1504,46 @@ test('customer detail manages customer accounts without exposing passwords', asy
   await panel.getByRole('row').filter({ hasText: '기존 담당자' }).getByRole('button', { name: '비활성화', exact: true }).click();
   await expect(panel.getByRole('row').filter({ hasText: '기존 담당자' }).getByText('비활성', { exact: true })).toBeVisible();
   expect(statusBody).toEqual({ status: 'DISABLED' });
+  expectOnlyFixtureCalls(api);
+});
+
+test('customer signup uses reserved login ID and returned session', async ({ page }) => {
+  let completeBody;
+  const serviceDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+  const api = await installApiFixtures(page, {
+    'POST /api/dsv/customer/auth/invitations/validate': legacyEnvelope({
+      customerName: 'Canonical Customer G006',
+      displayName: '초대 담당자',
+      email: 'customer@example.com',
+      expiresAt: '2026-08-10T08:00:00.000Z',
+      loginId: 'reserved-login',
+      purpose: 'SIGNUP',
+    }),
+    'POST /api/dsv/customer/auth/complete': ({ request }) => {
+      completeBody = request.postDataJSON();
+      return legacyEnvelope({ accessToken: 'customer-access-token', csrfToken: 'customer-csrf-token' });
+    },
+    'GET /api/dsv/v1/session': v1Envelope({
+      csrfToken: 'customer-csrf-token',
+      principalType: 'CUSTOMER_USER',
+      shopId: 'shop-g006-parity',
+      actorId: 'customer-account-g006',
+      displayName: '초대 담당자',
+      scopes: ['dsv:customer-deliveries:read'],
+    }, 'g006-customer-session'),
+    [`GET /api/dsv/v1/customer/deliveries?limit=100&serviceDate=${serviceDate}`]: v1Envelope({ items: [], page: { hasMore: false }, routes: [] }),
+  });
+
+  await page.goto('/customer/account/setup#token=signup-token');
+  await expect(page.getByLabel('Login ID')).toHaveValue('reserved-login');
+  await expect(page.getByLabel('Login ID')).toHaveAttribute('readonly', '');
+  await page.getByLabel('Password', { exact: true }).fill('StrongPassw0rd!');
+  await page.getByLabel('Confirm password').fill('StrongPassw0rd!');
+  await page.getByRole('button', { name: '계정 설정 완료', exact: true }).click();
+
+  await expect(page).toHaveURL(/\/customer\/delivery-inquiry$/u);
+  expect(completeBody).toEqual({ password: 'StrongPassw0rd!', shopDomain: 'dsv-demo.local', token: 'signup-token' });
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('clever.auth.csrf'))).toBe('customer-csrf-token');
   expectOnlyFixtureCalls(api);
 });
 
