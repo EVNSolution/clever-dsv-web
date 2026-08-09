@@ -213,6 +213,18 @@ test('dispatch keeps customer grouping as an explicit list view', () => {
   expect(settingsCss).toMatch(/\.settings-view-tabs\s*\{[\s\S]*?margin:0 0 var\(--space-4\)/);
 });
 
+test('customer search selection fills the field and promotes the matched destination', () => {
+  const page = readSrc('pages/CustomerDeliveryInquiryPage.tsx');
+  const customerCss = readSrc('styles/features/customer.css');
+
+  expect(page).toContain('setSearchValue(candidate.label)');
+  expect(page).toContain('setSearchDestinationId(candidate.destinationId)');
+  expect(page).toContain('displayedDestinationGroups.map');
+  expect(page).toContain('onPointerDown={(event) => event.preventDefault()}');
+  expect(page).toContain('<small>검색 결과</small>');
+  expect(customerCss).toContain('.customer-destination-card.search-match');
+});
+
 test('CSS ownership manifest matches source usage', () => {
   const ownership = [
     { selector: '.auth-page', owner: 'src/styles/features/auth.css' },

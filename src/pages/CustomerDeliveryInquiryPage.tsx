@@ -194,6 +194,7 @@ function RemoteCustomerDeliveryInquiryPage({
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>();
   const [searchValue, setSearchValue] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchDestinationId, setSearchDestinationId] = useState<string>();
   const [serviceDate, setServiceDate] = useState(() => (
     new URLSearchParams(window.location.search).get('serviceDate') ?? todayInSeoul()
   ));
@@ -267,6 +268,10 @@ function RemoteCustomerDeliveryInquiryPage({
     : viewDeliveries.filter((delivery) => customerVehicleGroupId(delivery) === activeVehicleId);
   const destinationGroups = customerDestinationGroups(visibleDeliveries);
   const selected = destinationGroups.find((group) => group.destinationId === selectedKey);
+  const searchResult = destinationGroups.find((group) => group.destinationId === searchDestinationId);
+  const displayedDestinationGroups = searchResult === undefined
+    ? destinationGroups
+    : [searchResult, ...destinationGroups.filter((group) => group.destinationId !== searchResult.destinationId)];
   const searchCandidates = customerSearchCandidates(viewDeliveries, searchValue);
   const points = customerMapPoints(destinationGroups);
   const vehicles = customerVehiclePoints(visibleDeliveries);
@@ -290,12 +295,14 @@ function RemoteCustomerDeliveryInquiryPage({
     setView(nextView);
     setSelectedVehicleId(undefined);
     setSelectedKey(undefined);
+    setSearchDestinationId(undefined);
   };
 
   const selectVehicle = (vehicleId: string) => {
     const nextVehicleId = activeVehicleId === vehicleId ? undefined : vehicleId;
     setSelectedVehicleId(nextVehicleId);
     setSelectedKey(undefined);
+    setSearchDestinationId(undefined);
   };
 
   const selectServiceDate = (nextServiceDate: string) => {
@@ -304,6 +311,7 @@ function RemoteCustomerDeliveryInquiryPage({
     window.history.replaceState({}, '', `${url.pathname}${url.search}`);
     setSelectedVehicleId(undefined);
     setSelectedKey(undefined);
+    setSearchDestinationId(undefined);
     setSearchValue('');
     setSearchOpen(false);
     setServiceDate(nextServiceDate);
@@ -312,6 +320,7 @@ function RemoteCustomerDeliveryInquiryPage({
   const selectSearchCandidate = (candidate: CustomerSearchCandidate) => {
     setSelectedVehicleId(candidate.vehicleId);
     setSelectedKey(candidate.destinationId);
+    setSearchDestinationId(candidate.destinationId);
     setSearchValue(candidate.label);
     setSearchOpen(false);
   };
@@ -326,7 +335,10 @@ function RemoteCustomerDeliveryInquiryPage({
             departureLocation={departureLocation}
             onPointSelect={(destinationId) => {
               const group = destinationGroups.find((item) => item.destinationId === destinationId);
-              if (group !== undefined) setSelectedKey(group.destinationId);
+              if (group !== undefined) {
+                setSearchDestinationId(undefined);
+                setSelectedKey(group.destinationId);
+              }
             }}
             points={points}
             routes={routes}
@@ -355,6 +367,7 @@ function RemoteCustomerDeliveryInquiryPage({
                 autoComplete="off"
                 onChange={(event) => {
                   setSearchValue(event.target.value);
+                  setSearchDestinationId(undefined);
                   setSearchOpen(true);
                 }}
                 onFocus={() => setSearchOpen(true)}
@@ -371,6 +384,7 @@ function RemoteCustomerDeliveryInquiryPage({
                     key={candidate.id}
                     type="button"
                     role="option"
+                    onPointerDown={(event) => event.preventDefault()}
                     onClick={() => selectSearchCandidate(candidate)}
                   >
                     <small>{candidate.kind}</small>
@@ -415,20 +429,25 @@ function RemoteCustomerDeliveryInquiryPage({
                 <div className="customer-destination-columns" aria-hidden="true">
                   <span>배송지</span><span>주문</span><span>도착 예정</span><span>실제 도착</span>
                 </div>
-                {destinationGroups.map((group) => {
+                {displayedDestinationGroups.map((group) => {
                   const active = group.destinationId === selected?.destinationId;
+                  const searchMatch = group.destinationId === searchDestinationId;
                   return (
                     <button
                       key={group.destinationId}
                       type="button"
-                      className={`customer-destination-card${active ? ' active' : ''}`}
+                      className={`customer-destination-card${active ? ' active' : ''}${searchMatch ? ' search-match' : ''}`}
                       aria-expanded={active}
-                      onClick={() => setSelectedKey((current) => current === group.destinationId ? undefined : group.destinationId)}
+                      onClick={() => {
+                        setSearchDestinationId(undefined);
+                        setSelectedKey((current) => current === group.destinationId ? undefined : group.destinationId);
+                      }}
                     >
                       <span className="customer-destination-card-summary">
                         <i aria-label={`배송지 순서 ${group.destinationSequence}`}>{group.destinationSequence}</i>
                         <span className="customer-destination-card-copy">
                           <strong>{group.destinationDisplayName}</strong>
+                          {searchMatch ? <small>검색 결과</small> : null}
                         </span>
                         <span className="customer-destination-order-count">{group.orderCount}건</span>
                         <time>{formatCustomerTime(group.sharedEstimatedArrivalAt)}</time>

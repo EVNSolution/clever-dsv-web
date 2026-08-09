@@ -115,6 +115,10 @@
 .customer-destination-card:last-child { border-bottom:0; }
 .customer-destination-card:hover { background:#f7f7f9; }
 .customer-destination-card.active { background:var(--color-primary-soft); }
+.customer-destination-card.search-match {
+  position:relative; z-index:1; background:var(--color-primary-soft);
+  box-shadow:inset 3px 0 var(--color-primary), inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 28%, transparent);
+}
 .customer-destination-card:focus-visible { outline:2px solid var(--color-primary); outline-offset:-2px; }
 .customer-destination-card-summary {
   min-width:0; min-height:52px; display:grid;
@@ -129,6 +133,7 @@
   min-width:0; overflow:hidden; color:var(--color-ink); font-size:13px; font-weight:900;
   letter-spacing:-.025em; text-overflow:ellipsis; white-space:nowrap;
 }
+.customer-destination-card-copy small { color:var(--color-primary); font-size:9px; font-weight:900; line-height:1.2; }
 .customer-destination-order-count { color:var(--color-muted); font-size:10px; font-weight:800; text-align:center; white-space:nowrap; }
 .customer-destination-card-summary time {
   color:var(--color-ink); font-size:10px; font-weight:900; font-variant-numeric:tabular-nums; text-align:center; white-space:nowrap;
