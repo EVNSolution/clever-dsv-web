@@ -35,7 +35,6 @@ export function LoginPage({ onLogin }: { onLogin: () => void }): ReactElement {
           <h1 id="auth-title">로그인</h1>
           <p>관리자 계정으로 배송 운영 화면에 접속합니다.</p>
         </div>
-        <a className="auth-alt-link" href={customerLoginPath}>고객 배송조회 로그인</a>
         <form className="auth-form" aria-label="Login" onSubmit={submit}>
           <label className="auth-field" htmlFor="auth-id">아이디</label>
           <div className="auth-control">
@@ -48,6 +47,7 @@ export function LoginPage({ onLogin }: { onLogin: () => void }): ReactElement {
           {error ? <p className="auth-error" role="alert">{error}</p> : null}
           <button className="auth-submit" type="submit" disabled={submitting}>{submitting ? '로그인 중' : '로그인'}</button>
         </form>
+        <a className="auth-alt-link" href={customerLoginPath}>고객 배송조회 로그인</a>
       </section>
     </main>
   );
