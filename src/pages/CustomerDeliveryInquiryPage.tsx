@@ -189,6 +189,8 @@ function RemoteCustomerDeliveryInquiryPage({
   adminCustomerId,
   principalDisplayName,
 }: CustomerDeliveryInquiryPageProps): ReactElement {
+  const initialQuery = new URLSearchParams(window.location.search);
+  const initialView: CustomerInquiryView = initialQuery.get('view') === 'history' ? 'history' : 'control';
   const [state, setState] = useState<RemoteInquiryState>({ status: 'loading' });
   const [selectedKey, setSelectedKey] = useState<string>();
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>();
@@ -196,11 +198,17 @@ function RemoteCustomerDeliveryInquiryPage({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchDestinationIds, setSearchDestinationIds] = useState<string[]>([]);
   const [serviceDate, setServiceDate] = useState(() => (
-    new URLSearchParams(window.location.search).get('serviceDate') ?? todayInSeoul()
+    initialView === 'history' ? initialQuery.get('serviceDate') ?? todayInSeoul() : todayInSeoul()
   ));
-  const [view, setView] = useState<CustomerInquiryView>(() => (
-    new URLSearchParams(window.location.search).get('view') === 'history' ? 'history' : 'control'
-  ));
+  const [view, setView] = useState<CustomerInquiryView>(initialView);
+
+  useEffect(() => {
+    if (view !== 'control') return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('serviceDate')) return;
+    url.searchParams.delete('serviceDate');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+  }, [view]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -258,9 +266,7 @@ function RemoteCustomerDeliveryInquiryPage({
   const customerName = state.data.customerDisplayName
     ?? (adminCustomerId === undefined ? principalDisplayName : undefined)
     ?? '고객사 배송조회';
-  const viewDeliveries = view === 'history'
-    ? state.data.deliveries.filter(isCompletedCustomerDelivery)
-    : state.data.deliveries;
+  const viewDeliveries = state.data.deliveries;
   const vehicleGroups = customerVehicleGroups(viewDeliveries);
   const activeVehicleId = vehicleGroups.some((vehicle) => vehicle.id === selectedVehicleId) ? selectedVehicleId : undefined;
   const visibleDeliveries = activeVehicleId === undefined
@@ -279,12 +285,16 @@ function RemoteCustomerDeliveryInquiryPage({
   const searchCandidates = searchMatches.slice(0, 10);
   const points = customerMapPoints(destinationGroups);
   const vehicles = customerVehiclePoints(visibleDeliveries);
-  const visibleRoutes = view === 'history'
-    ? []
-    : activeVehicleId === undefined
-      ? state.data.routes
-      : state.data.routes.filter((route) => route.vehicleId === activeVehicleId);
-  const routes = customerMapRoutes(visibleRoutes, activeVehicleId !== undefined);
+  const visibleRoutes = activeVehicleId === undefined
+    ? state.data.routes
+    : state.data.routes.filter((route) => route.vehicleId === activeVehicleId);
+  const visibleTrails = activeVehicleId === undefined
+    ? state.data.trails
+    : state.data.trails.filter((trail) => trail.vehicleId === activeVehicleId);
+  const routes = [
+    ...customerMapRoutes(visibleRoutes, activeVehicleId !== undefined, view),
+    ...customerTrailMapRoutes(visibleTrails),
+  ];
   const departureLocation = state.data.departureLocation === undefined ? null : {
     address: state.data.departureLocation.address ?? '물류센터',
     latitude: state.data.departureLocation.latitude,
@@ -293,8 +303,15 @@ function RemoteCustomerDeliveryInquiryPage({
 
   const selectView = (nextView: CustomerInquiryView) => {
     const url = new URL(window.location.href);
-    if (nextView === 'control') url.searchParams.delete('view');
-    else url.searchParams.set('view', nextView);
+    if (nextView === 'control') {
+      const today = todayInSeoul();
+      url.searchParams.delete('view');
+      url.searchParams.delete('serviceDate');
+      setServiceDate(today);
+    } else {
+      url.searchParams.set('view', nextView);
+      url.searchParams.set('serviceDate', serviceDate);
+    }
     window.history.replaceState({}, '', `${url.pathname}${url.search}`);
     setView(nextView);
     setSelectedVehicleId(undefined);
@@ -362,11 +379,11 @@ function RemoteCustomerDeliveryInquiryPage({
           />
         </Suspense>
         <div className="customer-map-tools">
-          <ServiceDateSelector
-            label="조회 기준일"
+          {view === 'history' ? <ServiceDateSelector
+            label="이력 기준일"
             onChange={(value) => { if (value !== undefined) selectServiceDate(value); }}
             serviceDate={serviceDate}
-          />
+          /> : null}
           <div
             className="customer-search-card"
             onBlur={(event) => {
@@ -723,10 +740,6 @@ function customerVehicleGroupId(delivery: CustomerDeliveryItem): string {
   return delivery.vehicleId ?? unassignedCustomerVehicleId;
 }
 
-function isCompletedCustomerDelivery(delivery: CustomerDeliveryItem): boolean {
-  return delivery.actualCompletedAt !== undefined || delivery.deliveryStatus === 'DELIVERED';
-}
-
 function customerMapPoints(groups: CustomerDestinationGroup[]): MapCanvasPoint[] {
   return groups.flatMap((group) => (
     group.latitude !== undefined && group.longitude !== undefined
@@ -743,13 +756,32 @@ function customerMapPoints(groups: CustomerDestinationGroup[]): MapCanvasPoint[]
   ));
 }
 
-function customerMapRoutes(routes: RemoteCustomerDeliveries['routes'], selected: boolean): MapCanvasRoute[] {
+function customerMapRoutes(
+  routes: RemoteCustomerDeliveries['routes'],
+  selected: boolean,
+  view: CustomerInquiryView,
+): MapCanvasRoute[] {
   return routes.map((route) => ({
-    color: '#0066cc',
+    color: view === 'history' ? '#8e8e93' : '#0066cc',
     coordinates: route.coordinates,
-    id: route.vehicleId,
-    selected,
+    id: `planned:${route.vehicleId}`,
+    selected: view === 'control' && selected,
+    sortOrder: 0,
   }));
+}
+
+function customerTrailMapRoutes(trails: RemoteCustomerDeliveries['trails']): MapCanvasRoute[] {
+  return trails.flatMap((trail) => trail.segments.map((segment, index) => ({
+    casingColor: '#ffffff',
+    color: '#d92d20',
+    coordinates: segment.coordinates,
+    dashed: true,
+    endMarker: index < trail.segments.length - 1 ? 'interrupted' as const : 'end' as const,
+    id: `trail:${trail.vehicleId}:${index}`,
+    selected: true,
+    sortOrder: 200 + index,
+    startMarker: index === 0 ? 'start' as const : 'restart' as const,
+  })));
 }
 
 function customerAddressLabel(value?: string): string | undefined {
