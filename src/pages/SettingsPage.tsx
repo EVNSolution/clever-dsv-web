@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { apiConfig } from '../api/config';
+import { AdminAccountsPanel } from '../components/AdminAccountsPanel';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
 import { MapPreview } from '../components/MapPreview';
 import { loadManualEmailConfig, manualEmailRecipientError, recipientsFromInput, sendManualEmail } from '../services/manual-email';
@@ -20,11 +21,15 @@ const DepartureLocationMap = lazy(() => import('../components/DepartureLocationM
 type LoadState = 'error' | 'loading' | 'ready';
 type SaveState = 'error' | 'idle' | 'saving' | 'saved';
 type GeocodeState = 'error' | 'idle' | 'loading' | 'resolved';
+type SettingsView = 'accounts' | 'operations';
 
 const defaultOperationalSettings: OperationalSettings = defaultAdminSettings;
 
-export function SettingsPage({ description, title }: { description: string; title: string }): ReactElement {
+export function SettingsPage({ description, principalId, principalScopes, title }: { description: string; principalId: string | null; principalScopes: readonly string[]; title: string }): ReactElement {
   const isRemote = apiConfig.mode === 'remote';
+  const canReadAccounts = principalScopes.includes('dsv:accounts:read');
+  const canWriteAccounts = principalScopes.includes('dsv:accounts:write');
+  const [activeView, setActiveView] = useState<SettingsView>('operations');
   const [mockSettings, setMockSettings] = useState<AdminSettings>(() => isRemote ? defaultAdminSettings : loadAdminSettings());
   const [remoteSettings, setRemoteSettings] = useState<OperationalSettings>(defaultOperationalSettings);
   const [loadState, setLoadState] = useState<LoadState>(() => isRemote ? 'loading' : 'ready');
@@ -132,7 +137,7 @@ export function SettingsPage({ description, title }: { description: string; titl
 
   return (
     <>
-      <AdminPageHeader className="settings-hero" title={title} description={description} actions={(
+      <AdminPageHeader className="settings-hero" title={title} description={description} actions={activeView === 'operations' ? (
         <div className="settings-header-tools">
           <div className="settings-feedback" aria-live="polite">
             {loadState === 'loading' ? <span role="status">설정을 불러오는 중입니다.</span> : null}
@@ -148,8 +153,15 @@ export function SettingsPage({ description, title }: { description: string; titl
             </button>
           </div>
         </div>
-      )} />
-      {loadState === 'ready' ? <div className="page-grid">
+      ) : undefined} />
+      <div className="settings-view-tabs" role="tablist" aria-label="설정 구분">
+        <button className={activeView === 'operations' ? 'active' : ''} type="button" role="tab" aria-selected={activeView === 'operations'} onClick={() => setActiveView('operations')}>운영</button>
+        {canReadAccounts ? <button className={activeView === 'accounts' ? 'active' : ''} type="button" role="tab" aria-selected={activeView === 'accounts'} onClick={() => setActiveView('accounts')}>계정</button> : null}
+      </div>
+      {activeView === 'accounts' && canReadAccounts
+        ? <AdminAccountsPanel canWrite={canWriteAccounts} currentAccountId={principalId} />
+        : null}
+      {activeView === 'operations' && loadState === 'ready' ? <div className="page-grid">
         <section className="page-panel settings-location-panel wide">
           <div className="settings-location-grid">
             <div className="settings-location-fields">

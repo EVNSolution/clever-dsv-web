@@ -8,12 +8,12 @@ const MasterDataPage = lazy(() => import('./MasterDataPage').then((module) => ({
 const RecordsPage = lazy(() => import('./RecordsPage').then((module) => ({ default: module.RecordsPage })));
 const SettingsPage = lazy(() => import('./SettingsPage').then((module) => ({ default: module.SettingsPage })));
 
-export function AdminContent({ activePath, title, description }: { activePath: AdminPath; title: string; description: string }): ReactElement {
+export function AdminContent({ activePath, title, description, principalId, principalScopes }: { activePath: AdminPath; title: string; description: string; principalId: string | null; principalScopes: readonly string[] }): ReactElement {
   return (
     <section className={`page-content dynamic-page admin-content overlay-scroll ${classNameForPath(activePath)}`} aria-label={`${title} 페이지`}>
       {activePath === '/dispatch' || activePath === '/settings' ? null : <AdminPageHeader title={title} description={description} />}
       <Suspense fallback={null}>
-        {contentForPath(activePath, title, description)}
+        {contentForPath(activePath, title, description, principalId, principalScopes)}
       </Suspense>
     </section>
   );
@@ -34,7 +34,7 @@ function classNameForPath(activePath: AdminPath): string {
   }
 }
 
-function contentForPath(activePath: AdminPath, title: string, description: string): ReactElement {
+function contentForPath(activePath: AdminPath, title: string, description: string, principalId: string | null, principalScopes: readonly string[]): ReactElement {
   switch (activePath) {
     case '/master-data':
       return <MasterDataPage />;
@@ -43,8 +43,8 @@ function contentForPath(activePath: AdminPath, title: string, description: strin
     case '/records':
       return <RecordsPage />;
     case '/settings':
-      return <SettingsPage title={title} description={description} />;
+      return <SettingsPage title={title} description={description} principalId={principalId} principalScopes={principalScopes} />;
     default:
-      return <SettingsPage title={title} description={description} />;
+      return <SettingsPage title={title} description={description} principalId={principalId} principalScopes={principalScopes} />;
   }
 }

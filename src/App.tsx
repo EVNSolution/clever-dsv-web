@@ -120,6 +120,8 @@ export function App(): ReactElement {
         <AdminShell
           activePath="/control"
           previewOnly
+          principalId={principal?.id ?? null}
+          principalScopes={principal?.scopes ?? []}
           onNavigate={(nextPath) => go(nextPath)}
           onLogout={handleLogout}
         />
@@ -155,6 +157,8 @@ export function App(): ReactElement {
   return (
     <AdminShell
       activePath={path}
+      principalId={principal?.id ?? null}
+      principalScopes={principal?.scopes ?? []}
       onNavigate={(nextPath) => go(nextPath)}
       onLogout={handleLogout}
     />

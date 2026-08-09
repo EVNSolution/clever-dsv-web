@@ -54,6 +54,10 @@
   .settings-location-grid { grid-template-columns:1fr; }
   .settings-location-map-shell { min-height:320px; }
   .settings-email-grid { grid-template-columns:1fr; }
+  .settings-account-layout { grid-template-columns:1fr; }
+  .settings-account-form { grid-template-columns:1fr 1fr auto; }
+  .settings-credential { grid-template-columns:1fr 1fr; }
+  .settings-credential > div { grid-column:1 / -1; }
   .settings-email-wide { grid-column:auto; }
   .page-content.work-page .work-two-grid {
     flex:0 0 auto;
@@ -160,6 +164,12 @@
   .settings-coordinate-grid { grid-template-columns:1fr 1fr; }
   .settings-location-map-shell { min-height:360px; border-left:0; border-top:1px solid var(--color-border); border-radius:0; }
   .settings-email-footer { align-items:stretch; flex-direction:column; }
+  .settings-view-tabs { width:100%; }
+  .settings-view-tabs button { flex:1 1 0; }
+  .settings-account-form,
+  .settings-credential { grid-template-columns:1fr; }
+  .settings-credential > div,
+  .settings-credential small { grid-column:auto; }
   .settings-email-action { align-items:flex-end; flex-direction:column; }
   .dispatch-search-form { grid-template-columns:1fr; padding:7px; }
   .dispatch-search-actions { justify-content:flex-end; }
