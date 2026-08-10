@@ -6,14 +6,12 @@ import type { MapCanvasRoute } from '../MapCanvas';
 const sourceId = 'operational-routes';
 const casingLayerId = 'operational-route-casing';
 const routeLayerId = 'operational-route-lines';
-const trailCasingLayerId = 'operational-trail-casing';
 const trailLayerId = 'operational-trail-lines';
 const trailPointLayerId = 'operational-route-trail-points';
 const destinationMarkerLayerId = 'operational-destination-markers';
 
 const routeFilter: FilterSpecification = ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'kind'], 'trail']];
 const trailFilter: FilterSpecification = ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'trail']];
-const trailCasingWidth: DataDrivenPropertyValueSpecification<number> = ['interpolate', ['linear'], ['zoom'], 4, 9, 10, 8, 16, 7];
 const trailLineWidth: DataDrivenPropertyValueSpecification<number> = ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 4.5, 16, 4];
 
 export function updateOperationalRoutes(
@@ -57,23 +55,6 @@ export function updateOperationalRoutes(
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
     map.addLayer({
-      id: trailCasingLayerId,
-      type: 'line',
-      source: sourceId,
-      filter: trailFilter,
-      layout: {
-        'line-cap': 'round',
-        'line-join': 'round',
-        'line-sort-key': ['get', 'sortKey'],
-      },
-      paint: {
-        'line-color': ['get', 'casingColor'],
-        'line-opacity': 1,
-        'line-width': trailCasingWidth,
-        'line-dasharray': ['literal', [2, 2]],
-      },
-    }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
-    map.addLayer({
       id: trailLayerId,
       type: 'line',
       source: sourceId,
@@ -87,7 +68,7 @@ export function updateOperationalRoutes(
         'line-color': ['get', 'color'],
         'line-opacity': 1,
         'line-width': trailLineWidth,
-        'line-dasharray': ['literal', [2, 2]],
+        'line-dasharray': ['literal', [1, 1]],
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
     map.addLayer({
