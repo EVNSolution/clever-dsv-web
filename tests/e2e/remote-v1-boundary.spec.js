@@ -490,7 +490,28 @@ test('renders selected control progress without letting a future destination cli
     }),
     'GET /api/dsv/v1/vehicles/vehicle-progress/gps-trail-history': v1Envelope({
       serviceDate: controlSummary.serviceDate,
-      segments: [],
+      sessions: [{
+        completedAt: null,
+        completionEventId: null,
+        endpoint: { endedAt: null, reason: 'LAST_VALID_SAMPLE' },
+        restart: null,
+        routePlanId,
+        segments: [
+          { samples: [
+            { distanceTodayKm: 1, ignitionOn: true, latitude: 37.5, longitude: 127, observedAt: '2026-08-05T00:00:00.000Z', speedKph: 20 },
+            { distanceTodayKm: 2, ignitionOn: true, latitude: 37.501, longitude: 127.005, observedAt: '2026-08-05T00:01:00.000Z', speedKph: 22 },
+          ] },
+          { samples: [
+            { distanceTodayKm: 3, ignitionOn: true, latitude: 37.502, longitude: 127.015, observedAt: '2026-08-05T00:06:00.000Z', speedKph: 24 },
+            { distanceTodayKm: 4, ignitionOn: true, latitude: 37.5, longitude: 127.025, observedAt: '2026-08-05T00:07:00.000Z', speedKph: 18 },
+          ] },
+        ],
+        sessionIndex: 0,
+        startedAt: '2026-08-05T00:00:00.000Z',
+        startEventId: 'event-progress-start',
+        startSource: 'ROUTE_STARTED',
+      }],
+      timezone: 'Asia/Seoul',
       vehicleId,
     }),
     'GET /api/dsv/v1/customers?limit=100': v1Envelope({ items: [], page: { hasMore: false } }),
@@ -536,10 +557,18 @@ test('renders selected control progress without letting a future destination cli
     if (!destinations || !routes) return null;
     return {
       destinations: destinations.serialize().data.features.map((feature) => feature.properties.color),
-      routes: routes.serialize().data.features.map((feature) => ({
+      routes: routes.serialize().data.features
+        .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.kind === 'route')
+        .map((feature) => ({
         casingColor: feature.properties.casingColor,
         color: feature.properties.color,
       })),
+      trailMarkers: routes.serialize().data.features
+        .filter((feature) => feature.geometry.type === 'Point')
+        .map((feature) => feature.properties.markerKind),
+      trails: routes.serialize().data.features
+        .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.kind === 'trail')
+        .map((feature) => feature.geometry.coordinates),
     };
   })).toEqual({
     destinations: ['#8e8e93', '#e87514', '#1f8b4c', '#0066cc'],
@@ -547,6 +576,11 @@ test('renders selected control progress without letting a future destination cli
       { casingColor: '#ffffff', color: '#8e8e93' },
       { casingColor: '#ffffff', color: '#1f8b4c' },
       { casingColor: '#ffffff', color: '#0066cc' },
+    ],
+    trailMarkers: ['start', 'interrupted', 'restart', 'end'],
+    trails: [
+      [[127, 37.5], [127.005, 37.501]],
+      [[127.015, 37.502], [127.025, 37.5]],
     ],
   });
 
@@ -993,7 +1027,9 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
       })),
       routePaint: {
         casingOpacity: window.dsvMap.getPaintProperty('operational-route-casing', 'line-opacity'),
+        casingWidth: window.dsvMap.getPaintProperty('operational-route-casing', 'line-width'),
         lineOpacity: window.dsvMap.getPaintProperty('operational-route-lines', 'line-opacity'),
+        lineWidth: window.dsvMap.getPaintProperty('operational-route-lines', 'line-width'),
       },
       vehicles: vehicleSource.serialize().data.features.map((feature) => ({
         coordinates: feature.geometry.coordinates,
@@ -1026,8 +1062,10 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
       { routeId: 'route-plan-g006-second' },
     ],
     routePaint: {
-      casingOpacity: ['case', ['get', 'selected'], 0.96, 1],
-      lineOpacity: ['case', ['get', 'selected'], 0.96, 1],
+      casingOpacity: ['case', ['==', ['get', 'kind'], 'trail'], 1, ['get', 'selected'], 0.96, 1],
+      casingWidth: ['case', ['==', ['get', 'kind'], 'trail'], 6.4, ['get', 'selected'], 4.6, 3.6],
+      lineOpacity: ['case', ['==', ['get', 'kind'], 'trail'], 1, ['get', 'selected'], 0.96, 1],
+      lineWidth: ['case', ['==', ['get', 'kind'], 'trail'], 3.4, ['get', 'selected'], 2.6, 1.8],
     },
     vehicles: [
       { coordinates: [127.0412, 37.5021], label: '99테 6006', markerImageId: expect.stringMatching(/^vehicle-marker-(?!8e8e93)/u), vehicleId: 'vehicle-g006-scheduled' },
@@ -1518,7 +1556,10 @@ test('loads the administrator customer map through the customer-scoped contract'
         }],
         trails: [{
           vehicleId: 'vehicle-g006-map',
-          segments: [{ coordinates: [[126.982, 37.564], [126.981, 37.5645], [126.98, 37.565]] }],
+          segments: [
+            { coordinates: [[126.982, 37.564], [126.9815, 37.5642]] },
+            { coordinates: [[126.9805, 37.5648], [126.98, 37.565]] },
+          ],
         }],
       });
     },
@@ -1562,10 +1603,29 @@ test('loads the administrator customer map through the customer-scoped contract'
     const routeData = routeSource && 'serialize' in routeSource ? routeSource.serialize().data : undefined;
     return routeData?.features
       ?.filter((feature) => feature.geometry.type === 'LineString')
-      .map((feature) => ({ color: feature.properties?.color, dashed: feature.properties?.dashed, routeId: feature.properties?.routeId }));
+      .map((feature) => ({
+        color: feature.properties?.color,
+        coordinates: feature.geometry.coordinates,
+        dashed: feature.properties?.dashed,
+        kind: feature.properties?.kind,
+        routeId: feature.properties?.routeId,
+      }));
   })).toEqual([
-    { color: '#0066cc', dashed: false, routeId: 'planned:vehicle-g006-map' },
-    { color: '#d92d20', dashed: true, routeId: 'trail:vehicle-g006-map:0' },
+    { color: '#0066cc', coordinates: [[126.982, 37.564], [126.98, 37.565], [126.9779, 37.5663]], dashed: false, kind: 'route', routeId: 'planned:vehicle-g006-map' },
+    { color: '#d92d20', coordinates: [[126.982, 37.564], [126.9815, 37.5642]], dashed: true, kind: 'trail', routeId: 'trail:vehicle-g006-map:0' },
+    { color: '#d92d20', coordinates: [[126.9805, 37.5648], [126.98, 37.565]], dashed: true, kind: 'trail', routeId: 'trail:vehicle-g006-map:1' },
+  ]);
+  await expect.poll(() => page.evaluate(() => {
+    const routeSource = window.dsvMap?.getSource('operational-routes');
+    const routeData = routeSource && 'serialize' in routeSource ? routeSource.serialize().data : undefined;
+    return routeData?.features
+      ?.filter((feature) => feature.geometry.type === 'Point')
+      .map((feature) => ({ markerKind: feature.properties?.markerKind, routeId: feature.properties?.routeId }));
+  })).toEqual([
+    { markerKind: 'start', routeId: 'trail:vehicle-g006-map:0' },
+    { markerKind: 'interrupted', routeId: 'trail:vehicle-g006-map:0' },
+    { markerKind: 'restart', routeId: 'trail:vehicle-g006-map:1' },
+    { markerKind: 'end', routeId: 'trail:vehicle-g006-map:1' },
   ]);
   await page.getByRole('button', { name: /이력 완료 배송 확인/u }).click();
   await page.getByRole('button', { name: '이력 기준일 날짜 변경' }).click();

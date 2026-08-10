@@ -61,6 +61,7 @@ export type MapCanvasRoute = {
   dashed?: boolean;
   endMarker?: 'end' | 'interrupted';
   id: string;
+  kind?: 'route' | 'trail';
   selected?: boolean;
   sortOrder?: number;
   startMarker?: 'restart' | 'start';

@@ -25,8 +25,8 @@ export function updateOperationalRoutes(
       },
       paint: {
         'line-color': ['get', 'casingColor'],
-        'line-opacity': ['case', ['get', 'selected'], 0.96, 1],
-        'line-width': ['case', ['get', 'selected'], 4.6, 3.6],
+        'line-opacity': ['case', ['==', ['get', 'kind'], 'trail'], 1, ['get', 'selected'], 0.96, 1],
+        'line-width': ['case', ['==', ['get', 'kind'], 'trail'], 6.4, ['get', 'selected'], 4.6, 3.6],
         'line-dasharray': ['case', ['get', 'dashed'], ['literal', [2, 2]], ['literal', [1, 0]]],
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
@@ -41,8 +41,8 @@ export function updateOperationalRoutes(
       },
       paint: {
         'line-color': ['get', 'color'],
-        'line-opacity': ['case', ['get', 'selected'], 0.96, 1],
-        'line-width': ['case', ['get', 'selected'], 2.6, 1.8],
+        'line-opacity': ['case', ['==', ['get', 'kind'], 'trail'], 1, ['get', 'selected'], 0.96, 1],
+        'line-width': ['case', ['==', ['get', 'kind'], 'trail'], 3.4, ['get', 'selected'], 2.6, 1.8],
         'line-dasharray': ['case', ['get', 'dashed'], ['literal', [2, 2]], ['literal', [1, 0]]],
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
@@ -73,6 +73,7 @@ function routeFeatures(routes: MapCanvasRoute[]): FeatureCollection<Geometry> {
           casingColor: route.casingColor ?? '#ffffff',
           color: route.color,
           dashed: route.dashed === true,
+          kind: route.kind ?? 'route',
           routeId: route.id,
           selected: route.selected === true,
           sortKey: (route.selected === true ? 100 : 0) + (route.sortOrder ?? 0),
