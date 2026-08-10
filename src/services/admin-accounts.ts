@@ -16,9 +16,10 @@ export type AdminAccount = {
   updatedAt: string;
 };
 
-export type AdminAccountCredential = {
-  account: AdminAccount;
-  temporaryPassword: string;
+export type AdminAccountInvitation = {
+  displayName: string | null;
+  email: string;
+  expiresAt: string | null;
 };
 
 export async function loadAdminAccounts(): Promise<AdminAccount[]> {
@@ -29,14 +30,9 @@ export async function loadAdminAccounts(): Promise<AdminAccount[]> {
   return accounts.map(parseAdminAccount);
 }
 
-export async function createAdminAccount(input: { displayName: string; loginId: string }): Promise<AdminAccountCredential> {
-  const response = await requestLegacyJson<unknown>('admin-accounts', { method: 'POST', json: input });
-  return parseCredential(response);
-}
-
-export async function resetAdminAccountPassword(accountId: string): Promise<AdminAccountCredential> {
-  const response = await requestLegacyJson<unknown>(`admin-accounts/${encodeURIComponent(accountId)}/password-reset`, { method: 'POST' });
-  return parseCredential(response);
+export async function inviteAdminAccount(input: { displayName: string; email: string }): Promise<AdminAccountInvitation> {
+  const response = await requestLegacyJson<unknown>('admin-accounts/invitations', { method: 'POST', json: input });
+  return parseInvitation(objectField(response, 'invitation'));
 }
 
 export async function setAdminAccountStatus(accountId: string, status: AdminAccountStatus): Promise<AdminAccount> {
@@ -44,10 +40,13 @@ export async function setAdminAccountStatus(accountId: string, status: AdminAcco
   return parseAdminAccount(objectField(response, 'account'));
 }
 
-function parseCredential(value: unknown): AdminAccountCredential {
-  const temporaryPassword = objectField(value, 'temporaryPassword');
-  if (typeof temporaryPassword !== 'string' || temporaryPassword === '') throw new Error('임시 비밀번호 응답 형식이 올바르지 않습니다.');
-  return { account: parseAdminAccount(objectField(value, 'account')), temporaryPassword };
+function parseInvitation(value: unknown): AdminAccountInvitation {
+  if (!isObject(value)) throw new Error('운영 계정 초대 응답 형식이 올바르지 않습니다.');
+  return {
+    displayName: nullableString(value.displayName),
+    email: requiredString(value.email),
+    expiresAt: nullableString(value.expiresAt),
+  };
 }
 
 function parseAdminAccount(value: unknown): AdminAccount {

@@ -1,9 +1,11 @@
 import type { ReactElement } from 'react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import { LogOut } from 'lucide-react';
+import { LogOut, UserCog } from 'lucide-react';
 import { adminTabs } from '../app-routes';
 import type { AdminPath } from '../app-routes';
+import type { Principal } from '../services/auth';
 import { apiConfig } from '../api/config';
+import { AdminCredentialDialog } from './AdminCredentialDialog';
 import { NotificationIsland } from './NotificationIsland';
 import { ControlPage, ControlPreviewPanels } from '../pages/ControlPage';
 import { AdminContent } from '../pages/AdminContent';
@@ -54,6 +56,7 @@ export function AdminShell({
   activePath,
   onNavigate,
   onLogout,
+  onSessionUpdate,
   principalId = null,
   principalScopes = [],
   previewOnly = false,
@@ -61,12 +64,15 @@ export function AdminShell({
   activePath: AdminPath;
   onNavigate: (path: AdminPath) => void;
   onLogout: () => void;
+  onSessionUpdate?: (principal: Principal) => void;
   principalId?: string | null;
   principalScopes?: readonly string[];
   previewOnly?: boolean;
 }): ReactElement {
   const activeTab = adminTabs.find((tab) => tab.path === activePath) ?? adminTabs[0];
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const [credentialMessage, setCredentialMessage] = useState('');
   const [navigationExpanded, setNavigationExpanded] = useState(false);
   const [departureLocation, setDepartureLocation] = useState<DepartureLocation | null>(null);
   const [controlSettings, setControlSettings] = useState<AdminSettings | null>(null);
@@ -271,6 +277,10 @@ export function AdminShell({
             <span className="main-tab-copy"><strong>{tab.label}</strong><small aria-hidden="true">{tab.navDescription}</small></span>
           </a>
         ))}
+        <button className="sidebar-account" type="button" aria-label="계정 설정" onClick={() => setCredentialsOpen(true)}>
+          <UserCog aria-hidden="true" />
+          <span>계정 설정</span>
+        </button>
         <button className="sidebar-logout" type="button" aria-label="로그아웃" onClick={onLogout}>
           <LogOut aria-hidden="true" />
           <span>로그아웃</span>
@@ -290,6 +300,7 @@ export function AdminShell({
       </nav>
 
       <div className="top-cluster">
+        {credentialMessage ? <p className="admin-shell-status" role="status">{credentialMessage}</p> : null}
         {activePath === '/control' ? <NotificationIsland
           open={notificationOpen}
           onToggle={() => setNotificationOpen((open) => !open)}
@@ -360,6 +371,14 @@ export function AdminShell({
               ))
           : <AdminContent activePath={activePath} title={activeTab.title} description={activeTab.description} principalId={principalId} principalScopes={principalScopes} />}
       </section>
+      {credentialsOpen && !previewOnly ? <AdminCredentialDialog
+        onClose={() => setCredentialsOpen(false)}
+        onUpdated={(updatedPrincipal) => {
+          onSessionUpdate?.(updatedPrincipal);
+          setCredentialsOpen(false);
+          setCredentialMessage('계정 설정을 저장했습니다.');
+        }}
+      /> : null}
     </main>
   );
 }

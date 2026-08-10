@@ -6,6 +6,11 @@
   display: flex; align-items: flex-start; gap: 12px;
   transition: left .2s ease, opacity .18s ease;
 }
+.admin-shell-status {
+  margin:0; padding:10px 12px; border:1px solid var(--color-border); border-radius:12px;
+  background:var(--color-white); color:var(--color-success); box-shadow:0 8px 24px rgba(0,0,0,.08);
+  font-size:12px; font-weight:850; line-height:1.3;
+}
 .app-header { display:flex; align-items:center; gap:10px; min-height:52px; }
 .brand-home {
   width:158px; height:52px; display:flex; align-items:center; gap:10px; padding:5px 12px 5px 6px;
@@ -85,22 +90,30 @@ body.risk-banner-active .left-tabs { top: 152px; }
   transition-delay:0s;
 }
 .main-tab.active .main-tab-copy small { color:rgba(255,255,255,.86); }
+.sidebar-account,
 .sidebar-logout {
   width:60px; height:40px; min-height:40px; padding:0; border:1px solid var(--color-border); border-radius:14px;
   display:grid; grid-template-columns:60px minmax(0, 1fr); align-items:center; overflow:hidden;
   background:transparent; color:var(--color-muted); cursor:pointer; font:inherit; font-size:13px; font-weight:800; text-align:left;
   transition:width .2s ease;
 }
+.sidebar-account { margin-top:auto; }
+.sidebar-account svg,
 .sidebar-logout svg { width:18px; height:18px; justify-self:center; }
+.sidebar-account span,
 .sidebar-logout span {
   white-space:nowrap; opacity:0; visibility:hidden;
   clip-path:inset(0 100% 0 0); transform:translateX(-4px);
   transition:clip-path .2s ease, opacity .16s linear, transform .2s ease, visibility 0s linear .2s;
 }
+.nav-expanded .sidebar-account,
 .nav-expanded .sidebar-logout { width:180px; padding:0; }
+.nav-expanded .sidebar-account span,
 .nav-expanded .sidebar-logout span {
   opacity:1; visibility:visible; clip-path:inset(0); transform:translateX(0);
   transition-delay:0s;
 }
+.sidebar-account:hover,
 .sidebar-logout:hover { border-color:var(--color-black); color:var(--color-ink); }
+.sidebar-account:focus-visible,
 .sidebar-logout:focus-visible { outline:3px solid rgba(0,102,204,.28); outline-offset:2px; }
