@@ -1,8 +1,9 @@
 import type { FormEvent, ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { ArrowUpDown, X } from 'lucide-react';
 import { AdminSectionHeader } from './AdminUi';
 import {
+  deleteAdminAccount,
   inviteAdminAccount,
   loadAdminAccounts,
   setAdminAccountStatus,
@@ -10,11 +11,14 @@ import {
 import type { AdminAccount } from '../services/admin-accounts';
 
 type ViewState = 'error' | 'loading' | 'ready';
+type AuthoritySort = 'admin-first' | 'operator-first';
 
 export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: boolean; currentAccountId: string | null }): ReactElement {
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
+  const [authoritySort, setAuthoritySort] = useState<AuthoritySort>('admin-first');
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [error, setError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<AdminAccount | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [pendingAccountId, setPendingAccountId] = useState<string>();
@@ -64,6 +68,25 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
     }
   };
 
+  const deleteAccount = async (account: AdminAccount) => {
+    setError('');
+    setMessage('');
+    setPendingAccountId(account.id);
+    try {
+      await deleteAdminAccount(account.id);
+      setAccounts((current) => current.filter((entry) => entry.id !== account.id));
+      setDeleteTarget(null);
+      setMessage(`${account.loginId} 계정을 영구 삭제했습니다.`);
+    } catch (deleteError) {
+      setDeleteTarget(null);
+      setError(errorMessage(deleteError));
+    } finally {
+      setPendingAccountId(undefined);
+    }
+  };
+
+  const sortedAccounts = [...accounts].sort((left, right) => compareAuthority(left, right, authoritySort));
+
   return (
     <div className="settings-account-layout">
       <section className="page-panel settings-account-panel wide">
@@ -73,6 +96,7 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
         />
         <p className="settings-account-description">이 화면은 CLEVER 개발 관리자만 사용합니다. 새 계정은 DSV 관제 운영 계정으로 초대되며 개발 관리 권한은 부여되지 않습니다.</p>
         {inviteOpen ? <DsvAdminInviteDialog busy={pendingAccountId === 'invite'} onClose={() => setInviteOpen(false)} onSubmit={sendInvitation} /> : null}
+        {deleteTarget ? <AdminAccountDeleteDialog account={deleteTarget} busy={pendingAccountId === deleteTarget.id} onClose={() => setDeleteTarget(null)} onConfirm={deleteAccount} /> : null}
         {message ? <p className="settings-account-state success" role="status">{message}</p> : null}
         {error ? <p className="settings-account-error" role="alert">{error}</p> : null}
         {viewState === 'loading' ? <p className="settings-account-state" role="status">관리자 계정을 불러오는 중입니다.</p> : null}
@@ -80,9 +104,9 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
         {viewState === 'ready' ? (
           <div className="admin-table-frame overlay-scroll settings-account-table-wrap">
             <table className="page-table settings-account-table">
-              <thead><tr><th>계정</th><th>권한</th><th>상태</th><th>마지막 로그인</th><th aria-label="계정 작업" /></tr></thead>
+              <thead><tr><th>계정</th><th aria-sort={authoritySort === 'admin-first' ? 'ascending' : 'descending'}><button className="settings-account-sort" type="button" aria-label={`권한 정렬: ${authoritySort === 'admin-first' ? '개발 관리 먼저' : '관제 운영 먼저'}`} onClick={() => setAuthoritySort((current) => current === 'admin-first' ? 'operator-first' : 'admin-first')}>권한 <ArrowUpDown aria-hidden="true" /></button></th><th>상태</th><th>마지막 로그인</th><th aria-label="계정 작업" /></tr></thead>
               <tbody>
-                {accounts.map((account) => {
+                {sortedAccounts.map((account) => {
                   const isCurrent = account.id === currentAccountId;
                   const pending = pendingAccountId === account.id;
                   const authority = account.scopes.includes('dsv:accounts:write') ? '개발 관리' : '관제 운영';
@@ -95,6 +119,7 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
                       <td>
                         {canWrite ? <span className="settings-account-row-actions">
                           <button type="button" disabled={pending || (isCurrent && account.status === 'ACTIVE')} onClick={() => void toggleStatus(account)}>{account.status === 'ACTIVE' ? '비활성화' : '활성화'}</button>
+                          {account.status === 'DISABLED' && !isCurrent ? <button className="danger" type="button" disabled={pending} onClick={() => setDeleteTarget(account)}>삭제</button> : null}
                         </span> : null}
                       </td>
                     </tr>
@@ -117,6 +142,65 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
         <small>고객 계정 발급 기능은 인증 계약을 확정한 뒤 별도 작업으로 연결합니다.</small>
       </section>
     </div>
+  );
+}
+
+function AdminAccountDeleteDialog({
+  account,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  account: AdminAccount;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: (account: AdminAccount) => Promise<void>;
+}): ReactElement {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [confirmation, setConfirmation] = useState('');
+  const confirmed = confirmation === account.loginId;
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+    return () => {
+      if (dialog?.open) dialog.close();
+    };
+  }, []);
+
+  return (
+    <dialog
+      aria-describedby="admin-account-delete-description"
+      aria-labelledby="admin-account-delete-title"
+      className="driver-invite-dialog customer-account-invite-dialog admin-account-delete-dialog"
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!busy) onClose();
+      }}
+      ref={dialogRef}
+    >
+      <header className="driver-invite-header">
+        <span>
+          <strong id="admin-account-delete-title">계정 영구 삭제</strong>
+          <small>비활성 계정을 복구할 수 없는 방식으로 삭제합니다.</small>
+        </span>
+        <button aria-label="계정 영구 삭제 닫기" type="button" disabled={busy} onClick={onClose}><X aria-hidden="true" /></button>
+      </header>
+      <form className="customer-account-invite-form admin-account-delete-form" id="admin-account-delete-form" onSubmit={(event) => {
+        event.preventDefault();
+        if (confirmed) void onConfirm(account);
+      }}>
+        <p className="admin-account-delete-warning" id="admin-account-delete-description"><strong>{account.loginId}</strong> 계정과 현재 세션 접근을 영구적으로 제거합니다.</p>
+        <label className="customer-account-invite-message">삭제 확인
+          <span>계속하려면 <strong>{account.loginId}</strong>을(를) 입력하세요.</span>
+          <input autoComplete="off" disabled={busy} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
+        </label>
+      </form>
+      <footer className="driver-invite-footer">
+        <button type="button" disabled={busy} onClick={onClose}>취소</button>
+        <button className="danger" disabled={busy || !confirmed} form="admin-account-delete-form" type="submit">{busy ? '삭제 중' : '영구 삭제'}</button>
+      </footer>
+    </dialog>
   );
 }
 
@@ -197,11 +281,13 @@ function DsvAdminInviteDialog({
 }
 
 function replaceAccount(setAccounts: (value: (current: AdminAccount[]) => AdminAccount[]) => void, account: AdminAccount): void {
-  setAccounts((current) => current.map((entry) => entry.id === account.id ? account : entry).sort(accountOrder));
+  setAccounts((current) => current.map((entry) => entry.id === account.id ? account : entry));
 }
 
-function accountOrder(left: AdminAccount, right: AdminAccount): number {
-  if (left.status !== right.status) return left.status === 'ACTIVE' ? -1 : 1;
+function compareAuthority(left: AdminAccount, right: AdminAccount, sort: AuthoritySort): number {
+  const leftAdmin = left.scopes.includes('dsv:accounts:write');
+  const rightAdmin = right.scopes.includes('dsv:accounts:write');
+  if (leftAdmin !== rightAdmin) return (leftAdmin ? -1 : 1) * (sort === 'admin-first' ? 1 : -1);
   return left.loginId.localeCompare(right.loginId, 'ko');
 }
 

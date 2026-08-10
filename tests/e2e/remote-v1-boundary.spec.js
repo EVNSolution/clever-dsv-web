@@ -2027,6 +2027,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'GET admin-accounts',
     'POST admin-accounts/invitations',
     'PATCH admin-accounts/[^/]+/status',
+    'DELETE admin-accounts/[^/]+',
     'POST admin/auth/invitations/validate',
     'POST admin/auth/complete',
     'PATCH auth/credentials',

@@ -1756,6 +1756,79 @@ test('super admin manages persistent operation accounts from settings', async ({
   expectOnlyFixtureCalls(api);
 });
 
+test('admin account status and delete actions stay attached to the selected row', async ({ page }) => {
+  const targetAccount = {
+    createdAt: '2026-08-10T01:00:00.000Z',
+    displayName: 'DSV 관제 운영자',
+    failedLoginAttempts: 0,
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    lastAuthenticatedAt: '2026-08-10T01:30:00.000Z',
+    lockedUntil: null,
+    loginId: 'asd',
+    scopes: ['dsv:session:read'],
+    status: 'ACTIVE',
+    updatedAt: '2026-08-10T01:30:00.000Z',
+  };
+  const currentAccount = {
+    ...targetAccount,
+    displayName: 'CLEVER 개발 관리자',
+    id: adminSession.actorId,
+    loginId: 'dsv-admin',
+    scopes: ['dsv:session:read', 'dsv:accounts:read', 'dsv:accounts:write'],
+  };
+  let statusBody;
+  let deleteRequested = false;
+  const api = await installApiFixtures(page, adminFixtures({
+    'GET /api/dsv/v1/session': v1Envelope({
+      ...adminSession,
+      scopes: [...adminSession.scopes, 'dsv:accounts:read', 'dsv:accounts:write'],
+    }, 'g006-account-action-session'),
+    'GET /api/dsv/admin-accounts': legacyEnvelope({ accounts: [targetAccount, currentAccount] }),
+    [`PATCH /api/dsv/admin-accounts/${targetAccount.id}/status`]: ({ request }) => {
+      statusBody = request.postDataJSON();
+      return legacyEnvelope({ account: { ...targetAccount, status: 'DISABLED' } });
+    },
+    [`DELETE /api/dsv/admin-accounts/${targetAccount.id}`]: () => {
+      deleteRequested = true;
+      return legacyEnvelope({ deletedAccountId: targetAccount.id });
+    },
+  }));
+
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: '계정' }).click();
+  const table = page.getByRole('table');
+  const targetRow = table.getByRole('row').filter({ hasText: 'asd' });
+  const currentRow = table.getByRole('row').filter({ hasText: 'dsv-admin' });
+  await expect(table.locator('tbody tr').nth(0)).toContainText('dsv-admin');
+  await targetRow.getByRole('button', { name: '비활성화', exact: true }).click();
+
+  await expect(table.locator('tbody tr').nth(0)).toContainText('dsv-admin');
+  await expect(targetRow.getByText('비활성', { exact: true })).toBeVisible();
+  await expect(targetRow.getByRole('button', { name: '활성화', exact: true })).toBeVisible();
+  await expect(targetRow.getByRole('button', { name: '삭제', exact: true })).toBeVisible();
+  await expect(currentRow.getByRole('button', { name: '비활성화', exact: true })).toBeDisabled();
+  expect(statusBody).toEqual({ status: 'DISABLED' });
+
+  await table.getByRole('button', { name: '권한 정렬: 개발 관리 먼저' }).click();
+  await expect(table.locator('tbody tr').nth(0)).toContainText('asd');
+  await expect(table.getByRole('button', { name: '권한 정렬: 관제 운영 먼저' })).toBeVisible();
+
+  await targetRow.getByRole('button', { name: '삭제', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '계정 영구 삭제' });
+  await expect(dialog).toContainText('복구할 수 없는');
+  await expect(dialog).toContainText('asd');
+  await dialog.getByLabel('삭제 확인').fill('wrong');
+  await expect(dialog.getByRole('button', { name: '영구 삭제', exact: true })).toBeDisabled();
+  await dialog.getByLabel('삭제 확인').fill('asd');
+  await dialog.getByRole('button', { name: '영구 삭제', exact: true }).click();
+
+  await expect(targetRow).toHaveCount(0);
+  await expect(currentRow).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'asd 계정을 영구 삭제했습니다.' })).toBeVisible();
+  expect(deleteRequested).toBe(true);
+  expectOnlyFixtureCalls(api);
+});
+
 test('DSV admin setup validates invitation and stores returned session', async ({ page }) => {
   let validateBody;
   let completeBody;

@@ -40,6 +40,10 @@ export async function setAdminAccountStatus(accountId: string, status: AdminAcco
   return parseAdminAccount(objectField(response, 'account'));
 }
 
+export async function deleteAdminAccount(accountId: string): Promise<void> {
+  await requestLegacyJson(`admin-accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
+}
+
 function parseInvitation(value: unknown): AdminAccountInvitation {
   if (!isObject(value)) throw new Error('운영 계정 초대 응답 형식이 올바르지 않습니다.');
   return {
