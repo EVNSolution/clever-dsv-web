@@ -1033,7 +1033,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
         layerOrder: window.dsvMap.getStyle().layers
           .map((layer) => layer.id)
           .filter((id) => id.startsWith('operational-route-') || id.startsWith('operational-trail-')),
-        trailCasingWidth: window.dsvMap.getPaintProperty('operational-trail-casing', 'line-width'),
+        trailDasharray: window.dsvMap.getPaintProperty('operational-trail-lines', 'line-dasharray'),
         trailFilter: window.dsvMap.getFilter('operational-trail-lines'),
         trailLineWidth: window.dsvMap.getPaintProperty('operational-trail-lines', 'line-width'),
         routeFilter: window.dsvMap.getFilter('operational-route-lines'),
@@ -1074,13 +1074,12 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
       layerOrder: [
         'operational-route-casing',
         'operational-route-lines',
-        'operational-trail-casing',
         'operational-trail-lines',
         'operational-route-trail-points',
       ],
       lineOpacity: ['case', ['get', 'selected'], 0.96, 1],
       lineWidth: ['case', ['get', 'selected'], 2.6, 1.8],
-      trailCasingWidth: ['interpolate', ['linear'], ['zoom'], 4, 9, 10, 8, 16, 7],
+      trailDasharray: ['literal', [1, 1]],
       trailFilter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'trail']],
       trailLineWidth: ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 4.5, 16, 4],
       routeFilter: ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'kind'], 'trail']],
