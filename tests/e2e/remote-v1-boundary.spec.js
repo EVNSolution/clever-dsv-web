@@ -497,14 +497,30 @@ test('renders selected control progress without letting a future destination cli
         restart: null,
         routePlanId,
         segments: [
-          { samples: [
+          {
+            roadMatchedGeometry: { type: 'MultiLineString', coordinates: [[[127, 37.5], [127.005, 37.501]]] },
+            samples: [
             { distanceTodayKm: 1, ignitionOn: true, latitude: 37.5, longitude: 127, observedAt: '2026-08-05T00:00:00.000Z', speedKph: 20 },
             { distanceTodayKm: 2, ignitionOn: true, latitude: 37.501, longitude: 127.005, observedAt: '2026-08-05T00:01:00.000Z', speedKph: 22 },
-          ] },
-          { samples: [
+            ],
+            trailMarker: { kind: 'START', latitude: 37.5, longitude: 127, observedAt: '2026-08-05T00:00:00.000Z' },
+          },
+          {
+            roadMatchedGeometry: { type: 'MultiLineString', coordinates: [[[127.015, 37.502], [127.025, 37.5]]] },
+            samples: [
             { distanceTodayKm: 3, ignitionOn: true, latitude: 37.502, longitude: 127.015, observedAt: '2026-08-05T00:06:00.000Z', speedKph: 24 },
             { distanceTodayKm: 4, ignitionOn: true, latitude: 37.5, longitude: 127.025, observedAt: '2026-08-05T00:07:00.000Z', speedKph: 18 },
-          ] },
+            ],
+            trailMarker: { kind: 'RESTART', latitude: 37.502, longitude: 127.015, observedAt: '2026-08-05T00:06:00.000Z' },
+          },
+          {
+            roadMatchedGeometry: null,
+            samples: [
+              { distanceTodayKm: 5, ignitionOn: true, latitude: 37.7, longitude: 127.7, observedAt: '2026-08-05T00:12:00.000Z', speedKph: 30 },
+              { distanceTodayKm: 6, ignitionOn: true, latitude: 37.8, longitude: 127.8, observedAt: '2026-08-05T00:13:00.000Z', speedKph: 32 },
+            ],
+            trailMarker: { kind: 'RESTART', latitude: 37.7, longitude: 127.7, observedAt: '2026-08-05T00:12:00.000Z' },
+          },
         ],
         sessionIndex: 0,
         startedAt: '2026-08-05T00:00:00.000Z',
@@ -817,10 +833,14 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
         endpoint: { endedAt: '2026-07-23T00:06:00.000Z', reason: 'LAST_VALID_SAMPLE' },
         restart: null,
         routePlanId: 'unassigned:vehicle-g006-unscheduled:2026-07-23',
-        segments: [{ samples: [
-          { distanceTodayKm: 1, ignitionOn: true, latitude: 37.6, longitude: 127.1, observedAt: '2026-07-23T00:05:00.000Z', speedKph: 18 },
-          { distanceTodayKm: 1.3, ignitionOn: true, latitude: 37.61, longitude: 127.12, observedAt: '2026-07-23T00:06:00.000Z', speedKph: 16 },
-        ] }],
+        segments: [{
+          roadMatchedGeometry: { type: 'MultiLineString', coordinates: [[[127.1, 37.6], [127.12, 37.61]]] },
+          samples: [
+            { distanceTodayKm: 1, ignitionOn: true, latitude: 37.6, longitude: 127.1, observedAt: '2026-07-23T00:05:00.000Z', speedKph: 18 },
+            { distanceTodayKm: 1.3, ignitionOn: true, latitude: 37.61, longitude: 127.12, observedAt: '2026-07-23T00:06:00.000Z', speedKph: 16 },
+          ],
+          trailMarker: { kind: 'START', latitude: 37.6, longitude: 127.1, observedAt: '2026-07-23T00:05:00.000Z' },
+        }],
         sessionIndex: 0,
         startedAt: '2026-07-22T23:30:00.000Z',
         startEventId: null,

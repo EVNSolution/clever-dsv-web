@@ -518,18 +518,33 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory): MapCanvasRou
     const timeOrder = Date.parse(left.startedAt) - Date.parse(right.startedAt);
     return timeOrder === 0 ? left.sessionIndex - right.sessionIndex : timeOrder;
   });
-  return sessions.flatMap((session, sessionOrder) => session.segments.map((segment, segmentOrder) => ({
-    casingColor: '#ffffff',
+  const matchedLines = sessions.flatMap((session, sessionOrder) => session.segments.flatMap((segment, segmentOrder) => (
+    segment.roadMatchedGeometry?.coordinates.map((coordinates, lineOrder) => ({
+      coordinates,
+      lineOrder,
+      marker: lineOrder === 0 ? segment.trailMarker : null,
+      routePlanId: session.routePlanId,
+      segmentOrder,
+      sessionIndex: session.sessionIndex,
+      sessionOrder,
+    })) ?? []
+  )));
+  return matchedLines.map((line, index) => ({
     color: '#d92d20',
-    coordinates: segment.samples.map((sample) => [sample.longitude, sample.latitude] as [number, number]),
+    coordinates: line.coordinates,
     dashed: true,
-    endMarker: segmentOrder < session.segments.length - 1 || sessionOrder < sessions.length - 1 ? 'interrupted' as const : 'end' as const,
-    id: `vehicle-trail:${session.routePlanId}:${session.sessionIndex}:${segmentOrder}`,
+    endMarker: index < matchedLines.length - 1 ? 'interrupted' as const : 'end' as const,
+    id: `vehicle-trail:${line.routePlanId}:${line.sessionIndex}:${line.segmentOrder}:${line.lineOrder}`,
     kind: 'trail' as const,
     selected: true,
-    sortOrder: 200 + sessionOrder * 10 + segmentOrder,
-    startMarker: sessionOrder === 0 && segmentOrder === 0 ? 'start' as const : 'restart' as const,
-  })));
+    sortOrder: 200 + line.sessionOrder * 100 + line.segmentOrder * 10 + line.lineOrder,
+    ...(line.marker === null || line.marker === undefined
+      ? {}
+      : {
+          startMarker: line.marker.kind === 'START' ? 'start' as const : 'restart' as const,
+          startMarkerCoordinate: [line.marker.longitude, line.marker.latitude] as [number, number],
+        }),
+  }));
 }
 
 function isTodayInSeoul(serviceDate?: string): boolean {

@@ -30,6 +30,18 @@ export type VehicleGpsTrailSample = {
   speedKph: number | null;
 };
 
+export type VehicleGpsTrailRoadMatchedGeometry = {
+  coordinates: Array<Array<[longitude: number, latitude: number]>>;
+  type: 'MultiLineString';
+};
+
+export type VehicleGpsTrailMarker = {
+  kind: 'RESTART' | 'START';
+  latitude: number;
+  longitude: number;
+  observedAt: string;
+};
+
 export type VehicleGpsTrailHistory = {
   serviceDate: string;
   sessions: Array<{
@@ -41,7 +53,11 @@ export type VehicleGpsTrailHistory = {
     };
     restart: { restartedAt: string; restartEventId: string | null } | null;
     routePlanId: string;
-    segments: Array<{ samples: VehicleGpsTrailSample[] }>;
+    segments: Array<{
+      roadMatchedGeometry?: VehicleGpsTrailRoadMatchedGeometry | null;
+      samples: VehicleGpsTrailSample[];
+      trailMarker?: VehicleGpsTrailMarker | null;
+    }>;
     sessionIndex: number;
     startedAt: string;
     startEventId: string | null;
@@ -180,10 +196,23 @@ function adaptVehicleGpsTrailHistory(data: unknown): VehicleGpsTrailHistory {
       restart: session.restart,
       routePlanId: session.routePlanId,
       segments: session.segments.map((segment) => {
-        if (!isObject(segment) || !hasExactKeys(segment, ['samples']) || !Array.isArray(segment.samples)) {
+        if (
+          !isObject(segment)
+          || !hasOnlyKeys(segment, ['samples', 'roadMatchedGeometry', 'trailMarker'])
+          || !Object.hasOwn(segment, 'samples')
+          || !Array.isArray(segment.samples)
+        ) {
           throw invalidVehicleGpsTrailHistory(data);
         }
-        return { samples: segment.samples.map((sample) => adaptVehicleGpsTrailSample(sample, data)) };
+        return {
+          samples: segment.samples.map((sample) => adaptVehicleGpsTrailSample(sample, data)),
+          ...(segment.roadMatchedGeometry === undefined
+            ? {}
+            : { roadMatchedGeometry: adaptVehicleGpsTrailRoadMatchedGeometry(segment.roadMatchedGeometry, data) }),
+          ...(segment.trailMarker === undefined
+            ? {}
+            : { trailMarker: adaptVehicleGpsTrailMarker(segment.trailMarker, data) }),
+        };
       }),
       sessionIndex: session.sessionIndex,
       startedAt: session.startedAt,
@@ -192,6 +221,44 @@ function adaptVehicleGpsTrailHistory(data: unknown): VehicleGpsTrailHistory {
     };
   });
   return { serviceDate: data.serviceDate, sessions, timezone: data.timezone, vehicleId: data.vehicleId };
+}
+
+function adaptVehicleGpsTrailRoadMatchedGeometry(
+  value: unknown,
+  body: unknown,
+): VehicleGpsTrailRoadMatchedGeometry | null {
+  if (value === null) return null;
+  if (!isObject(value) || !hasExactKeys(value, ['coordinates', 'type']) || value.type !== 'MultiLineString' || !Array.isArray(value.coordinates)) {
+    throw invalidVehicleGpsTrailHistory(body);
+  }
+  const coordinates = value.coordinates.map((line) => {
+    if (!Array.isArray(line) || line.length < 2) throw invalidVehicleGpsTrailHistory(body);
+    return line.map((coordinate) => {
+      if (!Array.isArray(coordinate) || coordinate.length !== 2 || !isFiniteNumber(coordinate[0]) || !isFiniteNumber(coordinate[1])) {
+        throw invalidVehicleGpsTrailHistory(body);
+      }
+      return [coordinate[0], coordinate[1]] as [number, number];
+    });
+  });
+  return { coordinates, type: 'MultiLineString' };
+}
+
+function adaptVehicleGpsTrailMarker(value: unknown, body: unknown): VehicleGpsTrailMarker | null {
+  if (value === null) return null;
+  if (
+    !isObject(value)
+    || !hasExactKeys(value, ['kind', 'latitude', 'longitude', 'observedAt'])
+    || (value.kind !== 'START' && value.kind !== 'RESTART')
+    || !isFiniteNumber(value.latitude)
+    || !isFiniteNumber(value.longitude)
+    || !isDateTime(value.observedAt)
+  ) throw invalidVehicleGpsTrailHistory(body);
+  return {
+    kind: value.kind,
+    latitude: value.latitude,
+    longitude: value.longitude,
+    observedAt: value.observedAt,
+  };
 }
 
 function adaptVehicleGpsTrailSample(sample: unknown, body: unknown): VehicleGpsTrailSample {

@@ -65,6 +65,7 @@ export type MapCanvasRoute = {
   selected?: boolean;
   sortOrder?: number;
   startMarker?: 'restart' | 'start';
+  startMarkerCoordinate?: MapCanvasCoordinate;
 };
 
 export type MapCanvasVehiclePoint = {

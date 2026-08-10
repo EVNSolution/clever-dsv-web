@@ -77,9 +77,21 @@ export function updateOperationalRoutes(
       source: sourceId,
       filter: ['==', '$type', 'Point'],
       paint: {
-        'circle-color': ['case', ['==', ['get', 'markerKind'], 'interrupted'], '#ffffff', '#d92d20'],
+        'circle-color': [
+          'case',
+          ['==', ['get', 'markerKind'], 'start'], '#111827',
+          ['==', ['get', 'markerKind'], 'restart'], '#f59e0b',
+          ['==', ['get', 'markerKind'], 'interrupted'], '#fff7ed',
+          '#d92d20',
+        ],
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 4.5, 16, 4],
-        'circle-stroke-color': '#d92d20',
+        'circle-stroke-color': [
+          'case',
+          ['==', ['get', 'markerKind'], 'start'], '#111827',
+          ['==', ['get', 'markerKind'], 'restart'], '#f59e0b',
+          ['==', ['get', 'markerKind'], 'interrupted'], '#f59e0b',
+          '#d92d20',
+        ],
         'circle-stroke-width': 2,
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
@@ -108,7 +120,7 @@ function routeFeatures(routes: MapCanvasRoute[]): FeatureCollection<Geometry> {
           coordinates: route.coordinates,
         },
       });
-      const start = route.coordinates[0];
+      const start = route.startMarkerCoordinate ?? route.coordinates[0];
       if (start !== undefined && route.startMarker !== undefined) features.push(pointFeature(route.id, start, route.startMarker));
       const end = route.coordinates.at(-1);
       if (end !== undefined && route.endMarker !== undefined) features.push(pointFeature(route.id, end, route.endMarker));
