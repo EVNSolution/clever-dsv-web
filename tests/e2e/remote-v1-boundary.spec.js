@@ -581,7 +581,11 @@ test('renders selected control progress without letting a future destination cli
       })),
       trailMarkers: routes.serialize().data.features
         .filter((feature) => feature.geometry.type === 'Point')
-        .map((feature) => feature.properties.markerKind),
+        .map((feature) => ({
+          interruptedAt: feature.properties.interruptedAt ?? null,
+          markerKind: feature.properties.markerKind,
+          resolvedAt: feature.properties.resolvedAt ?? null,
+        })),
       trails: routes.serialize().data.features
         .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.kind === 'trail')
         .map((feature) => feature.geometry.coordinates),
@@ -593,12 +597,47 @@ test('renders selected control progress without letting a future destination cli
       { casingColor: '#ffffff', color: '#1f8b4c' },
       { casingColor: '#ffffff', color: '#0066cc' },
     ],
-    trailMarkers: ['start', 'interrupted', 'restart', 'end'],
+    trailMarkers: [
+      { interruptedAt: null, markerKind: 'interrupted', resolvedAt: null },
+      { interruptedAt: null, markerKind: 'end', resolvedAt: null },
+      { interruptedAt: null, markerKind: 'start', resolvedAt: null },
+      { interruptedAt: '2026-08-05T00:01:00.000Z', markerKind: 'restart', resolvedAt: '2026-08-05T00:06:00.000Z' },
+      { interruptedAt: '2026-08-05T00:07:00.000Z', markerKind: 'restart', resolvedAt: '2026-08-05T00:12:00.000Z' },
+    ],
     trails: [
       [[127, 37.5], [127.005, 37.501]],
       [[127.015, 37.502], [127.025, 37.5]],
     ],
   });
+
+  await page.evaluate(() => {
+    const map = window.dsvMap;
+    map.jumpTo({ center: [127.015, 37.502], zoom: 15 });
+  });
+  await expect.poll(() => page.evaluate(() => {
+    const map = window.dsvMap;
+    return map.queryRenderedFeatures(map.project([127.015, 37.502]), { layers: ['operational-route-trail-points'] })
+      .map((feature) => feature.properties.markerKind);
+  })).toContain('restart');
+  const fireMapEvent = (type, coordinate) => page.evaluate(({ eventType, lngLat }) => {
+    const map = window.dsvMap;
+    const point = map.project(lngLat);
+    map.fire(eventType, {
+      lngLat: map.unproject(point),
+      originalEvent: new MouseEvent(eventType),
+      point,
+    });
+  }, { eventType: type, lngLat: coordinate });
+  await fireMapEvent('mousemove', [127.015, 37.502]);
+  const interruptionPopup = page.locator('.control-trail-interruption-popup');
+  await expect(interruptionPopup).toBeVisible();
+  await expect(interruptionPopup.locator('dt')).toHaveText(['끊김 발생', '해소까지']);
+  await expect(interruptionPopup.locator('dd')).toHaveText(['09:01', '5분']);
+  await fireMapEvent('click', [127.015, 37.502]);
+  await fireMapEvent('mousemove', [127.02, 37.51]);
+  await expect(interruptionPopup).toBeVisible();
+  await fireMapEvent('click', [127.02, 37.51]);
+  await expect(interruptionPopup).toHaveCount(0);
 
   await rows.nth(3).click();
   await expect(rows.nth(3)).toHaveClass(/selected/u);

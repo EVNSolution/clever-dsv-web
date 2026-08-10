@@ -518,6 +518,13 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory): MapCanvasRou
     const timeOrder = Date.parse(left.startedAt) - Date.parse(right.startedAt);
     return timeOrder === 0 ? left.sessionIndex - right.sessionIndex : timeOrder;
   });
+  const orderedSegments = sessions.flatMap((session, sessionOrder) => session.segments.map((segment, segmentOrder) => ({
+    routePlanId: session.routePlanId,
+    segment,
+    segmentOrder,
+    sessionIndex: session.sessionIndex,
+    sessionOrder,
+  })));
   const matchedLines = sessions.flatMap((session, sessionOrder) => session.segments.flatMap((segment, segmentOrder) => (
     segment.roadMatchedGeometry?.coordinates.map((coordinates, lineOrder) => ({
       coordinates,
@@ -538,20 +545,30 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory): MapCanvasRou
     selected: true,
     sortOrder: 200 + line.sessionOrder * 100 + line.segmentOrder * 10 + line.lineOrder,
   }));
-  const markerRoutes = sessions.flatMap((session, sessionOrder) => session.segments.flatMap((segment, segmentOrder) => {
+  const markerRoutes = orderedSegments.flatMap((entry, index) => {
+    const { routePlanId, segment, segmentOrder, sessionIndex, sessionOrder } = entry;
     if (segment.trailMarker === null || segment.trailMarker === undefined) return [];
     const coordinate: [number, number] = [segment.trailMarker.longitude, segment.trailMarker.latitude];
+    const previousSample = orderedSegments[index - 1]?.segment.samples.at(-1);
+    const interruptedAt = previousSample?.observedAt;
+    const resolvedAt = segment.trailMarker.observedAt;
+    const hasValidInterruption = segment.trailMarker.kind === 'RESTART'
+      && interruptedAt !== undefined
+      && Number.isFinite(Date.parse(interruptedAt))
+      && Number.isFinite(Date.parse(resolvedAt))
+      && Date.parse(resolvedAt) > Date.parse(interruptedAt);
     return [{
       color: '#d92d20',
       coordinates: [coordinate],
-      id: `vehicle-trail-marker:${session.routePlanId}:${session.sessionIndex}:${segmentOrder}`,
+      id: `vehicle-trail-marker:${routePlanId}:${sessionIndex}:${segmentOrder}`,
       kind: 'trail' as const,
       selected: true,
       sortOrder: 10_000 + sessionOrder * 100 + segmentOrder,
       startMarker: segment.trailMarker.kind === 'START' ? 'start' as const : 'restart' as const,
       startMarkerCoordinate: coordinate,
+      ...(hasValidInterruption ? { trailInterruption: { interruptedAt, resolvedAt } } : {}),
     }];
-  }));
+  });
   return [...matchedRoutes, ...markerRoutes];
 }
 

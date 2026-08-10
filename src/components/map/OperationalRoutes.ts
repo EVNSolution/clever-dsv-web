@@ -13,6 +13,12 @@ const destinationMarkerLayerId = 'operational-destination-markers';
 const routeFilter: FilterSpecification = ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'kind'], 'trail']];
 const trailFilter: FilterSpecification = ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'trail']];
 const trailLineWidth: DataDrivenPropertyValueSpecification<number> = ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 4.5, 16, 4];
+const seoulTimeFormatter = new Intl.DateTimeFormat('ko-KR', {
+  hour: '2-digit',
+  hour12: false,
+  minute: '2-digit',
+  timeZone: 'Asia/Seoul',
+});
 
 export function updateOperationalRoutes(
   map: maplibregl.Map,
@@ -95,6 +101,7 @@ export function updateOperationalRoutes(
         'circle-stroke-width': 2,
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
+    bindTrailInterruptionPopup(map);
   }
   (map.getSource(sourceId) as maplibregl.GeoJSONSource).setData(routeFeatures(routes));
 }
@@ -121,7 +128,9 @@ function routeFeatures(routes: MapCanvasRoute[]): FeatureCollection<Geometry> {
         },
       });
       const start = route.startMarkerCoordinate ?? route.coordinates[0];
-      if (start !== undefined && route.startMarker !== undefined) features.push(pointFeature(route.id, start, route.startMarker));
+      if (start !== undefined && route.startMarker !== undefined) {
+        features.push(pointFeature(route.id, start, route.startMarker, route.trailInterruption));
+      }
       const end = route.coordinates.at(-1);
       if (end !== undefined && route.endMarker !== undefined) features.push(pointFeature(route.id, end, route.endMarker));
       return features;
@@ -133,10 +142,93 @@ function pointFeature(
   routeId: string,
   coordinates: [number, number],
   markerKind: NonNullable<MapCanvasRoute['endMarker'] | MapCanvasRoute['startMarker']>,
+  trailInterruption?: MapCanvasRoute['trailInterruption'],
 ): Feature<Point> {
   return {
     type: 'Feature',
-    properties: { markerKind, routeId },
+    properties: {
+      markerKind,
+      routeId,
+      ...(trailInterruption === undefined ? {} : trailInterruption),
+    },
     geometry: { type: 'Point', coordinates },
   };
+}
+
+function bindTrailInterruptionPopup(map: maplibregl.Map): void {
+  const popup = new maplibregl.Popup({
+    className: 'control-trail-interruption-popup',
+    closeButton: false,
+    closeOnClick: false,
+    offset: 10,
+  });
+  let pinnedRouteId: string | null = null;
+
+  const readInterruption = (feature: maplibregl.MapGeoJSONFeature | undefined) => {
+    if (feature?.geometry.type !== 'Point' || feature.properties.markerKind !== 'restart') return null;
+    const interruptedAt = feature.properties.interruptedAt;
+    const resolvedAt = feature.properties.resolvedAt;
+    const routeId = feature.properties.routeId;
+    if (typeof interruptedAt !== 'string' || typeof resolvedAt !== 'string' || typeof routeId !== 'string') return null;
+    const interruptedMs = Date.parse(interruptedAt);
+    const resolvedMs = Date.parse(resolvedAt);
+    if (!Number.isFinite(interruptedMs) || !Number.isFinite(resolvedMs) || resolvedMs <= interruptedMs) return null;
+    return {
+      coordinates: feature.geometry.coordinates as [number, number],
+      interruptedAt,
+      interruptedMs,
+      resolvedMs,
+      routeId,
+    };
+  };
+
+  const showPopup = (interruption: NonNullable<ReturnType<typeof readInterruption>>) => {
+    const content = document.createElement('dl');
+    content.className = 'control-trail-interruption-popup__content';
+    content.append(
+      popupRow('끊김 발생', seoulTimeFormatter.format(new Date(interruption.interruptedAt))),
+      popupRow('해소까지', formatInterruptionDuration(interruption.resolvedMs - interruption.interruptedMs)),
+    );
+    popup.setLngLat(interruption.coordinates).setDOMContent(content).addTo(map);
+  };
+
+  map.on('mouseenter', trailPointLayerId, (event) => {
+    const interruption = readInterruption(event.features?.[0]);
+    map.getCanvas().style.cursor = interruption === null ? '' : 'pointer';
+    if (interruption !== null && pinnedRouteId === null) showPopup(interruption);
+  });
+  map.on('mouseleave', trailPointLayerId, () => {
+    map.getCanvas().style.cursor = '';
+    if (pinnedRouteId === null) popup.remove();
+  });
+  map.on('click', trailPointLayerId, (event) => {
+    const interruption = readInterruption(event.features?.[0]);
+    if (interruption === null) return;
+    pinnedRouteId = interruption.routeId;
+    showPopup(interruption);
+  });
+  map.on('click', (event) => {
+    const interruption = readInterruption(map.queryRenderedFeatures(event.point, { layers: [trailPointLayerId] })[0]);
+    if (interruption !== null) return;
+    pinnedRouteId = null;
+    popup.remove();
+  });
+}
+
+function popupRow(label: string, value: string): HTMLDivElement {
+  const row = document.createElement('div');
+  const term = document.createElement('dt');
+  const description = document.createElement('dd');
+  term.textContent = label;
+  description.textContent = value;
+  row.append(term, description);
+  return row;
+}
+
+function formatInterruptionDuration(durationMs: number): string {
+  const minutes = Math.max(1, Math.ceil(durationMs / 60_000));
+  if (minutes < 60) return `${minutes}분`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes === 0 ? `${hours}시간` : `${hours}시간 ${remainingMinutes}분`;
 }

@@ -66,6 +66,10 @@ export type MapCanvasRoute = {
   sortOrder?: number;
   startMarker?: 'restart' | 'start';
   startMarkerCoordinate?: MapCanvasCoordinate;
+  trailInterruption?: {
+    interruptedAt: string;
+    resolvedAt: string;
+  };
 };
 
 export type MapCanvasVehiclePoint = {
