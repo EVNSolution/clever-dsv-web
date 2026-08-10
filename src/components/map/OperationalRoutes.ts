@@ -68,7 +68,7 @@ export function updateOperationalRoutes(
         'line-color': ['get', 'color'],
         'line-opacity': 1,
         'line-width': trailLineWidth,
-        'line-dasharray': ['literal', [1, 1]],
+        'line-dasharray': ['literal', [1, 1.75]],
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
     map.addLayer({

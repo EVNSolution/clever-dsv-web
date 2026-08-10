@@ -811,7 +811,21 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
     }),
     'GET /api/dsv/v1/vehicles/vehicle-g006-unscheduled/gps-trail-history': v1Envelope({
       serviceDate: currentSummary.serviceDate,
-      sessions: [],
+      sessions: [{
+        completedAt: null,
+        completionEventId: null,
+        endpoint: { endedAt: '2026-07-23T00:06:00.000Z', reason: 'LAST_VALID_SAMPLE' },
+        restart: null,
+        routePlanId: 'unassigned:vehicle-g006-unscheduled:2026-07-23',
+        segments: [{ samples: [
+          { distanceTodayKm: 1, ignitionOn: true, latitude: 37.6, longitude: 127.1, observedAt: '2026-07-23T00:05:00.000Z', speedKph: 18 },
+          { distanceTodayKm: 1.3, ignitionOn: true, latitude: 37.61, longitude: 127.12, observedAt: '2026-07-23T00:06:00.000Z', speedKph: 16 },
+        ] }],
+        sessionIndex: 0,
+        startedAt: '2026-07-22T23:30:00.000Z',
+        startEventId: null,
+        startSource: 'PLANNED_DEPARTURE',
+      }],
       timezone: 'Asia/Seoul',
       vehicleId: 'vehicle-g006-unscheduled',
     }),
@@ -1079,7 +1093,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
       ],
       lineOpacity: ['case', ['get', 'selected'], 0.96, 1],
       lineWidth: ['case', ['get', 'selected'], 2.6, 1.8],
-      trailDasharray: ['literal', [1, 1]],
+      trailDasharray: ['literal', [1, 1.75]],
       trailFilter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'trail']],
       trailLineWidth: ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 4.5, 16, 4],
       routeFilter: ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'kind'], 'trail']],
@@ -1101,6 +1115,12 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await noOrderVehicle.click();
   await expect(noOrderVehicle).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('region', { name: '배송지 리스트', exact: true })).toContainText('선택한 차량에 배정된 배송지가 없습니다.');
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/vehicles/vehicle-g006-unscheduled/gps-trail-history');
+  await expect.poll(() => page.evaluate(() => (
+    window.dsvMap.getSource('operational-routes').serialize().data.features
+      .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.kind === 'trail')
+      .map((feature) => feature.geometry.coordinates)
+  ))).toEqual([[[127.1, 37.6], [127.12, 37.61]]]);
   await scheduledFleet.locator('.control-vehicle-visibility label', { hasText: '배정' }).click();
   await expect(page.getByRole('region', { name: '배송지 리스트', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('고객사별 주문 리스트')).toBeVisible();
