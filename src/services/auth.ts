@@ -81,7 +81,7 @@ export async function updateCredentials(input: CredentialChangeInput): Promise<P
   const response = await requestJson<unknown>('auth/credentials', { method: 'PATCH', json: input });
   const session = sessionDtoFrom(response);
   storeTransportSession(session);
-  return principalFromSession(session);
+  return restoreSession();
 }
 
 export async function logout(): Promise<void> {
