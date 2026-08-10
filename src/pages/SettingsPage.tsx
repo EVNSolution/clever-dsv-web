@@ -159,7 +159,12 @@ export function SettingsPage({ description, principalId, principalScopes, title 
         {canReadAccounts ? <button className={activeView === 'accounts' ? 'active' : ''} type="button" role="tab" aria-selected={activeView === 'accounts'} onClick={() => setActiveView('accounts')}>계정</button> : null}
       </div>
       {activeView === 'accounts' && canReadAccounts
-        ? <AdminAccountsPanel canWrite={canWriteAccounts} currentAccountId={principalId} />
+        ? <AdminAccountsPanel
+          canWrite={canWriteAccounts}
+          currentAccountId={principalId}
+          inviteSenderEmail={settings.manualEmailSenderEmail}
+          inviteSubject={settings.manualEmailSubject}
+        />
         : null}
       {activeView === 'operations' && loadState === 'ready' ? <div className="page-grid">
         <section className="page-panel settings-location-panel wide">

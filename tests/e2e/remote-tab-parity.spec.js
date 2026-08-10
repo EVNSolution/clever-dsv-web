@@ -1721,6 +1721,7 @@ test('super admin manages persistent operation accounts from settings', async ({
       ...adminSession,
       scopes: [...adminSession.scopes, 'dsv:accounts:read', 'dsv:accounts:write'],
     }, 'g006-account-session'),
+    'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings({ manualEmailSenderEmail: 'noreply@example.com' })),
     'GET /api/dsv/admin-accounts': legacyEnvelope({ accounts: [existingAccount] }),
     'POST /api/dsv/admin-accounts/invitations': ({ request }) => {
       inviteBody = request.postDataJSON();
@@ -1739,11 +1740,34 @@ test('super admin manages persistent operation accounts from settings', async ({
   await dialog.getByLabel('수신자 이메일').fill('operator@example.com');
   await dialog.getByLabel('표시 이름').fill('DSV 관제 운영자');
   await dialog.getByLabel('안내 문장').fill('DSV 관제팀 계정 설정을 안내드립니다.');
-  await expect(dialog.getByLabel('DSV 관제 운영 계정 초대 미리보기')).toContainText('48시간 동안 한 번만 사용할 수 있습니다.');
-  await expect(dialog.getByLabel('DSV 관제 운영 계정 초대 미리보기')).toContainText('DSV 관제팀 계정 설정을 안내드립니다.');
-  await expect(dialog.getByLabel('DSV 관제 운영 계정 초대 미리보기')).toContainText('CLEVER 고객사 DSV의 관제 운영 계정');
-  await expect(dialog.getByLabel('DSV 관제 운영 계정 초대 미리보기')).toContainText('수신자가 설정 화면에서 직접 만듭니다.');
+  const form = dialog.getByLabel('DSV 관제 운영 계정 초대', { exact: true });
+  const preview = dialog.getByLabel('DSV 관제 운영 계정 초대 미리보기');
+  await expect(preview).toContainText('noreply@example.com');
+  await expect(preview).toContainText('[CLEVER DSV] 운영자 계정 초대');
+  await expect(preview.getByLabel('초대 이메일 본문')).toHaveText([
+    '안녕하세요 DSV 관제 운영자님.',
+    'DSV 관제팀 계정 설정을 안내드립니다.',
+    '48시간 안에 아래 일회용 링크로 접속해 로그인 ID와 비밀번호를 설정해 주세요.',
+    'https://dsv.cleversystem.ai/admin/account/setup#token=EXAMPLE-ONE-TIME-LINK',
+    '초대 링크는 한 번만 사용할 수 있습니다.',
+    '설정 후에는 아래 주소에서 계속 로그인할 수 있습니다.',
+    'https://dsv.cleversystem.ai/login',
+  ].join('\n\n').replace('초대 링크는 한 번만 사용할 수 있습니다.\n\n설정 후에는', '초대 링크는 한 번만 사용할 수 있습니다.\n설정 후에는'));
+  await expect(preview).toContainText('실제 이메일에는 수신자 전용 일회성 링크가 포함됩니다.');
   await expect(dialog).not.toContainText('운영사 배송조회');
+  const [emailBox, nameBox, messageBox, formBox, previewBox, dialogBox] = await Promise.all([
+    dialog.getByLabel('수신자 이메일').boundingBox(),
+    dialog.getByLabel('표시 이름').boundingBox(),
+    dialog.getByLabel('안내 문장').boundingBox(),
+    form.boundingBox(),
+    preview.boundingBox(),
+    dialog.boundingBox(),
+  ]);
+  expect(emailBox && nameBox && messageBox && formBox && previewBox && dialogBox).toBeTruthy();
+  expect(dialogBox.width).toBeGreaterThanOrEqual(1000);
+  expect(nameBox.y).toBeGreaterThan(emailBox.y + emailBox.height);
+  expect(messageBox.y).toBeGreaterThan(nameBox.y + nameBox.height);
+  expect(previewBox.x).toBeGreaterThanOrEqual(formBox.x + formBox.width);
   await dialog.getByRole('button', { name: '초대 이메일 보내기', exact: true }).click();
 
   await expect(page.getByRole('status').filter({ hasText: 'DSV 관제 운영 계정 초대 이메일 발송을 요청했습니다.' })).toBeVisible();

@@ -13,7 +13,17 @@ import type { AdminAccount } from '../services/admin-accounts';
 type ViewState = 'error' | 'loading' | 'ready';
 type AuthoritySort = 'admin-first' | 'operator-first';
 
-export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: boolean; currentAccountId: string | null }): ReactElement {
+export function AdminAccountsPanel({
+  canWrite,
+  currentAccountId,
+  inviteSenderEmail,
+  inviteSubject,
+}: {
+  canWrite: boolean;
+  currentAccountId: string | null;
+  inviteSenderEmail: string;
+  inviteSubject: string;
+}): ReactElement {
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [authoritySort, setAuthoritySort] = useState<AuthoritySort>('admin-first');
   const [viewState, setViewState] = useState<ViewState>('loading');
@@ -95,7 +105,13 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
           side={canWrite ? <button className="btn" type="button" onClick={() => setInviteOpen(true)}>계정 초대</button> : null}
         />
         <p className="settings-account-description">이 화면은 CLEVER 개발 관리자만 사용합니다. 새 계정은 DSV 관제 운영 계정으로 초대되며 개발 관리 권한은 부여되지 않습니다.</p>
-        {inviteOpen ? <DsvAdminInviteDialog busy={pendingAccountId === 'invite'} onClose={() => setInviteOpen(false)} onSubmit={sendInvitation} /> : null}
+        {inviteOpen ? <DsvAdminInviteDialog
+          busy={pendingAccountId === 'invite'}
+          senderEmail={inviteSenderEmail}
+          subject={inviteSubject}
+          onClose={() => setInviteOpen(false)}
+          onSubmit={sendInvitation}
+        /> : null}
         {deleteTarget ? <AdminAccountDeleteDialog account={deleteTarget} busy={pendingAccountId === deleteTarget.id} onClose={() => setDeleteTarget(null)} onConfirm={deleteAccount} /> : null}
         {message ? <p className="settings-account-state success" role="status">{message}</p> : null}
         {error ? <p className="settings-account-error" role="alert">{error}</p> : null}
@@ -208,10 +224,14 @@ function DsvAdminInviteDialog({
   busy,
   onClose,
   onSubmit,
+  senderEmail,
+  subject,
 }: {
   busy: boolean;
   onClose: () => void;
   onSubmit: (input: { displayName: string; email: string; message: string }) => Promise<void>;
+  senderEmail: string;
+  subject: string;
 }): ReactElement {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [email, setEmail] = useState('');
@@ -232,12 +252,14 @@ function DsvAdminInviteDialog({
   };
 
   const previewName = displayName.trim() || 'DSV 관제 운영자';
+  const previewMessage = message.trim() || 'CLEVER DSV 관제 운영 계정 설정을 안내드립니다.';
+  const previewBody = `안녕하세요 ${previewName}님.\n\n${previewMessage}\n\n48시간 안에 아래 일회용 링크로 접속해 로그인 ID와 비밀번호를 설정해 주세요.\n\nhttps://dsv.cleversystem.ai/admin/account/setup#token=EXAMPLE-ONE-TIME-LINK\n\n초대 링크는 한 번만 사용할 수 있습니다.\n설정 후에는 아래 주소에서 계속 로그인할 수 있습니다.\nhttps://dsv.cleversystem.ai/login`;
 
   return (
     <dialog
       aria-describedby="dsv-admin-invite-preview"
       aria-labelledby="dsv-admin-invite-title"
-      className="driver-invite-dialog customer-account-invite-dialog"
+      className="driver-invite-dialog customer-account-invite-dialog dsv-admin-invite-dialog"
       onCancel={(event) => {
         event.preventDefault();
         onClose();
@@ -251,33 +273,39 @@ function DsvAdminInviteDialog({
         </span>
         <button aria-label="DSV 관제 운영 계정 초대 닫기" type="button" onClick={onClose}><X aria-hidden="true" /></button>
       </header>
-      <form className="customer-account-invite-form" id="dsv-admin-invite-form" aria-label="DSV 관제 운영 계정 초대" onSubmit={submit}>
-        <label>수신자 이메일
-          <input name="email" type="email" required autoComplete="email" placeholder="operator@example.com" disabled={busy} value={email} onChange={(event) => setEmail(event.target.value)} />
-        </label>
-        <label>표시 이름
-          <input name="displayName" required maxLength={120} autoComplete="name" placeholder="DSV 관제 운영자" disabled={busy} value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-        </label>
-        <label className="customer-account-invite-message">안내 문장
-          <textarea name="message" required maxLength={1000} rows={3} placeholder="수신자에게 전달할 안내 문장을 입력하세요." disabled={busy} value={message} onChange={(event) => setMessage(event.target.value)} />
-        </label>
-      </form>
-      <section className="customer-account-invite-preview" id="dsv-admin-invite-preview" aria-label="DSV 관제 운영 계정 초대 미리보기">
-        <strong>초대 이메일 미리보기</strong>
-        <p className="customer-account-invite-message-preview">{message.trim()}</p>
-        <p>{previewName}님에게 DSV 관제 운영 계정 설정 링크가 발송됩니다. 링크는 48시간 동안 한 번만 사용할 수 있습니다.</p>
-        <dl>
-          <div><dt>계정 범위</dt><dd>CLEVER 고객사 DSV의 관제 운영 계정</dd></div>
-          <div><dt>로그인 아이디</dt><dd>수신자가 설정 화면에서 직접 만듭니다.</dd></div>
-          <div><dt>비밀번호</dt><dd>수신자가 설정 화면에서 직접 만듭니다.</dd></div>
-        </dl>
-      </section>
+      <div className="dsv-admin-invite-layout">
+        <form className="customer-account-invite-form dsv-admin-invite-form" id="dsv-admin-invite-form" aria-label="DSV 관제 운영 계정 초대" onSubmit={submit}>
+          <label>수신자 이메일
+            <input name="email" type="email" required autoComplete="email" placeholder="operator@example.com" disabled={busy} value={email} onChange={(event) => setEmail(event.target.value)} />
+          </label>
+          <label>표시 이름
+            <input name="displayName" required maxLength={120} autoComplete="name" placeholder="DSV 관제 운영자" disabled={busy} value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+          </label>
+          <label className="customer-account-invite-message">안내 문장
+            <textarea name="message" required maxLength={1000} rows={8} placeholder="수신자에게 전달할 안내 문장을 입력하세요." disabled={busy} value={message} onChange={(event) => setMessage(event.target.value)} />
+          </label>
+        </form>
+        <section className="customer-account-invite-preview dsv-admin-invite-preview" id="dsv-admin-invite-preview" aria-label="DSV 관제 운영 계정 초대 미리보기">
+          <strong>초대 이메일 미리보기</strong>
+          <dl className="dsv-admin-invite-envelope">
+            <div><dt>보내는 계정</dt><dd>{senderEmail || '발신 계정 미설정'}</dd></div>
+            <div><dt>제목</dt><dd>{operatorInviteSubject(subject)}</dd></div>
+          </dl>
+          <div className="dsv-admin-invite-body" aria-label="초대 이메일 본문">{previewBody}</div>
+          <small className="dsv-admin-invite-example-note">미리보기용 예시 링크입니다. 실제 이메일에는 수신자 전용 일회성 링크가 포함됩니다.</small>
+        </section>
+      </div>
       <footer className="driver-invite-footer">
         <button type="button" onClick={onClose}>취소</button>
         <button className="primary" disabled={busy} form="dsv-admin-invite-form" type="submit">{busy ? '초대 중' : '초대 이메일 보내기'}</button>
       </footer>
     </dialog>
   );
+}
+
+function operatorInviteSubject(configuredSubject: string): string {
+  const prefix = /^\s*(\[[^\]]+\])\s*/u.exec(configuredSubject)?.[1] ?? '[CLEVER DSV]';
+  return `${prefix} 운영자 계정 초대`;
 }
 
 function replaceAccount(setAccounts: (value: (current: AdminAccount[]) => AdminAccount[]) => void, account: AdminAccount): void {
