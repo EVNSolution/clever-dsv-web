@@ -30,7 +30,7 @@ export async function loadAdminAccounts(): Promise<AdminAccount[]> {
   return accounts.map(parseAdminAccount);
 }
 
-export async function inviteAdminAccount(input: { displayName: string; email: string }): Promise<AdminAccountInvitation> {
+export async function inviteAdminAccount(input: { displayName: string; email: string; message: string }): Promise<AdminAccountInvitation> {
   const response = await requestLegacyJson<unknown>('admin-accounts/invitations', { method: 'POST', json: input });
   return parseInvitation(objectField(response, 'invitation'));
 }

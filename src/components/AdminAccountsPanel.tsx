@@ -36,7 +36,7 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
     return () => { active = false; };
   }, []);
 
-  const sendInvitation = async (input: { displayName: string; email: string }) => {
+  const sendInvitation = async (input: { displayName: string; email: string; message: string }) => {
     setError('');
     setMessage('');
     setPendingAccountId('invite');
@@ -127,11 +127,12 @@ function DsvAdminInviteDialog({
 }: {
   busy: boolean;
   onClose: () => void;
-  onSubmit: (input: { displayName: string; email: string }) => Promise<void>;
+  onSubmit: (input: { displayName: string; email: string; message: string }) => Promise<void>;
 }): ReactElement {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [message, setMessage] = useState('CLEVER DSV 관제 운영 계정 설정을 안내드립니다.');
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -143,7 +144,7 @@ function DsvAdminInviteDialog({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void onSubmit({ displayName: displayName.trim(), email: email.trim() });
+    void onSubmit({ displayName: displayName.trim(), email: email.trim(), message: message.trim() });
   };
 
   const previewName = displayName.trim() || 'DSV 관제 운영자';
@@ -173,9 +174,13 @@ function DsvAdminInviteDialog({
         <label>표시 이름
           <input name="displayName" required maxLength={120} autoComplete="name" placeholder="DSV 관제 운영자" disabled={busy} value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
         </label>
+        <label className="customer-account-invite-message">안내 문장
+          <textarea name="message" required maxLength={1000} rows={3} placeholder="수신자에게 전달할 안내 문장을 입력하세요." disabled={busy} value={message} onChange={(event) => setMessage(event.target.value)} />
+        </label>
       </form>
       <section className="customer-account-invite-preview" id="dsv-admin-invite-preview" aria-label="DSV 관제 운영 계정 초대 미리보기">
         <strong>초대 이메일 미리보기</strong>
+        <p className="customer-account-invite-message-preview">{message.trim()}</p>
         <p>{previewName}님에게 DSV 관제 운영 계정 설정 링크가 발송됩니다. 링크는 48시간 동안 한 번만 사용할 수 있습니다.</p>
         <dl>
           <div><dt>계정 범위</dt><dd>CLEVER 고객사 DSV의 관제 운영 계정</dd></div>
