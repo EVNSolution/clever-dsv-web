@@ -66,6 +66,17 @@
 .customer-account-invite-preview dl div { display:grid; grid-template-columns:110px minmax(0, 1fr); gap:10px; }
 .customer-account-invite-preview dt { color:var(--color-muted); font-size:12px; font-weight:750; }
 .customer-account-invite-preview dd { margin:0; color:var(--color-ink); font-size:12px; font-weight:850; overflow-wrap:anywhere; }
+.driver-invite-dialog.dsv-admin-invite-dialog { width:min(1040px, calc(100vw - 32px)); }
+.dsv-admin-invite-layout { min-height:470px; max-height:calc(100dvh - 172px); display:grid; grid-template-columns:minmax(280px, .72fr) minmax(460px, 1.28fr); overflow:auto; }
+.dsv-admin-invite-form { grid-template-columns:1fr; align-content:start; border-right:1px solid var(--color-border); }
+.dsv-admin-invite-form .customer-account-invite-message { grid-column:auto; }
+.dsv-admin-invite-form textarea { min-height:180px; }
+.dsv-admin-invite-preview { min-width:0; margin:18px; display:flex; flex-direction:column; gap:14px; }
+.dsv-admin-invite-preview > strong { font-size:15px; }
+.customer-account-invite-preview .dsv-admin-invite-envelope { padding-bottom:14px; gap:10px; border-bottom:1px solid var(--color-border); }
+.customer-account-invite-preview .dsv-admin-invite-envelope div { grid-template-columns:88px minmax(0, 1fr); }
+.dsv-admin-invite-body { min-height:280px; flex:1 1 auto; box-sizing:border-box; padding:18px; border:1px solid var(--color-border); border-radius:10px; background:var(--color-white); color:var(--color-ink); font-size:12px; font-weight:700; line-height:1.7; overflow-wrap:anywhere; white-space:pre-wrap; }
+.dsv-admin-invite-example-note { color:var(--color-muted); font-size:11px; font-weight:700; line-height:1.5; }
 .customer-account-table td small { display:block; margin-top:3px; color:var(--color-muted); font-size:11px; font-weight:700; overflow-wrap:anywhere; }
 .customer-account-status-pill { display:inline-flex; align-items:center; min-height:22px; border-radius:999px; padding:0 8px; background:var(--color-row-hover); color:var(--color-muted); font-size:11px; font-weight:900; }
 .customer-account-status-pill.active { background:var(--color-success-soft); color:var(--color-success); }
