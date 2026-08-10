@@ -1,14 +1,13 @@
 import type { FormEvent, ReactElement } from 'react';
-import { useEffect, useState } from 'react';
-import { Copy } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import { AdminSectionHeader } from './AdminUi';
 import {
-  createAdminAccount,
+  inviteAdminAccount,
   loadAdminAccounts,
-  resetAdminAccountPassword,
   setAdminAccountStatus,
 } from '../services/admin-accounts';
-import type { AdminAccount, AdminAccountCredential } from '../services/admin-accounts';
+import type { AdminAccount } from '../services/admin-accounts';
 
 type ViewState = 'error' | 'loading' | 'ready';
 
@@ -16,12 +15,9 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [error, setError] = useState('');
-  const [showCreate, setShowCreate] = useState(false);
-  const [loginId, setLoginId] = useState('');
-  const [displayName, setDisplayName] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [message, setMessage] = useState('');
   const [pendingAccountId, setPendingAccountId] = useState<string>();
-  const [credential, setCredential] = useState<AdminAccountCredential>();
-  const [copyState, setCopyState] = useState<'copied' | 'error' | 'idle'>('idle');
 
   useEffect(() => {
     let active = true;
@@ -40,35 +36,16 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
     return () => { active = false; };
   }, []);
 
-  const createAccount = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const sendInvitation = async (input: { displayName: string; email: string }) => {
     setError('');
-    setPendingAccountId('new');
+    setMessage('');
+    setPendingAccountId('invite');
     try {
-      const result = await createAdminAccount({ displayName: displayName.trim(), loginId: loginId.trim() });
-      setAccounts((current) => [...current, result.account].sort(accountOrder));
-      setCredential(result);
-      setCopyState('idle');
-      setLoginId('');
-      setDisplayName('');
-      setShowCreate(false);
-    } catch (createError) {
-      setError(errorMessage(createError));
-    } finally {
-      setPendingAccountId(undefined);
-    }
-  };
-
-  const resetPassword = async (account: AdminAccount) => {
-    setError('');
-    setPendingAccountId(account.id);
-    try {
-      const result = await resetAdminAccountPassword(account.id);
-      replaceAccount(setAccounts, result.account);
-      setCredential(result);
-      setCopyState('idle');
-    } catch (resetError) {
-      setError(errorMessage(resetError));
+      await inviteAdminAccount(input);
+      setInviteOpen(false);
+      setMessage('DSV 관제 운영 계정 초대 이메일 발송을 요청했습니다.');
+    } catch (inviteError) {
+      setError(errorMessage(inviteError));
     } finally {
       setPendingAccountId(undefined);
     }
@@ -87,42 +64,16 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
     }
   };
 
-  const copyCredential = async () => {
-    if (!credential) return;
-    try {
-      await navigator.clipboard.writeText(`아이디: ${credential.account.loginId}\n임시 비밀번호: ${credential.temporaryPassword}`);
-      setCopyState('copied');
-    } catch {
-      setCopyState('error');
-    }
-  };
-
   return (
     <div className="settings-account-layout">
       <section className="page-panel settings-account-panel wide">
         <AdminSectionHeader
           title="관리자 계정"
-          side={canWrite ? <button className="btn" type="button" onClick={() => setShowCreate((current) => !current)}>{showCreate ? '취소' : '계정 등록'}</button> : null}
+          side={canWrite ? <button className="btn" type="button" onClick={() => setInviteOpen(true)}>계정 초대</button> : null}
         />
-        <p className="settings-account-description">이 화면은 CLEVER 개발 관리자만 사용합니다. 새 계정은 관제 고객의 운영 계정으로 발급되며 개발 관리 권한은 부여되지 않습니다.</p>
-        {showCreate ? (
-          <form className="settings-account-form" onSubmit={(event) => void createAccount(event)}>
-            <label><span>아이디</span><input autoComplete="off" required maxLength={80} value={loginId} onChange={(event) => setLoginId(event.target.value)} /></label>
-            <label><span>표시 이름</span><input autoComplete="off" required maxLength={80} value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
-            <button className="btn primary" type="submit" disabled={pendingAccountId !== undefined}>등록</button>
-          </form>
-        ) : null}
-        {credential ? (
-          <div className="settings-credential" role="status">
-            <div><strong>임시 로그인 정보</strong><span>이 화면을 닫으면 비밀번호를 다시 확인할 수 없습니다.</span></div>
-            <code>{credential.account.loginId}</code>
-            <code>{credential.temporaryPassword}</code>
-            <button className="btn" type="button" onClick={() => void copyCredential()}><Copy aria-hidden="true" /> 복사</button>
-            <button className="text-button" type="button" onClick={() => setCredential(undefined)}>닫기</button>
-            {copyState === 'copied' ? <small>로그인 정보를 복사했습니다.</small> : null}
-            {copyState === 'error' ? <small className="error">복사하지 못했습니다. 직접 선택해 복사해 주세요.</small> : null}
-          </div>
-        ) : null}
+        <p className="settings-account-description">이 화면은 CLEVER 개발 관리자만 사용합니다. 새 계정은 DSV 관제 운영 계정으로 초대되며 개발 관리 권한은 부여되지 않습니다.</p>
+        {inviteOpen ? <DsvAdminInviteDialog busy={pendingAccountId === 'invite'} onClose={() => setInviteOpen(false)} onSubmit={sendInvitation} /> : null}
+        {message ? <p className="settings-account-state success" role="status">{message}</p> : null}
         {error ? <p className="settings-account-error" role="alert">{error}</p> : null}
         {viewState === 'loading' ? <p className="settings-account-state" role="status">관리자 계정을 불러오는 중입니다.</p> : null}
         {viewState === 'error' ? <p className="settings-account-state">관리자 계정을 불러오지 못했습니다.</p> : null}
@@ -143,7 +94,6 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
                       <td>{formatDateTime(account.lastAuthenticatedAt)}</td>
                       <td>
                         {canWrite ? <span className="settings-account-row-actions">
-                          <button type="button" disabled={pending} onClick={() => void resetPassword(account)}>비밀번호 재발급</button>
                           <button type="button" disabled={pending || (isCurrent && account.status === 'ACTIVE')} onClick={() => void toggleStatus(account)}>{account.status === 'ACTIVE' ? '비활성화' : '활성화'}</button>
                         </span> : null}
                       </td>
@@ -167,6 +117,77 @@ export function AdminAccountsPanel({ canWrite, currentAccountId }: { canWrite: b
         <small>고객 계정 발급 기능은 인증 계약을 확정한 뒤 별도 작업으로 연결합니다.</small>
       </section>
     </div>
+  );
+}
+
+function DsvAdminInviteDialog({
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  busy: boolean;
+  onClose: () => void;
+  onSubmit: (input: { displayName: string; email: string }) => Promise<void>;
+}): ReactElement {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [email, setEmail] = useState('');
+  const [displayName, setDisplayName] = useState('');
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+    return () => {
+      if (dialog?.open) dialog.close();
+    };
+  }, []);
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void onSubmit({ displayName: displayName.trim(), email: email.trim() });
+  };
+
+  const previewName = displayName.trim() || 'DSV 관제 운영자';
+
+  return (
+    <dialog
+      aria-describedby="dsv-admin-invite-preview"
+      aria-labelledby="dsv-admin-invite-title"
+      className="driver-invite-dialog customer-account-invite-dialog"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      ref={dialogRef}
+    >
+      <header className="driver-invite-header">
+        <span>
+          <strong id="dsv-admin-invite-title">DSV 관제 운영 계정 초대</strong>
+          <small>CLEVER 고객사인 DSV의 관제 운영자에게 계정 설정 이메일을 보냅니다.</small>
+        </span>
+        <button aria-label="DSV 관제 운영 계정 초대 닫기" type="button" onClick={onClose}><X aria-hidden="true" /></button>
+      </header>
+      <form className="customer-account-invite-form" id="dsv-admin-invite-form" aria-label="DSV 관제 운영 계정 초대" onSubmit={submit}>
+        <label>수신자 이메일
+          <input name="email" type="email" required autoComplete="email" placeholder="operator@example.com" disabled={busy} value={email} onChange={(event) => setEmail(event.target.value)} />
+        </label>
+        <label>표시 이름
+          <input name="displayName" required maxLength={120} autoComplete="name" placeholder="DSV 관제 운영자" disabled={busy} value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+        </label>
+      </form>
+      <section className="customer-account-invite-preview" id="dsv-admin-invite-preview" aria-label="DSV 관제 운영 계정 초대 미리보기">
+        <strong>초대 이메일 미리보기</strong>
+        <p>{previewName}님에게 DSV 관제 운영 계정 설정 링크가 발송됩니다. 링크는 48시간 동안 한 번만 사용할 수 있습니다.</p>
+        <dl>
+          <div><dt>계정 범위</dt><dd>CLEVER 고객사 DSV의 관제 운영 계정</dd></div>
+          <div><dt>로그인 아이디</dt><dd>수신자가 설정 화면에서 직접 만듭니다.</dd></div>
+          <div><dt>비밀번호</dt><dd>수신자가 설정 화면에서 직접 만듭니다.</dd></div>
+        </dl>
+      </section>
+      <footer className="driver-invite-footer">
+        <button type="button" onClick={onClose}>취소</button>
+        <button className="primary" disabled={busy} form="dsv-admin-invite-form" type="submit">{busy ? '초대 중' : '초대 이메일 보내기'}</button>
+      </footer>
+    </dialog>
   );
 }
 

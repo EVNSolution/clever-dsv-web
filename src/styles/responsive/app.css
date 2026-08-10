@@ -119,6 +119,7 @@
     transition:width .2s ease, height .2s ease, inset .2s ease, border-radius .2s ease, background .2s ease;
   }
   .left-tabs .main-tab { display:none !important; }
+  .page:not(.nav-expanded) .sidebar-account,
   .page:not(.nav-expanded) .sidebar-logout { display:none; }
   .sidebar-brand, .nav-expanded .sidebar-brand { width:184px; }
   .sidebar-brand-title {
@@ -148,6 +149,7 @@
   .page.nav-expanded .main-tab-copy small {
     display:block; font-size:14px; font-weight:750; line-height:1.25;
   }
+  .page.nav-expanded .sidebar-account,
   .page.nav-expanded .sidebar-logout {
     display:grid; grid-template-columns:64px minmax(0, 1fr);
     width:100%; min-height:52px; padding:0 18px; border-radius:18px; font-size:15px;

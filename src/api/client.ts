@@ -55,9 +55,11 @@ const legacyAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'GET', pattern: /^manual-email$/u },
   { method: 'POST', pattern: /^manual-email$/u },
   { method: 'GET', pattern: /^admin-accounts$/u },
-  { method: 'POST', pattern: /^admin-accounts$/u },
-  { method: 'POST', pattern: /^admin-accounts\/[^/]+\/password-reset$/u },
+  { method: 'POST', pattern: /^admin-accounts\/invitations$/u },
   { method: 'PATCH', pattern: /^admin-accounts\/[^/]+\/status$/u },
+  { method: 'POST', pattern: /^admin\/auth\/invitations\/validate$/u },
+  { method: 'POST', pattern: /^admin\/auth\/complete$/u },
+  { method: 'PATCH', pattern: /^auth\/credentials$/u },
   { method: 'GET', pattern: /^customers\/[^/]+\/accounts$/u },
   { method: 'POST', pattern: /^customers\/[^/]+\/accounts\/invitations$/u },
   { method: 'POST', pattern: /^customer-accounts\/[^/]+\/reinvite$/u },
@@ -167,19 +169,19 @@ export async function requestLegacyJson<ResponseBody>(path: string, init: JsonRe
   const target = requestTarget(path, init.method);
   assertAllowed('legacy API', target, legacyAllowlist);
   let response = await fetchJson(apiConfig.legacyBaseUrl, path, { ...init, method: target.method });
-  if (response.status === 401 && !isPublicCustomerAuthPath(target.path)) expireTransportSession();
+  if (response.status === 401 && !isPublicAuthPath(target.path)) expireTransportSession();
   let body = await readResponseBody(response);
   if (isCsrfFailure(response.status, body) && await refreshCsrfToken()) {
     response = await fetchJson(apiConfig.legacyBaseUrl, path, { ...init, method: target.method });
-    if (response.status === 401 && !isPublicCustomerAuthPath(target.path)) expireTransportSession();
+    if (response.status === 401 && !isPublicAuthPath(target.path)) expireTransportSession();
     body = await readResponseBody(response);
   }
   if (!response.ok) throw new ApiError(response.status, errorMessage(body, response.status), body);
   return legacyData<ResponseBody>(body);
 }
 
-function isPublicCustomerAuthPath(path: string): boolean {
-  return /^customer\/auth\/(?:invitations\/validate|complete|login)$/u.test(path);
+function isPublicAuthPath(path: string): boolean {
+  return /^(?:customer|admin)\/auth\/(?:invitations\/validate|complete|login)$/u.test(path);
 }
 
 export const requestJson = requestLegacyJson;

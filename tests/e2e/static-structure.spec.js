@@ -203,7 +203,32 @@ test('public customer account pages keep invitation and login contract explicit'
   expect(service).toContain("'customer/auth/complete'");
   expect(service).toContain("'customer/auth/login'");
   expect(service).toContain("'session/logout'");
-  expect(readSrc('api/client.ts')).toContain('!isPublicCustomerAuthPath(target.path)');
+  expect(readSrc('api/client.ts')).toContain('!isPublicAuthPath(target.path)');
+});
+
+test('public DSV admin account setup and credentials keep top-level account contract explicit', () => {
+  const app = readSrc('App.tsx');
+  const setup = readSrc('pages/AdminAccountSetupPage.tsx');
+  const auth = readSrc('services/auth.ts');
+  const accountService = readSrc('services/admin-accounts.ts');
+  const accounts = readSrc('components/AdminAccountsPanel.tsx');
+  const credentials = readSrc('components/AdminCredentialDialog.tsx');
+
+  expect(app).toContain('adminAccountSetupPath');
+  expect(app).toContain('path === adminAccountSetupPath');
+  expect(setup).toContain('window.location.hash');
+  expect(setup).toContain('validateAdminInvitation');
+  expect(setup).toContain('completeAdminInvitation');
+  expect(auth).toContain("'admin/auth/invitations/validate'");
+  expect(auth).toContain("'admin/auth/complete'");
+  expect(auth).toContain("'auth/credentials'");
+  expect(accounts).toContain('DSV 관제 운영 계정');
+  expect(accounts).not.toContain('비밀번호 재발급');
+  expect(accounts).not.toContain('임시 로그인 정보');
+  expect(accountService).toContain("'admin-accounts/invitations'");
+  expect(accountService).not.toContain('resetAdminAccountPassword');
+  expect(credentials).toContain('updateCredentials');
+  expect(credentials).toContain('DSV 관제 운영 계정');
 });
 
 test('dispatch keeps customer grouping as an explicit list view', () => {

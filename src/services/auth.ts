@@ -13,6 +13,16 @@ export type Principal = {
   customerId: string | null;
   driverId: string | null;
 };
+export type AdminInvitationValidation = {
+  displayName: string | null;
+  email: string;
+  expiresAt: string;
+};
+export type CredentialChangeInput = {
+  currentPassword: string;
+  loginId?: string;
+  password?: string;
+};
 
 type LoginResponse = { accessToken?: string; csrfToken?: string };
 type SessionDto = {
@@ -38,6 +48,40 @@ export async function login(credentials: LoginCredentials): Promise<void> {
     clearTransportSession();
     throw error;
   }
+}
+
+export async function validateAdminInvitation(token: string): Promise<AdminInvitationValidation> {
+  const response = await requestJson<unknown>('admin/auth/invitations/validate', {
+    method: 'POST',
+    json: { shopDomain: apiConfig.shopDomain, token },
+  });
+  return parseAdminInvitationValidation(response);
+}
+
+export async function completeAdminInvitation(input: { loginId: string; password: string; token: string }): Promise<void> {
+  clearTransportSession();
+  try {
+    const session = await requestJson<LoginResponse>('admin/auth/complete', {
+      method: 'POST',
+      json: {
+        shopDomain: apiConfig.shopDomain,
+        token: input.token,
+        loginId: input.loginId,
+        password: input.password,
+      },
+    });
+    storeTransportSession(session);
+  } catch (error) {
+    clearTransportSession();
+    throw error;
+  }
+}
+
+export async function updateCredentials(input: CredentialChangeInput): Promise<Principal> {
+  const response = await requestJson<unknown>('auth/credentials', { method: 'PATCH', json: input });
+  const session = sessionDtoFrom(response);
+  storeTransportSession(session);
+  return principalFromSession(session);
 }
 
 export async function logout(): Promise<void> {
@@ -96,6 +140,24 @@ function principalFromSession(session: SessionDto): Principal {
     customerId,
     driverId,
   };
+}
+
+function parseAdminInvitationValidation(value: unknown): AdminInvitationValidation {
+  if (!isObject(value)) throw new ApiError(502, '초대 응답 형식이 올바르지 않습니다.', value);
+  const email = stringField(value, ['email']);
+  const expiresAt = stringField(value, ['expiresAt']);
+  if (!email || !expiresAt) throw new ApiError(502, '초대 응답 형식이 올바르지 않습니다.', value);
+  return {
+    displayName: stringField(value, ['displayName']),
+    email,
+    expiresAt,
+  };
+}
+
+function sessionDtoFrom(value: unknown): SessionDto {
+  const candidate = isObject(value) && isObject(value.session) ? value.session : value;
+  if (!isObject(candidate)) throw new ApiError(502, '세션 API 응답 형식이 올바르지 않습니다.', value);
+  return candidate as SessionDto;
 }
 
 function principalTypeFrom(session: unknown): PrincipalRole | null {

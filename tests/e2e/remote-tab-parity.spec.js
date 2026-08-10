@@ -1715,39 +1715,121 @@ test('super admin manages persistent operation accounts from settings', async ({
     status: 'ACTIVE',
     updatedAt: '2026-08-09T00:00:00.000Z',
   };
-  const createdAccount = {
-    ...existingAccount,
-    createdAt: '2026-08-09T01:00:00.000Z',
-    displayName: 'DSV 운영 관리자',
-    id: '4c571998-e519-4bf0-af87-d25309a12133',
-    lastAuthenticatedAt: null,
-    loginId: 'dsv-admin',
-  };
-  let createBody;
+  let inviteBody;
   const api = await installApiFixtures(page, adminFixtures({
     'GET /api/dsv/v1/session': v1Envelope({
       ...adminSession,
       scopes: [...adminSession.scopes, 'dsv:accounts:read', 'dsv:accounts:write'],
     }, 'g006-account-session'),
     'GET /api/dsv/admin-accounts': legacyEnvelope({ accounts: [existingAccount] }),
-    'POST /api/dsv/admin-accounts': ({ request }) => {
-      createBody = request.postDataJSON();
-      return { ...legacyEnvelope({ account: createdAccount, temporaryPassword: 'temporary-account-password' }), status: 201 };
+    'POST /api/dsv/admin-accounts/invitations': ({ request }) => {
+      inviteBody = request.postDataJSON();
+      return {
+        ...legacyEnvelope({ invitation: { displayName: 'DSV 관제 운영자', email: 'operator@example.com', expiresAt: '2026-08-11T08:00:00.000Z' } }),
+        status: 201,
+      };
     },
   }));
 
   await page.goto('/settings');
   await page.getByRole('tab', { name: '계정' }).click();
   await expect(page.getByText('기존 운영 관리자')).toBeVisible();
-  await page.getByRole('button', { name: '계정 등록' }).click();
-  await page.getByLabel('아이디').fill('dsv-admin');
-  await page.getByLabel('표시 이름').fill('DSV 운영 관리자');
-  await page.getByRole('button', { name: '등록', exact: true }).click();
+  await page.getByRole('button', { name: '계정 초대' }).click();
+  const dialog = page.getByRole('dialog', { name: 'DSV 관제 운영 계정 초대' });
+  await dialog.getByLabel('수신자 이메일').fill('operator@example.com');
+  await dialog.getByLabel('표시 이름').fill('DSV 관제 운영자');
+  await expect(dialog.getByLabel('DSV 관제 운영 계정 초대 미리보기')).toContainText('48시간 동안 한 번만 사용할 수 있습니다.');
+  await expect(dialog.getByLabel('DSV 관제 운영 계정 초대 미리보기')).toContainText('CLEVER 고객사 DSV의 관제 운영 계정');
+  await expect(dialog.getByLabel('DSV 관제 운영 계정 초대 미리보기')).toContainText('수신자가 설정 화면에서 직접 만듭니다.');
+  await expect(dialog).not.toContainText('운영사 배송조회');
+  await dialog.getByRole('button', { name: '초대 이메일 보내기', exact: true }).click();
 
-  await expect(page.getByText('임시 로그인 정보')).toBeVisible();
-  await expect(page.getByText('temporary-account-password')).toBeVisible();
-  await expect(page.getByText('DSV 운영 관리자')).toBeVisible();
-  expect(createBody).toEqual({ displayName: 'DSV 운영 관리자', loginId: 'dsv-admin' });
+  await expect(page.getByRole('status').filter({ hasText: 'DSV 관제 운영 계정 초대 이메일 발송을 요청했습니다.' })).toBeVisible();
+  await expect(page.getByText('기존 운영 관리자')).toBeVisible();
+  expect(inviteBody).toEqual({ displayName: 'DSV 관제 운영자', email: 'operator@example.com' });
+  expectOnlyFixtureCalls(api);
+});
+
+test('DSV admin setup validates invitation and stores returned session', async ({ page }) => {
+  let validateBody;
+  let completeBody;
+  const api = await installApiFixtures(page, {
+    'POST /api/dsv/admin/auth/invitations/validate': ({ request }) => {
+      validateBody = request.postDataJSON();
+      return legacyEnvelope({ displayName: 'DSV 관제 운영자', email: 'operator@example.com', expiresAt: '2026-08-11T08:00:00.000Z' });
+    },
+    'POST /api/dsv/admin/auth/complete': ({ request }) => {
+      completeBody = request.postDataJSON();
+      return legacyEnvelope({ accessToken: 'admin-setup-token', csrfToken: 'admin-setup-csrf' });
+    },
+    'GET /api/dsv/v1/session': v1Envelope({
+      ...adminSession,
+      csrfToken: 'admin-setup-csrf',
+      actorId: 'new-admin-operator',
+      displayName: 'DSV 관제 운영자',
+    }, 'g006-admin-setup-session'),
+    'GET /api/dsv/v1/control': v1Envelope({
+      assignedCount: 0,
+      failedEtaCount: 0,
+      pendingEtaCount: 0,
+      readyEtaCount: 0,
+      serviceDate: '2026-08-10',
+      totalDispatchCount: 0,
+      unassignedCount: 0,
+    }),
+  });
+
+  await page.goto('/admin/account/setup#token=admin-invite-token');
+  await expect(page.getByText('관제 운영 계정 설정')).toBeVisible();
+  await expect(page.getByText('DSV 관제 운영 계정', { exact: true })).toBeVisible();
+  await page.getByLabel('Login ID').fill('dsv-operator');
+  await page.getByLabel('Password', { exact: true }).fill('StrongPass!234');
+  await page.getByLabel('Confirm password', { exact: true }).fill('StrongPass!234');
+  await page.getByRole('button', { name: '계정 설정 완료' }).click();
+  await expect(page).toHaveURL(/\/control$/u);
+  await expect(page.evaluate(() => ({
+    csrf: window.sessionStorage.getItem('clever.auth.csrf'),
+    token: window.sessionStorage.getItem('clever.auth.token'),
+  }))).resolves.toEqual({ csrf: 'admin-setup-csrf', token: 'admin-setup-token' });
+  expect(validateBody).toEqual({ shopDomain: 'dsv-demo.local', token: 'admin-invite-token' });
+  expect(completeBody).toEqual({ shopDomain: 'dsv-demo.local', token: 'admin-invite-token', loginId: 'dsv-operator', password: 'StrongPass!234' });
+  expectOnlyFixtureCalls(api);
+});
+
+test('DSV admin without account scopes can update own credentials from shell', async ({ page }) => {
+  let credentialBody;
+  const api = await installApiFixtures(page, adminFixtures({
+    'GET /api/dsv/v1/session': v1Envelope({
+      ...adminSession,
+      scopes: ['dsv:session:read', 'dsv:settings:read'],
+    }, 'g006-operator-session'),
+    'PATCH /api/dsv/auth/credentials': ({ request }) => {
+      credentialBody = request.postDataJSON();
+      return legacyEnvelope({
+        session: {
+          ...adminSession,
+          csrfToken: 'updated-csrf-token',
+          actorId: adminSession.actorId,
+          displayName: 'G006 Admin Operator',
+          scopes: ['dsv:session:read', 'dsv:settings:read'],
+        },
+      });
+    },
+  }));
+
+  await page.goto('/settings');
+  await expect(page.getByRole('tab', { name: '계정' })).toHaveCount(0);
+  await page.getByRole('button', { name: '계정 설정' }).click();
+  const dialog = page.getByRole('dialog', { name: '계정 설정' });
+  await dialog.getByLabel('현재 비밀번호').fill('CurrentPass!234');
+  await dialog.getByLabel('새 로그인 아이디').fill('new-operator-id');
+  await dialog.getByLabel('새 비밀번호', { exact: true }).fill('NewStrongPass!234');
+  await dialog.getByLabel('새 비밀번호 확인', { exact: true }).fill('NewStrongPass!234');
+  await dialog.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('status').filter({ hasText: '계정 설정을 저장했습니다.' })).toBeVisible();
+  await expect(page.evaluate(() => window.sessionStorage.getItem('clever.auth.csrf'))).resolves.toBe('updated-csrf-token');
+  expect(credentialBody).toEqual({ currentPassword: 'CurrentPass!234', loginId: 'new-operator-id', password: 'NewStrongPass!234' });
   expectOnlyFixtureCalls(api);
 });
 

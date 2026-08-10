@@ -1,8 +1,9 @@
 import type { ReactElement } from 'react';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { adminCustomerDeliveryPath, adminTabs, customerAccountSetupPath, customerDeliveryPath, customerLoginPath, defaultPath, legacyPathMap } from './app-routes';
+import { adminAccountSetupPath, adminCustomerDeliveryPath, adminTabs, customerAccountSetupPath, customerDeliveryPath, customerLoginPath, defaultPath, legacyPathMap } from './app-routes';
 import type { AppPath } from './app-routes';
 import { AdminShell } from './components/AdminShell';
+import { AdminAccountSetupPage } from './pages/AdminAccountSetupPage';
 import { CustomerAccountSetupPage } from './pages/CustomerAccountSetupPage';
 import { CustomerLoginPage } from './pages/CustomerLoginPage';
 import { LoginPage } from './pages/LoginPage';
@@ -24,7 +25,7 @@ type SessionGate = {
 function readPath(): AppPath {
   const decodedPath = decodeURI(window.location.pathname);
   const path: string = legacyPathMap[decodedPath as keyof typeof legacyPathMap] ?? decodedPath;
-  if (path === '/login' || path === customerLoginPath || path === customerAccountSetupPath || path === adminCustomerDeliveryPath || path === customerDeliveryPath || adminTabs.some((tab) => tab.path === path)) return path as AppPath;
+  if (path === '/login' || path === customerLoginPath || path === customerAccountSetupPath || path === adminAccountSetupPath || path === adminCustomerDeliveryPath || path === customerDeliveryPath || adminTabs.some((tab) => tab.path === path)) return path as AppPath;
   return defaultPath;
 }
 
@@ -33,7 +34,7 @@ function navigate(path: AppPath): void {
 }
 
 function isPublicPath(path: AppPath): boolean {
-  return path === '/login' || path === customerLoginPath || path === customerAccountSetupPath;
+  return path === '/login' || path === customerLoginPath || path === customerAccountSetupPath || path === adminAccountSetupPath;
 }
 
 export function App(): ReactElement {
@@ -134,6 +135,7 @@ export function App(): ReactElement {
   if (path === '/login') return <LoginPage onLogin={() => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(defaultPath); }} />;
   if (path === customerLoginPath) return <CustomerLoginPage onLogin={(nextPath) => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(nextPath); }} />;
   if (path === customerAccountSetupPath) return <CustomerAccountSetupPage onComplete={(nextPath) => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(nextPath); }} />;
+  if (path === adminAccountSetupPath) return <AdminAccountSetupPage onComplete={(nextPath) => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(nextPath); }} />;
   if (effectiveSessionGate.status === 'checking') {
     if (path === '/control') {
       return (
@@ -144,6 +146,7 @@ export function App(): ReactElement {
           principalScopes={principal?.scopes ?? []}
           onNavigate={(nextPath) => go(nextPath)}
           onLogout={handleLogout}
+          onSessionUpdate={setPrincipal}
         />
       );
     }
@@ -181,6 +184,7 @@ export function App(): ReactElement {
       principalScopes={principal?.scopes ?? []}
       onNavigate={(nextPath) => go(nextPath)}
       onLogout={handleLogout}
+      onSessionUpdate={setPrincipal}
     />
   );
 }
@@ -213,6 +217,7 @@ const requiredScopesByPath: Record<AppPath, string[]> = {
   '/login': [],
   [customerLoginPath]: [],
   [customerAccountSetupPath]: [],
+  [adminAccountSetupPath]: [],
 };
 
 function hasRequiredScopes(principal: Principal, path: AppPath): boolean {
