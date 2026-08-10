@@ -105,6 +105,15 @@ test('control vehicles keep their latest valid coordinates even when telemetry i
   expect(vehiclePoints).not.toContain('vehicle.vehiclePositionStale');
 });
 
+test('vehicle trail markers remain independent from road-matched lines', () => {
+  const adminShell = readFileSync(new URL('../../src/components/AdminShell.tsx', import.meta.url), 'utf8');
+  const trailRoutes = adminShell.match(/function vehicleGpsTrailMapRoutes[\s\S]*?\n\}/u)?.[0] ?? '';
+  expect(trailRoutes).toContain('const matchedRoutes = matchedLines.map');
+  expect(trailRoutes).toContain('const markerRoutes = sessions.flatMap');
+  expect(trailRoutes).toContain('coordinates: [coordinate]');
+  expect(trailRoutes).toContain('return [...matchedRoutes, ...markerRoutes]');
+});
+
 test('service and page imports follow dependency rules', () => {
   expect(exists('services/routing.ts')).toBe(false);
 

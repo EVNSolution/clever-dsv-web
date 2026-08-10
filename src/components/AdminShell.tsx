@@ -522,14 +522,13 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory): MapCanvasRou
     segment.roadMatchedGeometry?.coordinates.map((coordinates, lineOrder) => ({
       coordinates,
       lineOrder,
-      marker: lineOrder === 0 ? segment.trailMarker : null,
       routePlanId: session.routePlanId,
       segmentOrder,
       sessionIndex: session.sessionIndex,
       sessionOrder,
     })) ?? []
   )));
-  return matchedLines.map((line, index) => ({
+  const matchedRoutes = matchedLines.map((line, index): MapCanvasRoute => ({
     color: '#d92d20',
     coordinates: line.coordinates,
     dashed: true,
@@ -538,13 +537,22 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory): MapCanvasRou
     kind: 'trail' as const,
     selected: true,
     sortOrder: 200 + line.sessionOrder * 100 + line.segmentOrder * 10 + line.lineOrder,
-    ...(line.marker === null || line.marker === undefined
-      ? {}
-      : {
-          startMarker: line.marker.kind === 'START' ? 'start' as const : 'restart' as const,
-          startMarkerCoordinate: [line.marker.longitude, line.marker.latitude] as [number, number],
-        }),
   }));
+  const markerRoutes = sessions.flatMap((session, sessionOrder) => session.segments.flatMap((segment, segmentOrder) => {
+    if (segment.trailMarker === null || segment.trailMarker === undefined) return [];
+    const coordinate: [number, number] = [segment.trailMarker.longitude, segment.trailMarker.latitude];
+    return [{
+      color: '#d92d20',
+      coordinates: [coordinate],
+      id: `vehicle-trail-marker:${session.routePlanId}:${session.sessionIndex}:${segmentOrder}`,
+      kind: 'trail' as const,
+      selected: true,
+      sortOrder: 10_000 + sessionOrder * 100 + segmentOrder,
+      startMarker: segment.trailMarker.kind === 'START' ? 'start' as const : 'restart' as const,
+      startMarkerCoordinate: coordinate,
+    }];
+  }));
+  return [...matchedRoutes, ...markerRoutes];
 }
 
 function isTodayInSeoul(serviceDate?: string): boolean {
