@@ -1,12 +1,20 @@
 import type { Feature, FeatureCollection, Geometry, LineString, Point } from 'geojson';
 import maplibregl from 'maplibre-gl';
+import type { DataDrivenPropertyValueSpecification, FilterSpecification } from 'maplibre-gl';
 import type { MapCanvasRoute } from '../MapCanvas';
 
 const sourceId = 'operational-routes';
 const casingLayerId = 'operational-route-casing';
 const routeLayerId = 'operational-route-lines';
+const trailCasingLayerId = 'operational-trail-casing';
+const trailLayerId = 'operational-trail-lines';
 const trailPointLayerId = 'operational-route-trail-points';
 const destinationMarkerLayerId = 'operational-destination-markers';
+
+const routeFilter: FilterSpecification = ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'kind'], 'trail']];
+const trailFilter: FilterSpecification = ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'trail']];
+const trailCasingWidth: DataDrivenPropertyValueSpecification<number> = ['interpolate', ['linear'], ['zoom'], 4, 9, 10, 8, 16, 7];
+const trailLineWidth: DataDrivenPropertyValueSpecification<number> = ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 4.5, 16, 4];
 
 export function updateOperationalRoutes(
   map: maplibregl.Map,
@@ -18,6 +26,7 @@ export function updateOperationalRoutes(
       id: casingLayerId,
       type: 'line',
       source: sourceId,
+      filter: routeFilter,
       layout: {
         'line-cap': 'round',
         'line-join': 'round',
@@ -25,8 +34,8 @@ export function updateOperationalRoutes(
       },
       paint: {
         'line-color': ['get', 'casingColor'],
-        'line-opacity': ['case', ['==', ['get', 'kind'], 'trail'], 1, ['get', 'selected'], 0.96, 1],
-        'line-width': ['case', ['==', ['get', 'kind'], 'trail'], 6.4, ['get', 'selected'], 4.6, 3.6],
+        'line-opacity': ['case', ['get', 'selected'], 0.96, 1],
+        'line-width': ['case', ['get', 'selected'], 4.6, 3.6],
         'line-dasharray': ['case', ['get', 'dashed'], ['literal', [2, 2]], ['literal', [1, 0]]],
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
@@ -34,6 +43,7 @@ export function updateOperationalRoutes(
       id: routeLayerId,
       type: 'line',
       source: sourceId,
+      filter: routeFilter,
       layout: {
         'line-cap': 'round',
         'line-join': 'round',
@@ -41,9 +51,43 @@ export function updateOperationalRoutes(
       },
       paint: {
         'line-color': ['get', 'color'],
-        'line-opacity': ['case', ['==', ['get', 'kind'], 'trail'], 1, ['get', 'selected'], 0.96, 1],
-        'line-width': ['case', ['==', ['get', 'kind'], 'trail'], 3.4, ['get', 'selected'], 2.6, 1.8],
+        'line-opacity': ['case', ['get', 'selected'], 0.96, 1],
+        'line-width': ['case', ['get', 'selected'], 2.6, 1.8],
         'line-dasharray': ['case', ['get', 'dashed'], ['literal', [2, 2]], ['literal', [1, 0]]],
+      },
+    }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
+    map.addLayer({
+      id: trailCasingLayerId,
+      type: 'line',
+      source: sourceId,
+      filter: trailFilter,
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        'line-sort-key': ['get', 'sortKey'],
+      },
+      paint: {
+        'line-color': ['get', 'casingColor'],
+        'line-opacity': 1,
+        'line-width': trailCasingWidth,
+        'line-dasharray': ['literal', [2, 2]],
+      },
+    }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
+    map.addLayer({
+      id: trailLayerId,
+      type: 'line',
+      source: sourceId,
+      filter: trailFilter,
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        'line-sort-key': ['get', 'sortKey'],
+      },
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-opacity': 1,
+        'line-width': trailLineWidth,
+        'line-dasharray': ['literal', [2, 2]],
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
     map.addLayer({
@@ -53,9 +97,9 @@ export function updateOperationalRoutes(
       filter: ['==', '$type', 'Point'],
       paint: {
         'circle-color': ['case', ['==', ['get', 'markerKind'], 'interrupted'], '#ffffff', '#d92d20'],
-        'circle-radius': ['case', ['==', ['get', 'markerKind'], 'interrupted'], 3, 3.5],
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 4.5, 16, 4],
         'circle-stroke-color': '#d92d20',
-        'circle-stroke-width': 1.5,
+        'circle-stroke-width': 2,
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
   }

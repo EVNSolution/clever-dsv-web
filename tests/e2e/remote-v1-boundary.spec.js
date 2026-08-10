@@ -1030,6 +1030,13 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
         casingWidth: window.dsvMap.getPaintProperty('operational-route-casing', 'line-width'),
         lineOpacity: window.dsvMap.getPaintProperty('operational-route-lines', 'line-opacity'),
         lineWidth: window.dsvMap.getPaintProperty('operational-route-lines', 'line-width'),
+        layerOrder: window.dsvMap.getStyle().layers
+          .map((layer) => layer.id)
+          .filter((id) => id.startsWith('operational-route-') || id.startsWith('operational-trail-')),
+        trailCasingWidth: window.dsvMap.getPaintProperty('operational-trail-casing', 'line-width'),
+        trailFilter: window.dsvMap.getFilter('operational-trail-lines'),
+        trailLineWidth: window.dsvMap.getPaintProperty('operational-trail-lines', 'line-width'),
+        routeFilter: window.dsvMap.getFilter('operational-route-lines'),
       },
       vehicles: vehicleSource.serialize().data.features.map((feature) => ({
         coordinates: feature.geometry.coordinates,
@@ -1062,10 +1069,21 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
       { routeId: 'route-plan-g006-second' },
     ],
     routePaint: {
-      casingOpacity: ['case', ['==', ['get', 'kind'], 'trail'], 1, ['get', 'selected'], 0.96, 1],
-      casingWidth: ['case', ['==', ['get', 'kind'], 'trail'], 6.4, ['get', 'selected'], 4.6, 3.6],
-      lineOpacity: ['case', ['==', ['get', 'kind'], 'trail'], 1, ['get', 'selected'], 0.96, 1],
-      lineWidth: ['case', ['==', ['get', 'kind'], 'trail'], 3.4, ['get', 'selected'], 2.6, 1.8],
+      casingOpacity: ['case', ['get', 'selected'], 0.96, 1],
+      casingWidth: ['case', ['get', 'selected'], 4.6, 3.6],
+      layerOrder: [
+        'operational-route-casing',
+        'operational-route-lines',
+        'operational-trail-casing',
+        'operational-trail-lines',
+        'operational-route-trail-points',
+      ],
+      lineOpacity: ['case', ['get', 'selected'], 0.96, 1],
+      lineWidth: ['case', ['get', 'selected'], 2.6, 1.8],
+      trailCasingWidth: ['interpolate', ['linear'], ['zoom'], 4, 9, 10, 8, 16, 7],
+      trailFilter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'trail']],
+      trailLineWidth: ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 4.5, 16, 4],
+      routeFilter: ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'kind'], 'trail']],
     },
     vehicles: [
       { coordinates: [127.0412, 37.5021], label: '99테 6006', markerImageId: expect.stringMatching(/^vehicle-marker-(?!8e8e93)/u), vehicleId: 'vehicle-g006-scheduled' },
