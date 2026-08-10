@@ -1738,7 +1738,9 @@ test('super admin manages persistent operation accounts from settings', async ({
   const dialog = page.getByRole('dialog', { name: 'DSV 관제 운영 계정 초대' });
   await dialog.getByLabel('수신자 이메일').fill('operator@example.com');
   await dialog.getByLabel('표시 이름').fill('DSV 관제 운영자');
+  await dialog.getByLabel('안내 문장').fill('DSV 관제팀 계정 설정을 안내드립니다.');
   await expect(dialog.getByLabel('DSV 관제 운영 계정 초대 미리보기')).toContainText('48시간 동안 한 번만 사용할 수 있습니다.');
+  await expect(dialog.getByLabel('DSV 관제 운영 계정 초대 미리보기')).toContainText('DSV 관제팀 계정 설정을 안내드립니다.');
   await expect(dialog.getByLabel('DSV 관제 운영 계정 초대 미리보기')).toContainText('CLEVER 고객사 DSV의 관제 운영 계정');
   await expect(dialog.getByLabel('DSV 관제 운영 계정 초대 미리보기')).toContainText('수신자가 설정 화면에서 직접 만듭니다.');
   await expect(dialog).not.toContainText('운영사 배송조회');
@@ -1746,7 +1748,11 @@ test('super admin manages persistent operation accounts from settings', async ({
 
   await expect(page.getByRole('status').filter({ hasText: 'DSV 관제 운영 계정 초대 이메일 발송을 요청했습니다.' })).toBeVisible();
   await expect(page.getByText('기존 운영 관리자')).toBeVisible();
-  expect(inviteBody).toEqual({ displayName: 'DSV 관제 운영자', email: 'operator@example.com' });
+  expect(inviteBody).toEqual({
+    displayName: 'DSV 관제 운영자',
+    email: 'operator@example.com',
+    message: 'DSV 관제팀 계정 설정을 안내드립니다.',
+  });
   expectOnlyFixtureCalls(api);
 });
 
@@ -1785,6 +1791,16 @@ test('DSV admin setup validates invitation and stores returned session', async (
   await page.getByLabel('Login ID').fill('dsv-operator');
   await page.getByLabel('Password', { exact: true }).fill('StrongPass!234');
   await page.getByLabel('Confirm password', { exact: true }).fill('StrongPass!234');
+  const [passwordBox, helpBox, confirmBox] = await Promise.all([
+    page.getByLabel('Password', { exact: true }).locator('..').boundingBox(),
+    page.getByText('영문 대문자, 소문자, 숫자, 특수문자를 포함해 12자 이상 입력하세요.', { exact: true }).boundingBox(),
+    page.getByLabel('Confirm password', { exact: true }).boundingBox(),
+  ]);
+  expect(passwordBox).not.toBeNull();
+  expect(helpBox).not.toBeNull();
+  expect(confirmBox).not.toBeNull();
+  expect(helpBox.y).toBeGreaterThanOrEqual(passwordBox.y + passwordBox.height);
+  expect(confirmBox.y).toBeGreaterThanOrEqual(helpBox.y + helpBox.height);
   await page.getByRole('button', { name: '계정 설정 완료' }).click();
   await expect(page).toHaveURL(/\/control$/u);
   await expect(page.evaluate(() => ({
