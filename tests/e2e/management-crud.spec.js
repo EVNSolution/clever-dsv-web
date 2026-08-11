@@ -398,6 +398,49 @@ test('dispatch accepts an upload without driver and vehicle columns as unassigne
   await expect(review.getByRole('button', { name: '업로드 확정', exact: true })).toBeEnabled();
 });
 
+test('dispatch resolves a registered driver name when the vehicle column is absent', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('clever.management.data.v3', JSON.stringify({
+      assignments: [{ driverId: 'driver-upload', id: 'assignment-upload', kind: '기본 배정', vehicleId: 'vehicle-upload' }],
+      conditions: [{
+        code: 'COLD',
+        description: '냉장 상태를 유지하여 운송합니다.',
+        id: 'condition-cold',
+        name: '냉장 운송',
+        proof: '온도기록, 인수증',
+        temperature: '2-8℃',
+        temperatureAlertEnabled: true,
+        temperatureMaxC: 8,
+        temperatureMinC: 2,
+        vehicle: '냉장탑차',
+      }],
+      customers: [],
+      destinations: [],
+      drivers: [{ age: 40, career: '5년', gender: '미제공', id: 'driver-upload', name: '이교탁', score: '미제공', traits: [], zone: '미제공' }],
+      vehicles: [{ id: 'vehicle-upload', note: '', plate: '12가 3456', type: '냉장탑차' }],
+    }));
+  });
+  const csv = [
+    'driver,배송처,condition,shippedbox,주소,customer,SellerOrderKey,latitude,longitude',
+    '이교탁,백제약품동부,COLD,4,경기 광주시 초월읍 경충대로 1284번길 51,sanofi,DRIVER-AUTO-1,37.412,127.301',
+  ].join('\n');
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '주문 업로드', exact: true }).click();
+  await page.getByLabel('배차 파일').setInputFiles({
+    buffer: Buffer.from(csv),
+    mimeType: 'text/csv',
+    name: 'driver-only.csv',
+  });
+
+  const review = page.locator('.dispatch-upload-review');
+  await expect(page.locator('details.dispatch-upload-issues')).toHaveCount(0);
+  await expect(review.getByRole('button', { name: '업로드 확정', exact: true })).toBeEnabled();
+  await review.getByRole('button', { name: '업로드 확정', exact: true }).click();
+  const applied = await page.evaluate(() => JSON.parse(window.localStorage.getItem('clever.dispatch.last-import') ?? 'null'));
+  expect(applied.rows[0]).toMatchObject({ driverId: 'driver-upload', vehicleId: 'vehicle-upload' });
+});
+
 test('dispatch counts issue rows instead of individual issues', async ({ page }) => {
   const csv = [
     '배송처,condition,shippedbox,주소,customer,SellerOrderKey,latitude,longitude',
