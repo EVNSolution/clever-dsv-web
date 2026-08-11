@@ -8,8 +8,10 @@ import {
   cancelDispatchChangeRequest,
   clearDispatchTimeConstraint,
   confirmDispatchTimeConstraint,
+  deleteDispatchOrders,
   loadDispatchList,
   MAX_DISPATCH_ASSIGNMENT_COUNT,
+  MAX_DISPATCH_DELETE_COUNT,
   removeDispatchActiveRoute,
   reassignDispatchOrder,
   reassignDispatchOrders,
@@ -1347,6 +1349,26 @@ function DispatchWorkspace({
     else await unassignDispatchOrders(orders);
   }
 
+  async function deleteSelected(): Promise<void> {
+    if (selectedOrders.length === 0 || readOnly) return;
+    if (selectedOrders.length > MAX_DISPATCH_DELETE_COUNT) {
+      setMutationError(`배송 삭제는 한 번에 최대 ${MAX_DISPATCH_DELETE_COUNT}건까지 가능합니다.`);
+      return;
+    }
+    if (!window.confirm(`선택한 배송 ${selectedOrders.length}건을 영구 삭제합니다. 삭제 후에는 되돌릴 수 없습니다.`)) return;
+    setMutationBusy(true);
+    setMutationError('');
+    try {
+      await deleteDispatchOrders(selectedOrders, '관리자 배송 삭제');
+      clearSelection();
+      onAssignmentChanged?.();
+    } catch (caught) {
+      setMutationError(errorMessage(caught));
+    } finally {
+      setMutationBusy(false);
+    }
+  }
+
   async function confirmSelectedTimeConstraint(): Promise<void> {
     if (actionOrder === null || readOnly || !canEditDispatchTimeConstraint(actionOrder)) return;
     if (!isHardTimeRange(constraintStart, constraintEnd)) {
@@ -1796,6 +1818,7 @@ function DispatchWorkspace({
             {mutationError ? <p role="alert">{mutationError}</p> : null}
             <div>
               <button aria-label="배정 해제" className="btn" type="button" disabled={mutationBusy || readOnly || assignedSelectionCount === 0} onClick={() => void unassignSelected()}>배정 해제<span className="dispatch-action-count">{assignedSelectionCount}건</span></button>
+              <button aria-label="배송 삭제" className="btn danger" type="button" disabled={mutationBusy || readOnly || selectedOrders.length === 0} onClick={() => void deleteSelected()}>배송 삭제<span className="dispatch-action-count">{selectedOrders.length}건</span></button>
               <button aria-label={assignedSelectionCount > 0 ? '선택 이관' : '선택 배정'} className="btn primary" type="button" disabled={mutationBusy || readOnly || assignmentCandidates.length === 0 || selectedDriver === null || selectedVehicle === null} onClick={() => void assignSelected()}>
                 {mutationBusy ? '처리 중' : assignedSelectionCount > 0 ? '선택 이관' : '선택 배정'}
                 {!mutationBusy ? <span className="dispatch-action-count">{assignmentCandidates.length}건</span> : null}

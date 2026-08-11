@@ -2328,6 +2328,7 @@ test('keeps the v1 assignment-command legacy envelope exception bounded to the e
   expect(extractAllowlist(clientSource, 'assignmentCommandAllowlist')).toEqual([
     'POST seller-order-assignments/reassign',
     'POST seller-order-assignments/unassign',
+    'POST seller-order-deletions',
     'POST seller-orders/[^/]+/assignment/unassign',
     'POST seller-orders/[^/]+/assignment/reassign',
   ]);

@@ -204,7 +204,7 @@ test('dispatch keeps the driver workspace at a fixed desktop width', async ({ pa
   }
 
   const actionButtons = page.locator('.dispatch-assignment-action .btn');
-  await expect(actionButtons).toHaveCount(2);
+  await expect(actionButtons).toHaveCount(3);
   expect(await actionButtons.evaluateAll((buttons) => buttons.every((button) => (
     getComputedStyle(button).whiteSpace === 'nowrap' && button.scrollWidth <= button.clientWidth
   )))).toBe(true);
