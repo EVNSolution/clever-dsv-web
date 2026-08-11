@@ -434,7 +434,16 @@ function previewLocally(input: DispatchImportInput): DispatchImportPreview {
       ['conditionCode', row.conditionCode], ['address', row.address], ['customerCode', row.customerCode],
       ['sellerOrderKey', row.sellerOrderKey],
     ] as const) if (!value) issues.push(errorIssue('REQUIRED', field, '필수 값입니다.'));
-    if (!Number.isInteger(row.shippedBoxes) || row.shippedBoxes <= 0) issues.push(errorIssue('SHIPPED_BOXES_INVALID', 'shippedBoxes', '박스 수량은 1 이상의 정수여야 합니다.'));
+    if (!Number.isInteger(row.shippedBoxes) || row.shippedBoxes < 0) {
+      issues.push(errorIssue('SHIPPED_BOXES_INVALID', 'shippedBoxes', '박스 수량은 0 이상의 정수여야 합니다.'));
+    } else if (row.shippedBoxes === 0) {
+      issues.push({
+        code: 'SHIPPED_BOXES_ZERO',
+        field: 'shippedBoxes',
+        message: '같은 배송지의 다른 주문에 박스를 합산한 경우인지 확인하세요. 0박스로 업로드할 수 있습니다.',
+        severity: 'review',
+      });
+    }
     if (hasDriverName && drivers.length === 0) issues.push(errorIssue('DRIVER_NOT_FOUND', 'driverName', '등록된 배송원을 찾을 수 없습니다.'));
     if (drivers.length > 1) issues.push(errorIssue('DRIVER_AMBIGUOUS', 'driverName', '같은 이름의 배송원이 둘 이상입니다.'));
     if (hasDriverName && hasVehiclePlate && vehicles.length === 0) issues.push(errorIssue('VEHICLE_NOT_FOUND', 'vehiclePlate', '등록된 차량 번호를 찾을 수 없습니다.'));
@@ -453,14 +462,14 @@ function previewLocally(input: DispatchImportInput): DispatchImportPreview {
     };
   });
   const errorRows = rows.filter((row) => row.issues.some((issue) => issue.severity === 'error')).length;
-  const reviewRows = rows.filter((row) => row.issues.length > 0 && row.issues.every((issue) => issue.severity === 'review')).length;
+  const reviewRows = rows.filter((row) => row.issues.some((issue) => issue.severity === 'review')).length;
   return {
     canCommit: errorRows === 0,
     conditionCandidates,
     fileName: input.fileName,
     planDate: input.planDate,
     rows,
-    summary: { errorRows, readyRows: rows.length - errorRows - reviewRows, reviewRows, totalRows: rows.length },
+    summary: { errorRows, readyRows: rows.length - errorRows, reviewRows, totalRows: rows.length },
   };
 }
 

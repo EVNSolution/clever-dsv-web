@@ -527,7 +527,7 @@ function rawDispatch(value: unknown): RawDispatch {
   if (value.customerNotificationEmailRecipient !== undefined && typeof value.customerNotificationEmailRecipient !== 'string') {
     throw new Error('배차 항목의 customerNotificationEmailRecipient 필드가 올바르지 않습니다.');
   }
-  if (value.shippedBoxes !== undefined && (!Number.isInteger(value.shippedBoxes) || (value.shippedBoxes as number) < 1)) {
+  if (value.shippedBoxes !== undefined && (!Number.isInteger(value.shippedBoxes) || (value.shippedBoxes as number) < 0)) {
     throw new Error('배차 항목의 shippedBoxes 필드가 올바르지 않습니다.');
   }
   if (value.reviewStatus !== undefined && !isReviewStatus(value.reviewStatus)) throw new Error('배차 항목의 reviewStatus 필드가 올바르지 않습니다.');

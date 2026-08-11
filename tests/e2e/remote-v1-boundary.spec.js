@@ -1014,7 +1014,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
           routeStopSequence: 6,
           sellerOrderId: 'seller-order-g006-control-2',
           sellerOrderKey: 'SELLER-G006-CONTROL-2',
-          shippedBoxes: 2,
+          shippedBoxes: 0,
           vehicleId: 'vehicle-g006-scheduled',
         },
         {
@@ -1291,11 +1291,17 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await expect(page.getByLabel('배송지 순서 1')).toHaveCSS('background-color', 'rgb(31, 139, 76)');
   await expect(page.locator('#destinationCard .control-destination-row')).toContainText('2건');
   const destinationRow = page.locator('#destinationCard .control-destination-row');
+  await expect(destinationRow.locator('.control-destination-order-count')).toContainText('총 4박스');
   await expect(destinationRow).toHaveAttribute('aria-expanded', 'false');
   await expect(destinationRow.locator('.control-destination-details')).toHaveCount(0);
   await destinationRow.click();
   await expect(destinationRow).toHaveClass(/selected/u);
   await expect(destinationRow).toHaveAttribute('aria-expanded', 'true');
+  await expect.poll(async () => destinationRow.evaluate((element) => {
+    const details = element.querySelector('.control-destination-details')?.getBoundingClientRect();
+    const row = element.getBoundingClientRect();
+    return details !== undefined && row.bottom >= details.bottom;
+  })).toBe(true);
   await expect(page.getByLabel('배송지 순서 1')).toHaveCSS('background-color', 'rgb(31, 139, 76)');
   const destinationDetails = destinationRow.locator('.control-destination-details');
   await expect(destinationDetails).toBeVisible();
@@ -1305,7 +1311,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await expect(destinationDetails).toContainText('운영 상태 COLD');
   await expect(destinationDetails).toContainText('박스 4박스');
   await expect(destinationDetails).toContainText('운영 상태 AMBIENT');
-  await expect(destinationDetails).toContainText('박스 2박스');
+  await expect(destinationDetails).toContainText('박스 0박스');
   await expect(destinationDetails).not.toContainText('STOP_ARRIVED');
   await expect(destinationDetails.locator('.control-detail-value').first()).toHaveCSS('white-space', 'normal');
   await expect.poll(() => page.evaluate(() => ({
@@ -1699,7 +1705,7 @@ test('loads the administrator customer map through the customer-scoped contract'
             etaStatus: 'READY',
             estimatedArrivalAt: '2026-08-03T03:30:00.000Z',
             proofStatus: 'NONE',
-            shippedBoxes: 3,
+            shippedBoxes: 0,
             eventSummary: [],
             latitude: 37.5663,
             longitude: 126.9779,
@@ -1746,6 +1752,7 @@ test('loads the administrator customer map through the customer-scoped contract'
   await destination.click();
   await expect(destination).toHaveAttribute('aria-expanded', 'true');
   await expect(destination).toContainText('SELLER-G006-MAP');
+  await expect(destination).toContainText('0박스');
   await destination.click();
   await expect(destination).toHaveAttribute('aria-expanded', 'false');
   await expect(destination).not.toContainText('SELLER-G006-MAP');

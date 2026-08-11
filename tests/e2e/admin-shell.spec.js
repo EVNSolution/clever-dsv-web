@@ -388,8 +388,9 @@ test('dispatch upload exposes validation and can be cancelled', async ({ page })
   await firstBoxEditor.fill('0');
   await firstBoxEditor.press('Enter');
   await expect(firstBoxCell).toHaveText('0');
-  await expect(firstBoxCell.locator('..')).toHaveClass(/is-error/u);
-  await expect(firstBoxCell.locator('..')).toHaveCSS('box-shadow', /rgb\(212, 59, 47\)/u);
+  await expect(firstBoxCell.locator('..')).toHaveClass(/is-warning/u);
+  await expect(firstBoxCell.locator('..')).toHaveCSS('box-shadow', /rgb\(217, 154, 0\)/u);
+  await expect(page.locator('.dispatch-upload-summary')).toContainText('주의 1');
   const cancelButton = uploadPanel.getByRole('button', { name: '취소', exact: true });
   const closeButton = uploadPanel.getByRole('button', { name: '닫기', exact: true });
   await expect(cancelButton).toBeVisible();
@@ -404,7 +405,8 @@ test('dispatch upload exposes validation and can be cancelled', async ({ page })
   await expect(issueDetails.locator('.dispatch-upload-toggle-open')).toBeHidden();
   await expect(issueDetails.locator('.dispatch-upload-toggle-close')).toBeVisible();
   const firstBoxIssue = issueDetails.locator('.dispatch-upload-issue-row').filter({ hasText: '2행' }).filter({ hasText: 'E열' });
-  await expect(firstBoxIssue).toContainText('박스 수량은 1 이상의 정수여야 합니다.');
+  await expect(firstBoxIssue).toHaveClass(/is-review/u);
+  await expect(firstBoxIssue).toContainText('0박스로 업로드할 수 있습니다.');
   await expect(issueDetails.locator('.dispatch-upload-issue-row').filter({ hasText: 'A열' }).first()).toContainText('등록된 배송원을 찾을 수 없습니다.');
   await expect(issueDetails.locator('.dispatch-upload-issue-row').filter({ hasText: 'B열' }).first()).toContainText('등록된 차량 번호를 찾을 수 없습니다.');
   await expect(issueDetails).toContainText('등록된 배송원을 찾을 수 없습니다.');
