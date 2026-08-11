@@ -394,12 +394,13 @@ test('session check remains visually silent', () => {
   expect(app).not.toContain('고객 세션 권한을 확인하고 있습니다.');
 });
 
-test('package dependency inventory is unchanged', () => {
+test('package dependency inventory remains explicit', () => {
   const manifest = JSON.parse(readRepo('package.json'));
   expect(Object.keys(manifest.dependencies).sort()).toEqual([
     '@vitejs/plugin-react',
     'lucide-react',
     'maplibre-gl',
+    'pdfjs-dist',
     'pretendard',
     'react',
     'react-day-picker',
