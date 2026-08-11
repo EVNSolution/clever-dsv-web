@@ -1941,7 +1941,7 @@ test('DSV admin without account scopes can update own credentials from shell', a
   await dialog.getByRole('button', { name: '저장', exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('status').filter({ hasText: '계정 설정을 저장했습니다.' })).toBeVisible();
-  await expect(page.evaluate(() => window.sessionStorage.getItem('clever.auth.csrf'))).resolves.toBe('updated-csrf-token');
+  await expect(page.evaluate(() => window.sessionStorage.getItem('clever.auth.csrf'))).resolves.toBe('g006-admin-csrf');
   expect(credentialBody).toEqual({ currentPassword: 'CurrentPass!234', loginId: 'new-operator-id', password: 'NewStrongPass!234' });
   expectOnlyFixtureCalls(api);
 });

@@ -20,6 +20,11 @@ import { loadControlRoutes } from '../services/control-routes';
 import type { ControlRouteResult } from '../services/control-routes';
 import { loadVehicleGpsTrailHistory } from '../services/control';
 import type { VehicleGpsTrailHistory } from '../services/control';
+import {
+  controlTrailBounds,
+  controlTrailSampleAt,
+  visibleTrailGeometryLines,
+} from '../features/control/control-trail-playback';
 import type { ManagementData } from '../demo/management';
 import type { DepartureLocation } from './DepartureMarker';
 import type { MapCanvasCenterRequest, MapCanvasPoint, MapCanvasRoute, MapCanvasVehiclePoint } from './MapCanvas';
@@ -85,6 +90,11 @@ export function AdminShell({
   const [controlMapCenterRequest, setControlMapCenterRequest] = useState<MapCanvasCenterRequest>();
   const [controlRouteResults, setControlRouteResults] = useState<ReadonlyMap<string, ControlRouteResult>>(new Map());
   const [controlVehicleTrail, setControlVehicleTrail] = useState<VehicleGpsTrailHistory>();
+  const [controlVehicleTrailError, setControlVehicleTrailError] = useState('');
+  const [controlTrailOpen, setControlTrailOpen] = useState(false);
+  const [controlTrailCursorMs, setControlTrailCursorMs] = useState<number>();
+  const [controlTrailPlaying, setControlTrailPlaying] = useState(false);
+  const [controlTrailFollow, setControlTrailFollow] = useState(false);
   const vehicleColors = useMemo(
     () => controlVehicleColorMap(controlManagement?.vehicles ?? [], controlOrders),
     [controlManagement, controlOrders],
@@ -106,9 +116,16 @@ export function AdminShell({
     ),
     [controlManagement, controlRouteRequests, controlRouteResults, controlServiceDate, selectedControlVehicleId],
   );
+  const controlTrailRange = useMemo(() => controlTrailBounds(controlVehicleTrail), [controlVehicleTrail]);
+  const controlTrailPlaybackSample = useMemo(
+    () => controlTrailSampleAt(controlVehicleTrail, controlTrailOpen ? controlTrailCursorMs : undefined),
+    [controlTrailCursorMs, controlTrailOpen, controlVehicleTrail],
+  );
   const controlTrailRoutes = useMemo(
-    () => controlVehicleTrail === undefined ? [] : vehicleGpsTrailMapRoutes(controlVehicleTrail),
-    [controlVehicleTrail],
+    () => controlVehicleTrail === undefined
+      ? []
+      : vehicleGpsTrailMapRoutes(controlVehicleTrail, controlTrailOpen ? controlTrailCursorMs : undefined),
+    [controlTrailCursorMs, controlTrailOpen, controlVehicleTrail],
   );
   const controlEstimatedArrivalByOrderId = useMemo(
     () => configuredControlEtas(
@@ -120,16 +137,42 @@ export function AdminShell({
     ),
     [controlRouteRequests, controlRouteResults, controlServiceDate, controlSettings],
   );
-  const controlVehiclePoints = useMemo(
-    () => isTodayInSeoul(controlServiceDate)
+  const controlVehiclePoints = useMemo(() => {
+    const liveVehicles = isTodayInSeoul(controlServiceDate)
       ? controlVehicleMapPoints(controlOrders, departureLocation, vehicleColors, controlVehicleVisibility, controlManagement)
-      : [],
-    [controlManagement, controlOrders, controlServiceDate, controlVehicleVisibility, departureLocation, vehicleColors],
-  );
+      : [];
+    if (controlTrailPlaybackSample === undefined || selectedControlVehicleId === undefined) return liveVehicles;
+    const plate = controlManagement?.vehicles.find((vehicle) => vehicle.id === selectedControlVehicleId)?.plate ?? '차량';
+    return [...liveVehicles, {
+      color: '#d92d20',
+      id: `trail-playback:${selectedControlVehicleId}`,
+      interactive: false,
+      label: `${plate} ${formatControlTrailTime(controlTrailPlaybackSample.observedAt)}`,
+      latitude: controlTrailPlaybackSample.latitude,
+      longitude: controlTrailPlaybackSample.longitude,
+    }];
+  }, [
+    controlManagement,
+    controlOrders,
+    controlServiceDate,
+    controlTrailPlaybackSample,
+    controlVehicleVisibility,
+    departureLocation,
+    selectedControlVehicleId,
+    vehicleColors,
+  ]);
   const handleControlOrdersChange = useCallback((orders: DispatchListItem[], serviceDate?: string) => {
     setControlOrders(orders);
     setControlServiceDate(serviceDate);
   }, []);
+  const handleControlTrailToggle = useCallback(() => {
+    setControlTrailOpen((open) => {
+      const nextOpen = !open;
+      setControlTrailPlaying(false);
+      if (nextOpen) setControlTrailCursorMs(controlTrailRange?.startMs);
+      return nextOpen;
+    });
+  }, [controlTrailRange]);
 
   useEffect(() => {
     const compactViewport = window.matchMedia(compactNavigationQuery);
@@ -200,6 +243,7 @@ export function AdminShell({
   useEffect(() => {
     const controller = new AbortController();
     setControlVehicleTrail(undefined);
+    setControlVehicleTrailError('');
     if (
       apiConfig.mode !== 'remote'
       || selectedControlVehicleId === undefined
@@ -210,10 +254,51 @@ export function AdminShell({
         if (!controller.signal.aborted) setControlVehicleTrail(history);
       })
       .catch(() => {
-        if (!controller.signal.aborted) setControlVehicleTrail(undefined);
+        if (!controller.signal.aborted) {
+          setControlVehicleTrail(undefined);
+          setControlVehicleTrailError('차량 자취를 불러오지 못했습니다.');
+        }
       });
     return () => controller.abort();
   }, [controlServiceDate, selectedControlVehicleId]);
+
+  useEffect(() => {
+    setControlTrailOpen(false);
+    setControlTrailCursorMs(undefined);
+    setControlTrailPlaying(false);
+    setControlTrailFollow(false);
+  }, [controlServiceDate, selectedControlVehicleId]);
+
+  useEffect(() => {
+    if (!controlTrailOpen || controlTrailRange === undefined) return;
+    setControlTrailCursorMs((current) => current ?? controlTrailRange.startMs);
+  }, [controlTrailOpen, controlTrailRange]);
+
+  useEffect(() => {
+    if (!controlTrailOpen || !controlTrailPlaying || controlTrailRange === undefined) return undefined;
+    const timer = window.setInterval(() => {
+      setControlTrailCursorMs((current) => Math.min(
+        controlTrailRange.endMs,
+        (current ?? controlTrailRange.startMs) + 5 * 60_000,
+      ));
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [controlTrailOpen, controlTrailPlaying, controlTrailRange]);
+
+  useEffect(() => {
+    if (controlTrailRange !== undefined && controlTrailCursorMs === controlTrailRange.endMs) {
+      setControlTrailPlaying(false);
+    }
+  }, [controlTrailCursorMs, controlTrailRange]);
+
+  useEffect(() => {
+    if (!controlTrailOpen || !controlTrailFollow || controlTrailPlaybackSample === undefined) return;
+    setControlMapCenterRequest((current) => ({
+      id: (current?.id ?? 0) + 1,
+      latitude: controlTrailPlaybackSample.latitude,
+      longitude: controlTrailPlaybackSample.longitude,
+    }));
+  }, [controlTrailFollow, controlTrailOpen, controlTrailPlaybackSample]);
 
   useEffect(() => {
     if (activePath !== '/control' || previewOnly) {
@@ -364,6 +449,24 @@ export function AdminShell({
                   }}
                   selectedDestinationId={selectedControlDestinationId}
                   selectedVehicleId={selectedControlVehicleId}
+                  trailCursorMs={controlTrailCursorMs}
+                  trailError={controlVehicleTrailError}
+                  trailFollow={controlTrailFollow}
+                  trailOpen={controlTrailOpen}
+                  trailPlaying={controlTrailPlaying}
+                  trailRange={controlTrailRange}
+                  trailReady={controlTrailRange !== undefined}
+                  onTrailCursorChange={(cursorMs) => {
+                    setControlTrailCursorMs(cursorMs);
+                    setControlTrailPlaying(false);
+                  }}
+                  onTrailFollowChange={setControlTrailFollow}
+                  onTrailPlayingChange={setControlTrailPlaying}
+                  onTrailReset={() => {
+                    setControlTrailCursorMs(controlTrailRange?.startMs);
+                    setControlTrailPlaying(false);
+                  }}
+                  onTrailToggle={handleControlTrailToggle}
                   vehicleColors={vehicleColors}
                   vehicleVisibility={controlVehicleVisibility}
                   onVehicleVisibilityChange={setControlVehicleVisibility}
@@ -513,7 +616,7 @@ function assignedControlMapRoutes(
   });
 }
 
-function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory): MapCanvasRoute[] {
+function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory, cursorMs?: number): MapCanvasRoute[] {
   const sessions = [...history.sessions].sort((left, right) => {
     const timeOrder = Date.parse(left.startedAt) - Date.parse(right.startedAt);
     return timeOrder === 0 ? left.sessionIndex - right.sessionIndex : timeOrder;
@@ -525,21 +628,38 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory): MapCanvasRou
     sessionIndex: session.sessionIndex,
     sessionOrder,
   })));
-  const matchedLines = sessions.flatMap((session, sessionOrder) => session.segments.flatMap((segment, segmentOrder) => (
-    segment.roadMatchedGeometry?.coordinates.map((coordinates, lineOrder) => ({
-      coordinates,
-      lineOrder,
+  const lastMatchedLineId = sessions.flatMap((session) => session.segments.flatMap((segment, segmentOrder) => (
+    segment.roadMatchedGeometry?.coordinates.map((_, lineOrder) => (
+      `${session.routePlanId}:${session.sessionIndex}:${segmentOrder}:${lineOrder}`
+    )) ?? []
+  ))).at(-1);
+  const matchedLines = sessions.flatMap((session, sessionOrder) => session.segments.flatMap((segment, segmentOrder) => {
+    if (segment.roadMatchedGeometry === null || segment.roadMatchedGeometry === undefined) return [];
+    const geometry = segment.roadMatchedGeometry;
+    const segmentEndMs = Math.max(...segment.samples.map((sample) => Date.parse(sample.observedAt)).filter(Number.isFinite));
+    const lines = cursorMs === undefined
+      ? geometry.coordinates.map((coordinates, lineIndex) => ({ coordinates, lineIndex }))
+      : geometry.anchors === undefined
+        ? (Number.isFinite(segmentEndMs) && segmentEndMs <= cursorMs
+          ? geometry.coordinates.map((coordinates, lineIndex) => ({ coordinates, lineIndex }))
+          : [])
+        : visibleTrailGeometryLines(geometry, cursorMs);
+    return lines.map((line) => ({
+      complete: line.coordinates.length === geometry.coordinates[line.lineIndex]?.length,
+      coordinates: line.coordinates,
+      id: `${session.routePlanId}:${session.sessionIndex}:${segmentOrder}:${line.lineIndex}`,
+      lineOrder: line.lineIndex,
       routePlanId: session.routePlanId,
       segmentOrder,
       sessionIndex: session.sessionIndex,
       sessionOrder,
-    })) ?? []
-  )));
-  const matchedRoutes = matchedLines.map((line, index): MapCanvasRoute => ({
+    }));
+  }));
+  const matchedRoutes = matchedLines.map((line): MapCanvasRoute => ({
     color: '#d92d20',
     coordinates: line.coordinates,
     dashed: true,
-    endMarker: index < matchedLines.length - 1 ? 'interrupted' as const : 'end' as const,
+    ...(line.complete ? { endMarker: line.id === lastMatchedLineId ? 'end' as const : 'interrupted' as const } : {}),
     id: `vehicle-trail:${line.routePlanId}:${line.sessionIndex}:${line.segmentOrder}:${line.lineOrder}`,
     kind: 'trail' as const,
     selected: true,
@@ -547,7 +667,11 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory): MapCanvasRou
   }));
   const markerRoutes = orderedSegments.flatMap((entry, index) => {
     const { routePlanId, segment, segmentOrder, sessionIndex, sessionOrder } = entry;
-    if (segment.trailMarker === null || segment.trailMarker === undefined) return [];
+    if (
+      segment.trailMarker === null
+      || segment.trailMarker === undefined
+      || (cursorMs !== undefined && Date.parse(segment.trailMarker.observedAt) > cursorMs)
+    ) return [];
     const coordinate: [number, number] = [segment.trailMarker.longitude, segment.trailMarker.latitude];
     const previousSample = orderedSegments[index - 1]?.segment.samples.at(-1);
     const interruptedAt = previousSample?.observedAt;
@@ -570,6 +694,15 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory): MapCanvasRou
     }];
   });
   return [...matchedRoutes, ...markerRoutes];
+}
+
+function formatControlTrailTime(value: string): string {
+  return new Intl.DateTimeFormat('ko-KR', {
+    hour: '2-digit',
+    hour12: false,
+    minute: '2-digit',
+    timeZone: 'Asia/Seoul',
+  }).format(new Date(value));
 }
 
 function isTodayInSeoul(serviceDate?: string): boolean {

@@ -52,7 +52,7 @@ export async function updateVehicleMarkers(
     map.on('click', markerLayerId, (event) => {
       const feature = event.features?.[0];
       const vehicleId = feature?.properties?.vehicleId;
-      if (typeof vehicleId !== 'string' || feature?.geometry.type !== 'Point') return;
+      if (typeof vehicleId !== 'string' || feature?.properties?.interactive === false || feature?.geometry.type !== 'Point') return;
       const [longitude, latitude] = feature.geometry.coordinates;
       if (typeof longitude !== 'number' || typeof latitude !== 'number') return;
       onVehicleSelect?.(vehicleId, [longitude, latitude]);
@@ -70,6 +70,7 @@ function vehicleFeatures(vehicles: MapCanvasVehiclePoint[]): FeatureCollection<P
       type: 'Feature',
       properties: {
         label: vehicle.label,
+        interactive: vehicle.interactive !== false,
         markerImageId: markerImageId(vehicle.color),
         vehicleId: vehicle.id,
       },

@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, LocateFixed, Pause, Play, RotateCcw, X } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { loadControlSummary, loadVehicleTemperatureHistory } from '../services/control';
 import type { ControlSummary, VehicleTemperatureHistory, VehicleTemperatureSample } from '../services/control';
@@ -53,8 +53,20 @@ export function ControlPage({
   onDestinationSelect,
   onVehicleCenter,
   onVehicleSelect,
+  onTrailCursorChange,
+  onTrailFollowChange,
+  onTrailPlayingChange,
+  onTrailReset,
+  onTrailToggle,
   selectedDestinationId,
   selectedVehicleId,
+  trailCursorMs,
+  trailError = '',
+  trailFollow = false,
+  trailOpen = false,
+  trailPlaying = false,
+  trailRange,
+  trailReady = false,
   vehicleColors = new Map(),
   vehicleVisibility = 'ALL',
   onVehicleVisibilityChange,
@@ -65,8 +77,20 @@ export function ControlPage({
   onDestinationSelect?: (destinationId: string) => void;
   onVehicleCenter?: (latitude: number, longitude: number) => void;
   onVehicleSelect?: (vehicleId: string) => void;
+  onTrailCursorChange?: (cursorMs: number) => void;
+  onTrailFollowChange?: (follow: boolean) => void;
+  onTrailPlayingChange?: (playing: boolean) => void;
+  onTrailReset?: () => void;
+  onTrailToggle?: () => void;
   selectedDestinationId?: string;
   selectedVehicleId?: string;
+  trailCursorMs?: number;
+  trailError?: string;
+  trailFollow?: boolean;
+  trailOpen?: boolean;
+  trailPlaying?: boolean;
+  trailRange?: { endMs: number; startMs: number };
+  trailReady?: boolean;
   vehicleColors?: ReadonlyMap<string, string>;
   vehicleVisibility?: ControlVehicleVisibility;
   onVehicleVisibilityChange?: (visibility: ControlVehicleVisibility) => void;
@@ -80,8 +104,20 @@ export function ControlPage({
         onDestinationSelect={onDestinationSelect}
         onVehicleCenter={onVehicleCenter}
         onVehicleSelect={onVehicleSelect}
+        onTrailCursorChange={onTrailCursorChange}
+        onTrailFollowChange={onTrailFollowChange}
+        onTrailPlayingChange={onTrailPlayingChange}
+        onTrailReset={onTrailReset}
+        onTrailToggle={onTrailToggle}
         selectedDestinationId={selectedDestinationId}
         selectedVehicleId={selectedVehicleId}
+        trailCursorMs={trailCursorMs}
+        trailError={trailError}
+        trailFollow={trailFollow}
+        trailOpen={trailOpen}
+        trailPlaying={trailPlaying}
+        trailRange={trailRange}
+        trailReady={trailReady}
         vehicleColors={vehicleColors}
         vehicleVisibility={vehicleVisibility}
         onVehicleVisibilityChange={onVehicleVisibilityChange}
@@ -118,8 +154,20 @@ function RemoteControlPage({
   onDestinationSelect,
   onVehicleCenter,
   onVehicleSelect,
+  onTrailCursorChange,
+  onTrailFollowChange,
+  onTrailPlayingChange,
+  onTrailReset,
+  onTrailToggle,
   selectedDestinationId,
   selectedVehicleId,
+  trailCursorMs,
+  trailError,
+  trailFollow,
+  trailOpen,
+  trailPlaying,
+  trailRange,
+  trailReady,
   vehicleColors,
   vehicleVisibility,
   onVehicleVisibilityChange,
@@ -130,8 +178,20 @@ function RemoteControlPage({
   onDestinationSelect?: (destinationId: string) => void;
   onVehicleCenter?: (latitude: number, longitude: number) => void;
   onVehicleSelect?: (vehicleId: string) => void;
+  onTrailCursorChange?: (cursorMs: number) => void;
+  onTrailFollowChange?: (follow: boolean) => void;
+  onTrailPlayingChange?: (playing: boolean) => void;
+  onTrailReset?: () => void;
+  onTrailToggle?: () => void;
   selectedDestinationId?: string;
   selectedVehicleId?: string;
+  trailCursorMs?: number;
+  trailError: string;
+  trailFollow: boolean;
+  trailOpen: boolean;
+  trailPlaying: boolean;
+  trailRange?: { endMs: number; startMs: number };
+  trailReady: boolean;
   vehicleColors: ReadonlyMap<string, string>;
   vehicleVisibility: ControlVehicleVisibility;
   onVehicleVisibilityChange?: (visibility: ControlVehicleVisibility) => void;
@@ -220,6 +280,18 @@ function RemoteControlPage({
       selectedDestinationId={selectedDestinationId}
       selectedServiceDate={serviceDateFilter}
       selectedVehicleId={selectedVehicleId}
+      trailCursorMs={trailCursorMs}
+      trailError={trailError}
+      trailFollow={trailFollow}
+      trailOpen={trailOpen}
+      trailPlaying={trailPlaying}
+      trailRange={trailRange}
+      trailReady={trailReady}
+      onTrailCursorChange={onTrailCursorChange}
+      onTrailFollowChange={onTrailFollowChange}
+      onTrailPlayingChange={onTrailPlayingChange}
+      onTrailReset={onTrailReset}
+      onTrailToggle={onTrailToggle}
       vehicleColors={vehicleColors}
       vehicleVisibility={vehicleVisibility}
       onVehicleVisibilityChange={onVehicleVisibilityChange}
@@ -255,9 +327,21 @@ function ControlPanels({
   onVehicleCenter,
   onDestinationSelect,
   onServiceDateChange,
+  onTrailCursorChange,
+  onTrailFollowChange,
+  onTrailPlayingChange,
+  onTrailReset,
+  onTrailToggle,
   selectedDestinationId,
   selectedServiceDate,
   selectedVehicleId,
+  trailCursorMs,
+  trailError = '',
+  trailFollow = false,
+  trailOpen = false,
+  trailPlaying = false,
+  trailRange,
+  trailReady = false,
   vehicleColors = new Map(),
   vehicleVisibility = 'ALL',
   onVehicleVisibilityChange,
@@ -277,9 +361,21 @@ function ControlPanels({
   onVehicleCenter?: (latitude: number, longitude: number) => void;
   onDestinationSelect?: (destinationId: string) => void;
   onServiceDateChange?: (serviceDate: string) => void;
+  onTrailCursorChange?: (cursorMs: number) => void;
+  onTrailFollowChange?: (follow: boolean) => void;
+  onTrailPlayingChange?: (playing: boolean) => void;
+  onTrailReset?: () => void;
+  onTrailToggle?: () => void;
   selectedDestinationId?: string;
   selectedServiceDate?: string;
   selectedVehicleId?: string;
+  trailCursorMs?: number;
+  trailError?: string;
+  trailFollow?: boolean;
+  trailOpen?: boolean;
+  trailPlaying?: boolean;
+  trailRange?: { endMs: number; startMs: number };
+  trailReady?: boolean;
   vehicleColors?: ReadonlyMap<string, string>;
   vehicleVisibility?: ControlVehicleVisibility;
   onVehicleVisibilityChange?: (visibility: ControlVehicleVisibility) => void;
@@ -375,7 +471,7 @@ function ControlPanels({
     return () => window.clearInterval(timer);
   }, [selectedVehicle]);
 
-  return (
+  return <>
     <aside className={`side control-side${mobilePanel ? ' mobile-panel-active' : ''}`} aria-label="관제 운영 패널">
       {onServiceDateChange ? (
         <ServiceDateSelector
@@ -389,34 +485,37 @@ function ControlPanels({
           <section className="card panel expand-card control-vehicle-detail-panel" aria-label="차량 상세">
             <div className="tab-line section-heading">
               <span>차량 상세</span>
+              <button
+                aria-describedby={trailError ? 'controlTrailError' : undefined}
+                aria-pressed={trailOpen}
+                className="control-trail-toggle"
+                disabled={!trailReady}
+                onClick={onTrailToggle}
+                type="button"
+              >{trailOpen ? '자취 닫기' : '자취 보기'}</button>
             </div>
+            {trailError ? <p className="control-trail-error" id="controlTrailError" role="alert">{trailError}</p> : null}
             <div className="control-detail-card control-vehicle-detail-content">
-              <span className="control-vehicle-detail-compact"><small>차량 번호</small><b className="control-detail-value">{selectedVehicle.plate || '차량 번호 미등록'}</b></span>
-              <span className="control-vehicle-detail-primary"><small>차종</small><b className="control-detail-value">{selectedVehicle.type || '차종 미등록'}</b></span>
-              <span className="control-vehicle-detail-compact"><small>운행</small><b className="control-detail-value">{controlVehicleMotionText(selectedVehicle)}</b></span>
-              <span className="control-vehicle-detail-primary"><small>운전자</small><b className="control-detail-value">{selectedVehicleDrivers.join(', ')}</b></span>
-              <div className="control-vehicle-detail-section">
-                <span>
-                  <small>운송 조건</small>
-                  <b className="control-detail-value">{selectedVehicleConditions.join(', ')}</b>
-                </span>
-                <TelemetryRecency
-                  label="최근 위치 조회"
-                  now={telemetryClock}
-                  observedAt={selectedVehicle.vehiclePositionObservedAt}
-                  stale={selectedVehicle.vehiclePositionStale === true}
-                />
-              </div>
-              <div className="control-vehicle-detail-section">
+              <span><small>차량 번호</small><b className="control-detail-value">{selectedVehicle.plate || '차량 번호 미등록'}</b></span>
+              <span><small>운전자</small><b className="control-detail-value">{selectedVehicleDrivers.join(', ') || '미배정'}</b></span>
+              <span><small>운행</small><b className="control-detail-value">{controlVehicleMotionText(selectedVehicle)}</b></span>
+              <TelemetryRecency
+                label="최근 위치 조회"
+                now={telemetryClock}
+                observedAt={selectedVehicle.vehiclePositionObservedAt}
+                stale={selectedVehicle.vehiclePositionStale === true}
+              />
+              <details className="control-vehicle-secondary">
+                <summary>운송 정보</summary>
+                <span><small>차종</small><b className="control-detail-value">{selectedVehicle.type || '차종 미등록'}</b></span>
+                <span><small>운송 조건</small><b className="control-detail-value">{selectedVehicleConditions.join(', ') || '운송 조건 없음'}</b></span>
                 <span>
                   <small>배송 특이사항</small>
-                  {selectedVehicleInstructions.length ? (
-                    <ul className="control-detail-list">
-                      {selectedVehicleInstructions.map((instruction) => (
-                        <li key={instruction.id}><strong>{instruction.destination}</strong><span>{instruction.note}</span></li>
-                      ))}
-                    </ul>
-                  ) : <b className="control-detail-value">특이사항 없음</b>}
+                  {selectedVehicleInstructions.length ? <ul className="control-detail-list">
+                    {selectedVehicleInstructions.map((instruction) => (
+                      <li key={instruction.id}><strong>{instruction.destination}</strong><span>{instruction.note}</span></li>
+                    ))}
+                  </ul> : <b className="control-detail-value">특이사항 없음</b>}
                 </span>
                 <TelemetryRecency
                   label="최근 온도 조회"
@@ -424,7 +523,7 @@ function ControlPanels({
                   observedAt={selectedVehicle.temperatureObservedAt}
                   stale={selectedVehicle.temperatureStale === true}
                 />
-              </div>
+              </details>
             </div>
           </section>
         ) : null}
@@ -610,7 +709,94 @@ function ControlPanels({
         />
       ) : null}
     </aside>
+    {trailOpen && selectedVehicle ? (
+      <VehicleTrailTimeline
+        cursorMs={trailCursorMs}
+        follow={trailFollow}
+        onCursorChange={onTrailCursorChange}
+        onFollowChange={onTrailFollowChange}
+        onPlayingChange={onTrailPlayingChange}
+        onReset={onTrailReset}
+        playing={trailPlaying}
+        range={trailRange}
+        vehicleLabel={selectedVehicle.plate || '차량 번호 미등록'}
+      />
+    ) : null}
+  </>;
+}
+
+function VehicleTrailTimeline({
+  cursorMs,
+  follow,
+  onCursorChange,
+  onFollowChange,
+  onPlayingChange,
+  onReset,
+  playing,
+  range,
+  vehicleLabel,
+}: {
+  cursorMs?: number;
+  follow: boolean;
+  onCursorChange?: (cursorMs: number) => void;
+  onFollowChange?: (follow: boolean) => void;
+  onPlayingChange?: (playing: boolean) => void;
+  onReset?: () => void;
+  playing: boolean;
+  range?: { endMs: number; startMs: number };
+  vehicleLabel: string;
+}): ReactElement {
+  if (range === undefined) return <></>;
+  const cursor = Math.min(range.endMs, Math.max(range.startMs, cursorMs ?? range.startMs));
+  const togglePlayback = (): void => {
+    if (!playing && cursor >= range.endMs) onCursorChange?.(range.startMs);
+    onPlayingChange?.(!playing);
+  };
+  return (
+    <section className="control-trail-timeline" aria-label={`${vehicleLabel} 자취 타임라인`}>
+      <header>
+        <span><small>차량 자취</small><strong>{vehicleLabel}</strong></span>
+        <time dateTime={new Date(cursor).toISOString()}>{formatTrailTimelineTime(cursor)}</time>
+      </header>
+      <div className="control-trail-timeline__track">
+        <button
+          aria-label={playing ? '자취 재생 일시정지' : '자취 재생'}
+          className="control-trail-play"
+          onClick={togglePlayback}
+          type="button"
+        >{playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}</button>
+        <time>{formatTrailTimelineTime(range.startMs)}</time>
+        <input
+          aria-label="자취 시점"
+          max={range.endMs}
+          min={range.startMs}
+          onChange={(event) => onCursorChange?.(Number(event.currentTarget.value))}
+          step={60_000}
+          type="range"
+          value={cursor}
+        />
+        <time>{formatTrailTimelineTime(range.endMs)}</time>
+      </div>
+      <footer>
+        <button onClick={onReset} type="button"><RotateCcw aria-hidden="true" />처음</button>
+        <button
+          aria-pressed={follow}
+          className={follow ? 'active' : ''}
+          onClick={() => onFollowChange?.(!follow)}
+          type="button"
+        ><LocateFixed aria-hidden="true" />차량 따라가기</button>
+      </footer>
+    </section>
   );
+}
+
+function formatTrailTimelineTime(value: number): string {
+  return new Intl.DateTimeFormat('ko-KR', {
+    hour: '2-digit',
+    hour12: false,
+    minute: '2-digit',
+    timeZone: 'Asia/Seoul',
+  }).format(new Date(value));
 }
 
 function TelemetryRecency({

@@ -141,10 +141,22 @@
   overflow-wrap:anywhere; text-overflow:clip; white-space:normal;
 }
 .control-vehicle-detail-panel {
-  position:absolute; right:calc(100% + 14px); top:0; width:340px; max-height:100%; z-index:2;
+  position:absolute; right:calc(100% + 14px); top:0; width:236px; max-height:100%; z-index:2;
   padding:16px; overflow:auto; background:rgba(255,255,255,.97); backdrop-filter:blur(18px);
 }
-.control-vehicle-detail-content { grid-template-columns:86px minmax(0, 1fr); gap:8px; padding:9px 10px; }
+.control-trail-toggle {
+  min-height:30px; border:1px solid var(--color-control-border); border-radius:9px; padding:0 9px;
+  background:var(--color-white); color:var(--color-ink); cursor:pointer; font:850 11px/1 var(--font-sans); white-space:nowrap;
+}
+.control-trail-toggle:hover:not(:disabled) { border-color:var(--color-primary); color:var(--color-primary); }
+.control-trail-toggle:disabled { cursor:not-allowed; opacity:.45; }
+.control-trail-toggle[aria-pressed="true"] { border-color:var(--color-black); background:var(--color-black); color:var(--color-white); }
+.control-trail-error { margin:0; padding:8px 12px 0; color:var(--color-danger); font-size:11px; font-weight:800; }
+.control-vehicle-detail-content { grid-template-columns:1fr; gap:8px; padding:9px 10px; }
+.control-vehicle-secondary { display:grid; gap:9px; padding-top:2px; border-top:1px solid var(--color-border); }
+.control-vehicle-secondary summary { padding:8px 0 0; color:var(--color-muted); cursor:pointer; font-size:10px; font-weight:850; }
+.control-vehicle-secondary[open] { padding-bottom:2px; }
+.control-vehicle-secondary[open] > span { margin-top:8px; }
 .control-vehicle-detail-primary .control-detail-value { white-space:nowrap; }
 .control-vehicle-detail-section {
   grid-column:1 / -1; min-width:0; display:grid; grid-template-columns:86px minmax(0, 1fr); gap:8px; align-items:end;
@@ -174,6 +186,29 @@
   cursor:pointer; font:850 11px/1 var(--font-sans); white-space:nowrap;
 }
 .control-temperature-button:hover { border-color:var(--control-route-color); color:var(--control-route-color); }
+.control-trail-timeline {
+  position:fixed; left:116px; right:414px; bottom:22px; z-index:6; min-width:0; display:grid; gap:10px;
+  padding:12px 14px; border:1px solid var(--color-border); border-radius:16px; background:rgba(255,255,255,.97);
+  color:var(--color-ink); box-shadow:0 14px 40px rgba(0,0,0,.14); backdrop-filter:blur(18px);
+}
+.nav-expanded .control-trail-timeline { left:236px; }
+.control-trail-timeline header { display:flex; align-items:end; justify-content:space-between; gap:12px; }
+.control-trail-timeline header span { min-width:0; display:flex; align-items:baseline; gap:8px; }
+.control-trail-timeline header small { color:var(--color-muted); font-size:10px; font-weight:800; }
+.control-trail-timeline header strong { overflow:hidden; font-size:13px; font-weight:950; text-overflow:ellipsis; white-space:nowrap; }
+.control-trail-timeline header time { font-size:17px; font-weight:950; font-variant-numeric:tabular-nums; }
+.control-trail-timeline__track { display:grid; grid-template-columns:34px auto minmax(0, 1fr) auto; gap:10px; align-items:center; }
+.control-trail-timeline__track time { color:var(--color-muted); font-size:10px; font-weight:850; font-variant-numeric:tabular-nums; }
+.control-trail-timeline__track input { width:100%; accent-color:var(--color-black); cursor:pointer; }
+.control-trail-play { width:34px; height:34px; display:grid; place-items:center; border:0; border-radius:10px; background:var(--color-black); color:var(--color-white); cursor:pointer; }
+.control-trail-play svg { width:15px; height:15px; fill:currentColor; }
+.control-trail-timeline footer { display:flex; justify-content:flex-end; gap:7px; }
+.control-trail-timeline footer button {
+  min-height:30px; display:inline-flex; align-items:center; gap:5px; border:1px solid var(--color-border); border-radius:9px; padding:0 9px;
+  background:var(--color-white); color:var(--color-muted); cursor:pointer; font:800 10px/1 var(--font-sans);
+}
+.control-trail-timeline footer button.active { border-color:var(--color-primary); background:var(--color-primary-soft); color:var(--color-primary); }
+.control-trail-timeline footer svg { width:13px; height:13px; }
 .temperature-dialog-backdrop {
   position:fixed; inset:0; z-index:30; display:grid; place-items:center; padding:20px; background:rgba(16,20,24,.38);
 }

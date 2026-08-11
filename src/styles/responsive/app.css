@@ -37,6 +37,8 @@
   .side { position: relative; inset: auto; width: auto; height: auto; min-height: 0; margin: 14px 12px 20px; overflow: visible; }
   .panel-view { height: auto; grid-template-rows: none; }
   .control-vehicle-detail-panel { position:static; right:auto; top:auto; width:auto; max-height:none; }
+  .control-trail-timeline { left:100px; right:24px; bottom:18px; }
+  .page.nav-expanded .control-trail-timeline { left:230px; }
   #fleetList { max-height: 360px; }
   .page-content {
     position:relative; inset:auto; margin:12px 12px 12px 100px; padding:0 12px;
@@ -112,6 +114,10 @@
   .page:not(.static-page) .grid { height:100%; }
   .page:not(.static-page) .map-card { position:fixed; inset:0; width:100vw; height:100vh; height:100dvh; min-height:0; }
   .page:not(.static-page) .map-card.embedded { position:relative; inset:auto; width:100%; height:100%; min-height:260px; }
+  .control-trail-timeline,
+  .page.nav-expanded .control-trail-timeline { left:12px; right:12px; bottom:82px; z-index:28; }
+  .control-trail-timeline__track { grid-template-columns:34px minmax(0, 1fr); }
+  .control-trail-timeline__track > time { display:none; }
   .left-tabs {
     position:fixed; left:12px; right:auto; top:12px; bottom:auto; z-index:30;
     width:196px; height:56px; padding:8px 6px; overflow:visible;
