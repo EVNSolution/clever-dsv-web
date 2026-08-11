@@ -1049,9 +1049,11 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' }).getByRole('button', { name: '온도', exact: true }).click();
   const temperatureDialog = page.getByRole('dialog', { name: '99테 6006 온도' });
   await expect(temperatureDialog).toBeVisible();
-  await expect(temperatureDialog.getByRole('img', { name: '전날부터 최근 수신까지 차량 온도 A 채널과 B 채널 꺾은선 차트' })).toBeVisible();
-  await expect(temperatureDialog).toContainText('A 채널');
-  await expect(temperatureDialog).toContainText('B 채널');
+  await expect(temperatureDialog.getByRole('img', { name: '전날부터 최근 수신까지 차량 온도 꺾은선 차트' })).toBeVisible();
+  await expect(temperatureDialog).not.toContainText('A 채널');
+  await expect(temperatureDialog).not.toContainText('B 채널');
+  await expect(temperatureDialog.locator('.temperature-legend')).toHaveText('온도');
+  await expect(temperatureDialog.locator('.temperature-point')).toHaveCount(4);
   await expect(temperatureDialog.getByLabel('온도 수집 시간표')).toContainText('5분');
   await expect(temperatureDialog.locator('.temperature-grid-x.temperature-grid-minor').first()).toBeAttached();
   await expect(temperatureDialog.locator('.temperature-grid-x.temperature-grid-major').first()).toBeAttached();
@@ -1069,8 +1071,9 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   const temperatureTooltip = temperatureDialog.getByRole('tooltip');
   await expect(temperatureTooltip).toBeVisible();
   await expect(temperatureTooltip).toContainText('수집 시각');
-  await expect(temperatureTooltip).toContainText('A 채널');
-  await expect(temperatureTooltip).toContainText('B 채널');
+  await expect(temperatureTooltip).toContainText('온도');
+  await expect(temperatureTooltip).not.toContainText('A 채널');
+  await expect(temperatureTooltip).not.toContainText('B 채널');
   await expect(temperatureTooltip).toContainText('이 시점 배송 온도 기준');
   await expect(temperatureTooltip).toContainText('COLD');
   await expect(temperatureTooltip).toContainText('AMBIENT');

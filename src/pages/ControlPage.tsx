@@ -949,10 +949,9 @@ function TemperatureChart({
   const yAxisRef = useRef<SVGSVGElement>(null);
   const [hoveredSample, setHoveredSample] = useState<VehicleTemperatureSample>();
   const channels = [
-    { key: 'temperatureA' as const, label: 'A 채널', color: 'var(--color-primary)' },
-    { key: 'temperatureB' as const, label: 'B 채널', color: 'var(--color-risk)' },
+    { key: 'temperatureA' as const, label: '온도', color: 'var(--color-primary)' },
   ];
-  const values = samples.flatMap((sample) => [sample.temperatureA, sample.temperatureB]).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  const values = samples.map((sample) => sample.temperatureA).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
   const timeframe = samples.length ? `${formatTemperatureTooltipTime(samples[0].observedAt)} ~ ${formatTemperatureTooltipTime(samples[samples.length - 1].observedAt)}` : '수집 기록 없음';
   const hasTemperatureData = samples.length > 0 && values.length > 0;
   const fiveMinutes = 5 * 60 * 1000;
@@ -1040,11 +1039,11 @@ function TemperatureChart({
         <div className="temperature-chart-scroll" onScroll={syncTemperatureAxes} ref={scrollRef}>
           <div className="temperature-chart-plot" style={{ height: `${height}px`, width: `${width}px` }}>
             <svg
-              aria-label="전날부터 최근 수신까지 차량 온도 A 채널과 B 채널 꺾은선 차트"
+              aria-label="전날부터 최근 수신까지 차량 온도 꺾은선 차트"
               role="img"
               viewBox={`0 0 ${width} ${height}`}
             >
-            <desc>A 채널과 B 채널을 5분 수집 포인트와 꺾은선으로 표시하고 운영 상태별 온도 범위를 투명 영역으로 구분합니다.</desc>
+            <desc>냉동 배송 위치의 온도를 5분 수집 포인트와 꺾은선으로 표시하고 운영 상태별 온도 범위를 투명 영역으로 구분합니다.</desc>
           {temperatureBands.map((band) => (
             <rect
               className="temperature-condition-band"
@@ -1170,8 +1169,7 @@ function TemperatureSampleTooltip({
         <strong>{formatTemperatureTooltipTime(sample.observedAt)}</strong>
       </div>
       <div className="temperature-sample-readings">
-        <span><small>A 채널</small><b>{formatTemperatureReading(sample.temperatureA)}</b></span>
-        <span><small>B 채널</small><b>{formatTemperatureReading(sample.temperatureB)}</b></span>
+        <span><small>온도</small><b>{formatTemperatureReading(sample.temperatureA)}</b></span>
       </div>
       <section>
         <strong>이 시점 배송 온도 기준</strong>
@@ -1374,19 +1372,17 @@ function assessTemperatureSample(
   sample: VehicleTemperatureSample,
   band: TemperatureConditionBand,
 ): { label: string; risk: boolean } {
-  const assessments = [
-    ['A', sample.temperatureA],
-    ['B', sample.temperatureB],
-  ].map(([channel, rawValue]) => {
-    const value = rawValue as number | null;
-    if (typeof value !== 'number' || !Number.isFinite(value)) return `${channel} 미수신`;
-    if (value < band.minimum) return `${channel} ${(band.minimum - value).toFixed(1)}℃ 미달`;
-    if (value > band.maximum) return `${channel} ${(value - band.maximum).toFixed(1)}℃ 초과`;
-    return `${channel} 기준 내`;
-  });
+  const value = sample.temperatureA;
+  const assessment = typeof value !== 'number' || !Number.isFinite(value)
+    ? '미수신'
+    : value < band.minimum
+      ? `${(band.minimum - value).toFixed(1)}℃ 미달`
+      : value > band.maximum
+        ? `${(value - band.maximum).toFixed(1)}℃ 초과`
+        : '기준 내';
   return {
-    label: assessments.join(' · '),
-    risk: assessments.some((assessment) => assessment.includes('미달') || assessment.includes('초과')),
+    label: assessment,
+    risk: assessment.includes('미달') || assessment.includes('초과'),
   };
 }
 
@@ -1395,17 +1391,6 @@ function controlVehicleMotionText(vehicle: ManagementData['vehicles'][number]): 
   if (vehicle.vehicleStopped === true) return '정차';
   if (vehicle.vehicleStopped === false) return '이동';
   return '운행 미확인';
-}
-
-function controlTemperaturePairText(vehicle: ManagementData['vehicles'][number]): string {
-  const temperatureA = controlTemperatureText(vehicle.temperatureA);
-  const temperatureB = controlTemperatureText(vehicle.temperatureB);
-  if (temperatureA === '미수신' && temperatureB === '미수신') return '온도 미수신';
-  return `A ${temperatureA} B ${temperatureB}`;
-}
-
-function controlTemperatureText(value: number | null | undefined): string {
-  return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}℃` : '미수신';
 }
 
 function customerFirstEta(orders: DispatchListItem[], configuredEtas: ReadonlyMap<string, string>): string {
