@@ -1,5 +1,7 @@
 const { defineConfig } = require('@playwright/test');
 
+const port = Number(process.env.PLAYWRIGHT_PORT ?? 4174);
+
 module.exports = defineConfig({
   testDir: './tests/e2e',
   testIgnore: [
@@ -9,12 +11,12 @@ module.exports = defineConfig({
   timeout: 30_000,
   workers: 1,
   use: {
-    baseURL: 'http://127.0.0.1:4174',
+    baseURL: `http://127.0.0.1:${port}`,
     viewport: { width: 1440, height: 900 },
   },
   webServer: {
-    command: 'npm run build && npm run preview',
-    url: 'http://127.0.0.1:4174',
+    command: `npm run build && npm exec vite -- preview --host 0.0.0.0 --port ${port}`,
+    url: `http://127.0.0.1:${port}`,
     reuseExistingServer: false,
     timeout: 120_000,
   },

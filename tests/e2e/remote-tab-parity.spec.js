@@ -31,6 +31,7 @@ const mapProviderProfile = {
   version: '2026-07',
 };
 const demoIdentifierPattern = /DSV-2026-0709-(?:01|02)|DSV-SCHEDULED-03|CR-(?:101|204|207|303|330|410)|(?:11바 1201|12바 2302|13사 3403|14자 4504|15바 5605|21사 6101|22자 6202|23바 6303|24사 6404|31자 7104|32바 7207|33사 7311|34자 7412)|김도윤|역삼 진단센터/iu;
+const guidePdf = Buffer.from('JVBERi0xLjMKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgKG9wZW5zb3VyY2UpCjEgMCBvYmoKPDwKL0YxIDIgMCBSIC9GMiAzIDAgUgo+PgplbmRvYmoKMiAwIG9iago8PAovQmFzZUZvbnQgL0hlbHZldGljYSAvRW5jb2RpbmcgL1dpbkFuc2lFbmNvZGluZyAvTmFtZSAvRjEgL1N1YnR5cGUgL1R5cGUxIC9UeXBlIC9Gb250Cj4+CmVuZG9iagozIDAgb2JqCjw8Ci9CYXNlRm9udCAvSGVsdmV0aWNhLUJvbGQgL0VuY29kaW5nIC9XaW5BbnNpRW5jb2RpbmcgL05hbWUgL0YyIC9TdWJ0eXBlIC9UeXBlMSAvVHlwZSAvRm9udAo+PgplbmRvYmoKNCAwIG9iago8PAovQ29udGVudHMgMTAgMCBSIC9NZWRpYUJveCBbIDAgMCA4NDIgNTk1IF0gL1BhcmVudCA5IDAgUiAvUmVzb3VyY2VzIDw8Ci9Gb250IDEgMCBSIC9Qcm9jU2V0IFsgL1BERiAvVGV4dCAvSW1hZ2VCIC9JbWFnZUMgL0ltYWdlSSBdCj4+IC9Sb3RhdGUgMCAvVHJhbnMgPDwKCj4+IAogIC9UeXBlIC9QYWdlCj4+CmVuZG9iago1IDAgb2JqCjw8Ci9PdXRsaW5lcyA3IDAgUiAvUGFnZU1vZGUgL1VzZU5vbmUgL1BhZ2VzIDkgMCBSIC9UeXBlIC9DYXRhbG9nCj4+CmVuZG9iago2IDAgb2JqCjw8Ci9BdXRob3IgKGFub255bW91cykgL0NyZWF0aW9uRGF0ZSAoRDoyMDI2MDgxMTE4MTkyNCswOScwMCcpIC9DcmVhdG9yIChhbm9ueW1vdXMpIC9LZXl3b3JkcyAoKSAvTW9kRGF0ZSAoRDoyMDI2MDgxMTE4MTkyNCswOScwMCcpIC9Qcm9kdWNlciAoUmVwb3J0TGFiIFBERiBMaWJyYXJ5IC0gXChvcGVuc291cmNlXCkpIAogIC9TdWJqZWN0ICh1bnNwZWNpZmllZCkgL1RpdGxlIChDTEVWRVIgRFNWIFRlc3QgR3VpZGUpIC9UcmFwcGVkIC9GYWxzZQo+PgplbmRvYmoKNyAwIG9iago8PAovQ291bnQgMSAvRmlyc3QgOCAwIFIgL0xhc3QgOCAwIFIgL1R5cGUgL091dGxpbmVzCj4+CmVuZG9iago4IDAgb2JqCjw8Ci9EZXN0IFsgNCAwIFIgL0ZpdCBdIC9QYXJlbnQgNyAwIFIgL1RpdGxlIChcMzc2XDM3N1wwMDAxXDAwMC5cMDAwIFwzMDJcMzM0XDMwN1wyMjFcMzI1WFwyNTYwKQo+PgplbmRvYmoKOSAwIG9iago8PAovQ291bnQgMSAvS2lkcyBbIDQgMCBSIF0gL1R5cGUgL1BhZ2VzCj4+CmVuZG9iagoxMCAwIG9iago8PAovRmlsdGVyIFsgL0FTQ0lJODVEZWNvZGUgL0ZsYXRlRGVjb2RlIF0gL0xlbmd0aCAxODkKPj4Kc3RyZWFtCkdhcm85NW1yOTAnU1ByU01FK11Cby5AImcwIjIqS2pqU1JYY2UoSmQ7Pl43RCclSjk0TD5iNEE2XHElaURxYj4/YHFEcUciYD9SZGVETT0kIjQlXkhJVzpYLWwnS2snWXU/SVIjaSZtM2FBJDR1YUdMPTlaJkRWLGNISTJTI0IpZjdqaSx0JnEuJWxGbHRxSS9CYjkmSDxzclVmJWlJKEVpIzY3M1VbKCJrXXEmP2tgaCpKPTpXS0ZsUU5+PmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDExCjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDA2MSAwMDAwMCBuIAowMDAwMDAwMTAyIDAwMDAwIG4gCjAwMDAwMDAyMDkgMDAwMDAgbiAKMDAwMDAwMDMyMSAwMDAwMCBuIAowMDAwMDAwNTE1IDAwMDAwIG4gCjAwMDAwMDA1OTkgMDAwMDAgbiAKMDAwMDAwMDg3MyAwMDAwMCBuIAowMDAwMDAwOTQ0IDAwMDAwIG4gCjAwMDAwMDEwNTkgMDAwMDAgbiAKMDAwMDAwMTExOCAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9JRCAKWzw1NTdhZmVhMzcxNDJmZTE1MzQ4ZDk1ZjFlNzQzOTA3ZD48NTU3YWZlYTM3MTQyZmUxNTM0OGQ5NWYxZTc0MzkwN2Q+XQolIFJlcG9ydExhYiBnZW5lcmF0ZWQgUERGIGRvY3VtZW50IC0tIGRpZ2VzdCAob3BlbnNvdXJjZSkKCi9JbmZvIDYgMCBSCi9Sb290IDUgMCBSCi9TaXplIDExCj4+CnN0YXJ0eHJlZgoxMzk4CiUlRU9GCg==', 'base64');
 
 function v1Envelope(data, requestId = 'g006-parity-request') {
   return { data, meta: v1Meta, requestId };
@@ -114,6 +115,20 @@ async function installApiFixtures(page, fixtures) {
     });
   });
   return { calls, unexpected };
+}
+
+async function installGuideFixture(page) {
+  await page.route('**/api/dsv/guides/operator*', async (route) => {
+    await route.fulfill({
+      body: guidePdf,
+      contentType: 'application/pdf',
+      headers: {
+        'accept-ranges': 'bytes',
+        'cache-control': 'private, no-store',
+      },
+      status: 200,
+    });
+  });
 }
 
 async function seedSentinel(page, key, value) {
@@ -1736,6 +1751,57 @@ test('settings renders the complete backend defaults', async ({ page }) => {
   await expect(page.getByRole('checkbox', { name: '배송원에게 전달' })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: '기록 페이지에 표시' })).toBeChecked();
   await expect(page.getByRole('tab', { name: '계정' })).toHaveCount(0);
+  expectOnlyFixtureCalls(api);
+});
+
+test('settings opens the protected guide with outline, paging, search, and file actions', async ({ page }) => {
+  const api = await installApiFixtures(page, adminFixtures({
+    'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings()),
+  }));
+  await installGuideFixture(page);
+
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '사용자 가이드', exact: true }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'CLEVER DSV 사용자 가이드' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('현재 페이지')).toHaveValue('1');
+  await expect(dialog.getByText('/ 1', { exact: true })).toBeVisible();
+  await expect(dialog.locator('.user-guide-pdf-viewer .page[data-page-number="1"] canvas')).toBeVisible();
+  await expect(dialog.getByRole('complementary', { name: '사용자 가이드 목차' })).toContainText('1페이지');
+  await expect(dialog.getByRole('link', { name: '새 창' })).toHaveAttribute('href', '/api/dsv/guides/operator');
+  await expect(dialog.getByRole('link', { name: '다운로드' })).toHaveAttribute('href', '/api/dsv/guides/operator?download=1');
+
+  await dialog.getByRole('button', { name: '페이지', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: '페이지', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await dialog.getByLabel('가이드 검색').fill('CLEVER');
+  await dialog.getByRole('button', { name: '다음 검색 결과' }).click();
+  await expect(dialog.getByText('1 / 1', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: '사용자 가이드 닫기' }).click();
+  await expect(dialog).toHaveCount(0);
+  expectOnlyFixtureCalls(api);
+});
+
+test('settings guide uses a full-screen mobile viewer and an overlay outline', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const api = await installApiFixtures(page, adminFixtures({
+    'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings()),
+  }));
+  await installGuideFixture(page);
+
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '사용자 가이드', exact: true }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'CLEVER DSV 사용자 가이드' });
+  await expect(dialog.locator('.user-guide-pdf-viewer .page[data-page-number="1"] canvas')).toBeVisible();
+  const box = await dialog.boundingBox();
+  expect(box).toMatchObject({ x: 0, width: 390 });
+  expect(box.height).toBeGreaterThanOrEqual(843);
+  await expect(dialog.getByRole('button', { name: '목차 닫기' })).toBeHidden();
+  await dialog.getByRole('button', { name: '목차' }).click();
+  await expect(dialog.getByRole('button', { name: '목차 닫기' })).toBeVisible();
+  await dialog.getByRole('button', { name: '목차 닫기' }).click();
+  await expect(dialog.getByRole('button', { name: '목차 닫기' })).toBeHidden();
   expectOnlyFixtureCalls(api);
 });
 

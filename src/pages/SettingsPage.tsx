@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { BookOpen } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { AdminAccountsPanel } from '../components/AdminAccountsPanel';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
@@ -17,6 +18,7 @@ import {
 import type { AdminSettings, OperationalSettings } from '../services/settings';
 
 const DepartureLocationMap = lazy(() => import('../components/DepartureLocationMap').then((module) => ({ default: module.DepartureLocationMap })));
+const UserGuideDialog = lazy(() => import('../components/UserGuideDialog').then((module) => ({ default: module.UserGuideDialog })));
 
 type LoadState = 'error' | 'loading' | 'ready';
 type SaveState = 'error' | 'idle' | 'saving' | 'saved';
@@ -41,6 +43,7 @@ export function SettingsPage({ description, principalId, principalScopes, title 
   const [settingsRevision, setSettingsRevision] = useState(0);
   const [geocodeState, setGeocodeState] = useState<GeocodeState>('idle');
   const [geocodeMessage, setGeocodeMessage] = useState('');
+  const [guideOpen, setGuideOpen] = useState(false);
   const geocodeRequest = useRef(0);
 
   useEffect(() => {
@@ -137,23 +140,27 @@ export function SettingsPage({ description, principalId, principalScopes, title 
 
   return (
     <>
-      <AdminPageHeader className="settings-hero" title={title} description={description} actions={activeView === 'operations' ? (
+      <AdminPageHeader className="settings-hero" title={title} description={description} actions={(
         <div className="settings-header-tools">
-          <div className="settings-feedback" aria-live="polite">
-            {loadState === 'loading' ? <span role="status">설정을 불러오는 중입니다.</span> : null}
-            {loadWarning ? <span role="status">{loadWarning} <button className="text-button" type="button" onClick={() => setLoadRequest((request) => request + 1)}>다시 불러오기</button></span> : null}
-            {saveState === 'saved' ? <span role="status">설정을 저장했습니다.</span> : null}
-            {saveState === 'error' ? <span className="error" role="alert">{saveError}</span> : null}
-            {resetNotice ? <span role="status">{resetNotice}</span> : null}
-          </div>
+          {activeView === 'operations' ? <div className="settings-feedback" aria-live="polite">
+              {loadState === 'loading' ? <span role="status">설정을 불러오는 중입니다.</span> : null}
+              {loadWarning ? <span role="status">{loadWarning} <button className="text-button" type="button" onClick={() => setLoadRequest((request) => request + 1)}>다시 불러오기</button></span> : null}
+              {saveState === 'saved' ? <span role="status">설정을 저장했습니다.</span> : null}
+              {saveState === 'error' ? <span className="error" role="alert">{saveError}</span> : null}
+              {resetNotice ? <span role="status">{resetNotice}</span> : null}
+            </div> : null}
           <div className="settings-actions">
-            <button className="btn" type="button" disabled={loadState !== 'ready' || saveState === 'saving'} onClick={resetDraft}>초기화</button>
-            <button className="btn primary" type="button" disabled={loadState !== 'ready' || saveState === 'saving'} onClick={() => void saveDraft()}>
-              {saveState === 'saving' ? '저장 중' : '저장'}
-            </button>
+            <button className="btn settings-guide-button" type="button" onClick={() => setGuideOpen(true)}><BookOpen aria-hidden="true" />사용자 가이드</button>
+            {activeView === 'operations' ? <>
+              <button className="btn" type="button" disabled={loadState !== 'ready' || saveState === 'saving'} onClick={resetDraft}>초기화</button>
+              <button className="btn primary" type="button" disabled={loadState !== 'ready' || saveState === 'saving'} onClick={() => void saveDraft()}>
+                {saveState === 'saving' ? '저장 중' : '저장'}
+              </button>
+            </> : null}
           </div>
         </div>
-      ) : undefined} />
+      )} />
+      {guideOpen ? <Suspense fallback={null}><UserGuideDialog onClose={() => setGuideOpen(false)} /></Suspense> : null}
       <div className="settings-view-tabs" role="tablist" aria-label="설정 구분">
         <button className={activeView === 'operations' ? 'active' : ''} type="button" role="tab" aria-selected={activeView === 'operations'} onClick={() => setActiveView('operations')}>운영</button>
         {canReadAccounts ? <button className={activeView === 'accounts' ? 'active' : ''} type="button" role="tab" aria-selected={activeView === 'accounts'} onClick={() => setActiveView('accounts')}>계정</button> : null}

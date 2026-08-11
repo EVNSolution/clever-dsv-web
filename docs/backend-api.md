@@ -1,7 +1,7 @@
 # Backend API connection
 
 - Status: Active
-- Last refreshed: 2026-08-04
+- Last refreshed: 2026-08-11
 - Frontend owner: `clever-dsv-web/src/api` and `clever-dsv-web/src/services`
 - Backend owner: `clever-route-server/apps/delivery-api`
 
@@ -45,6 +45,8 @@ Content-Type: application/json
 | `CUSTOMER_USER` | 고객 배송조회 | `dsv:customer-deliveries:read` |
 
 고객 배송조회 권한은 인증된 customer principal에서 결정한다. query parameter의 customer ID는 고객 권한의 근거가 아니다. 관리자 전용 고객 조회만 `customers/deliveries?customerId=...`를 사용한다.
+
+설정 화면의 관제 운영자 가이드는 `GET /api/dsv/guides/operator`에서 제공한다. 이 경로는 `dsv:settings:read` scope가 있는 DSV 세션을 요구하며, 로그인하지 않은 직접 URL 요청은 `401`로 거부한다. PDF.js 렌더링을 위해 단일 byte range 요청과 `206 Partial Content`를 지원하고 `Cache-Control: private, no-store`를 사용한다. `?download=1`은 같은 인증 경계에서 첨부 파일로 응답한다. PDF 바이너리 응답은 JSON envelope를 사용하지 않는다.
 
 ## v1 reads
 
@@ -141,7 +143,7 @@ bounded legacy calls use the legacy `{ "data": ..., "error": ... }` envelope. �
 | 배차 | `services/dispatch.ts`, `dispatch-imports.ts` | dispatches, assignment, deletion, import |
 | 이력 | `services/records.ts` | records |
 | 관리 | `services/management.ts` | v1 lists, legacy mutations |
-| 설정 | `services/settings.ts`, `manual-email.ts` | operations, geocode, manual email |
+| 설정 | `services/settings.ts`, `manual-email.ts`, `components/UserGuideDialog.tsx` | operations, geocode, manual email, protected operator guide |
 | 고객 배송조회 | `services/customer-deliveries.ts` | customer deliveries |
 
 배차 파일의 상세 규칙은 [배차 계약](./contracts/dispatch.md)을 따른다. 배포 절차는 [운영 배포 Runbook](./runbooks/dsv-production-deploy.md)을 따른다.
