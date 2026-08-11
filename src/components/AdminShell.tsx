@@ -169,7 +169,7 @@ export function AdminShell({
     setControlTrailOpen((open) => {
       const nextOpen = !open;
       setControlTrailPlaying(false);
-      if (nextOpen) setControlTrailCursorMs(controlTrailRange?.startMs);
+      if (nextOpen) setControlTrailCursorMs(controlTrailRange?.endMs);
       return nextOpen;
     });
   }, [controlTrailRange]);
@@ -271,7 +271,7 @@ export function AdminShell({
 
   useEffect(() => {
     if (!controlTrailOpen || controlTrailRange === undefined) return;
-    setControlTrailCursorMs((current) => current ?? controlTrailRange.startMs);
+    setControlTrailCursorMs((current) => current ?? controlTrailRange.endMs);
   }, [controlTrailOpen, controlTrailRange]);
 
   useEffect(() => {
@@ -623,79 +623,28 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory, cursorMs?: nu
     const timeOrder = Date.parse(left.startedAt) - Date.parse(right.startedAt);
     return timeOrder === 0 ? left.sessionIndex - right.sessionIndex : timeOrder;
   });
-  const orderedSegments = sessions.flatMap((session, sessionOrder) => session.segments.map((segment, segmentOrder) => ({
-    routePlanId: session.routePlanId,
-    segment,
-    segmentOrder,
-    sessionIndex: session.sessionIndex,
-    sessionOrder,
-  })));
-  const lastMatchedLineId = sessions.flatMap((session) => session.segments.flatMap((segment, segmentOrder) => (
-    segment.roadMatchedGeometry?.coordinates.map((_, lineOrder) => (
-      `${session.routePlanId}:${session.sessionIndex}:${segmentOrder}:${lineOrder}`
-    )) ?? []
-  ))).at(-1);
-  const matchedLines = sessions.flatMap((session, sessionOrder) => session.segments.flatMap((segment, segmentOrder) => {
-    if (segment.roadMatchedGeometry === null || segment.roadMatchedGeometry === undefined) return [];
-    const geometry = segment.roadMatchedGeometry;
-    const segmentEndMs = Math.max(...segment.samples.map((sample) => Date.parse(sample.observedAt)).filter(Number.isFinite));
-    const lines = cursorMs === undefined
-      ? geometry.coordinates.map((coordinates, lineIndex) => ({ coordinates, lineIndex }))
-      : geometry.anchors === undefined
-        ? (Number.isFinite(segmentEndMs) && segmentEndMs <= cursorMs
-          ? geometry.coordinates.map((coordinates, lineIndex) => ({ coordinates, lineIndex }))
-          : [])
-        : visibleTrailGeometryLines(geometry, cursorMs);
-    return lines.map((line) => ({
-      complete: line.coordinates.length === geometry.coordinates[line.lineIndex]?.length,
-      coordinates: line.coordinates,
-      id: `${session.routePlanId}:${session.sessionIndex}:${segmentOrder}:${line.lineIndex}`,
-      lineOrder: line.lineIndex,
-      routePlanId: session.routePlanId,
-      segmentOrder,
-      sessionIndex: session.sessionIndex,
-      sessionOrder,
-    }));
-  }));
-  const matchedRoutes = matchedLines.map((line): MapCanvasRoute => ({
-    color: '#d92d20',
-    coordinates: line.coordinates,
-    dashed: true,
-    ...(line.complete ? { endMarker: line.id === lastMatchedLineId ? 'end' as const : 'interrupted' as const } : {}),
-    id: `vehicle-trail:${line.routePlanId}:${line.sessionIndex}:${line.segmentOrder}:${line.lineOrder}`,
-    kind: 'trail' as const,
-    selected: true,
-    sortOrder: 200 + line.sessionOrder * 100 + line.segmentOrder * 10 + line.lineOrder,
-  }));
-  const markerRoutes = orderedSegments.flatMap((entry, index) => {
-    const { routePlanId, segment, segmentOrder, sessionIndex, sessionOrder } = entry;
-    if (
-      segment.trailMarker === null
-      || segment.trailMarker === undefined
-      || (cursorMs !== undefined && Date.parse(segment.trailMarker.observedAt) > cursorMs)
-    ) return [];
-    const coordinate: [number, number] = [segment.trailMarker.longitude, segment.trailMarker.latitude];
-    const previousSample = orderedSegments[index - 1]?.segment.samples.at(-1);
-    const interruptedAt = previousSample?.observedAt;
-    const resolvedAt = segment.trailMarker.observedAt;
-    const hasValidInterruption = segment.trailMarker.kind === 'RESTART'
-      && interruptedAt !== undefined
-      && Number.isFinite(Date.parse(interruptedAt))
-      && Number.isFinite(Date.parse(resolvedAt))
-      && Date.parse(resolvedAt) > Date.parse(interruptedAt);
-    return [{
+  return sessions.flatMap((session, sessionOrder) => session.segments.flatMap((segment, segmentOrder): MapCanvasRoute[] => {
+    const rawCoordinates = segment.samples
+      .filter((sample) => cursorMs === undefined || Date.parse(sample.observedAt) <= cursorMs)
+      .map((sample) => [sample.longitude, sample.latitude] as [number, number]);
+    const matchedLines = visibleTrailGeometryLines(segment.roadMatchedGeometry, cursorMs);
+    const lines = matchedLines === undefined
+      ? (rawCoordinates.length === 0 ? [] : [{ coordinates: rawCoordinates, lineIndex: 0 }])
+      : matchedLines;
+    return lines.flatMap((line): MapCanvasRoute[] => {
+      if (line.coordinates.length === 0) return [];
+      const visibleCoordinates = line.coordinates.length === 1 ? [line.coordinates[0]!, line.coordinates[0]!] : line.coordinates;
+      return [{
       color: '#d92d20',
-      coordinates: [coordinate],
-      id: `vehicle-trail-marker:${routePlanId}:${sessionIndex}:${segmentOrder}`,
+      coordinates: visibleCoordinates,
+      dashed: true,
+      id: `vehicle-trail:${session.routePlanId}:${session.sessionIndex}:${segmentOrder}:${line.lineIndex}`,
       kind: 'trail' as const,
       selected: true,
-      sortOrder: 10_000 + sessionOrder * 100 + segmentOrder,
-      startMarker: segment.trailMarker.kind === 'START' ? 'start' as const : 'restart' as const,
-      startMarkerCoordinate: coordinate,
-      ...(hasValidInterruption ? { trailInterruption: { interruptedAt, resolvedAt } } : {}),
-    }];
-  });
-  return [...matchedRoutes, ...markerRoutes];
+      sortOrder: 200 + sessionOrder * 100 + segmentOrder * 10 + line.lineIndex,
+      }];
+    });
+  }));
 }
 
 function formatControlTrailTime(value: string): string {
@@ -812,7 +761,7 @@ function controlVehicleMapPoints(
     ) return [];
     const orderCount = orderCounts.get(vehicle.id) ?? 0;
     return [{
-      color: controlVehicleDisplayColor(vehicle.id, orderCounts, vehicleColors),
+      color: controlVehicleDisplayColor(vehicle.id, vehicleColors),
       id: vehicle.id,
       label: vehicle.plate || vehicle.type || '차량 위치',
       latitude,
