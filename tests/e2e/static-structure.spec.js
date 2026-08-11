@@ -105,24 +105,38 @@ test('control vehicles keep their latest valid coordinates even when telemetry i
   expect(vehiclePoints).not.toContain('vehicle.vehiclePositionStale');
 });
 
-test('vehicle trail markers remain independent from road-matched lines', () => {
-  const adminShell = readFileSync(new URL('../../src/components/AdminShell.tsx', import.meta.url), 'utf8');
-  const trailRoutes = adminShell.match(/function vehicleGpsTrailMapRoutes[\s\S]*?\n\}/u)?.[0] ?? '';
-  expect(trailRoutes).toContain('const matchedRoutes = matchedLines.map');
-  expect(trailRoutes).toContain('const orderedSegments = sessions.flatMap');
-  expect(trailRoutes).toContain('const markerRoutes = orderedSegments.flatMap');
-  expect(trailRoutes).toContain('coordinates: [coordinate]');
-  expect(trailRoutes).toContain('trailInterruption: { interruptedAt, resolvedAt }');
-  expect(trailRoutes).toContain('return [...matchedRoutes, ...markerRoutes]');
+test('the first five control vehicles receive distinct fixed high-contrast colors', () => {
+  const vehicles = readSrc('features/control/control-vehicles.ts');
+  expect(vehicles).toContain("'#0072b2'");
+  expect(vehicles).toContain("'#d55e00'");
+  expect(vehicles).toContain("'#009e73'");
+  expect(vehicles).toContain("'#cc79a7'");
+  expect(vehicles).toContain("'#e69f00'");
+  expect(vehicles).toContain('[...vehicleIds].sort().map((vehicleId, index)');
+  expect(vehicles).toContain('controlVehiclePalette[index % controlVehiclePalette.length]');
+  expect(vehicles).not.toContain('CONTROL_VEHICLE_NO_ORDERS_COLOR');
 });
 
-test('vehicle trail playback uses timestamp anchors and a native timeline control', () => {
+test('vehicle trail map prefers clipped matched geometry without restart markers', () => {
+  const adminShell = readFileSync(new URL('../../src/components/AdminShell.tsx', import.meta.url), 'utf8');
+  const trailRoutes = adminShell.match(/function vehicleGpsTrailMapRoutes[\s\S]*?\n\}/u)?.[0] ?? '';
+  expect(trailRoutes).toContain('visibleTrailGeometryLines(segment.roadMatchedGeometry, cursorMs)');
+  expect(trailRoutes).toContain('segment.samples');
+  expect(trailRoutes).toContain('[sample.longitude, sample.latitude]');
+  expect(trailRoutes).toContain('line.coordinates.length === 1 ? [line.coordinates[0]!, line.coordinates[0]!]');
+  expect(trailRoutes).not.toContain('trailMarker');
+  expect(trailRoutes).not.toContain('startMarker');
+});
+
+test('vehicle trail playback uses raw sample timestamps and a native timeline control', () => {
   const adminShell = readSrc('components/AdminShell.tsx');
   const controlPage = readSrc('pages/ControlPage.tsx');
   const playback = readSrc('features/control/control-trail-playback.ts');
-  expect(adminShell).toContain('visibleTrailGeometryLines');
+  expect(adminShell).toContain('Date.parse(sample.observedAt) <= cursorMs');
+  expect(adminShell).toContain('setControlTrailCursorMs(controlTrailRange?.endMs)');
   expect(controlPage).toContain('aria-label="자취 시점"');
   expect(controlPage).toContain('type="range"');
+  expect(playback).toContain('Date.parse(sample.observedAt) <= cursorMs');
   expect(playback).toContain('Date.parse(anchor.observedAt) <= cursorMs');
   expect(playback).not.toContain('Date.parse(session.startedAt)');
 });

@@ -501,10 +501,10 @@ test('renders selected control progress without letting a future destination cli
             roadMatchedGeometry: {
               anchors: [
                 { coordinateIndex: 0, lineIndex: 0, observedAt: '2026-08-05T00:00:00.000Z' },
-                { coordinateIndex: 1, lineIndex: 0, observedAt: '2026-08-05T00:01:00.000Z' },
+                { coordinateIndex: 2, lineIndex: 0, observedAt: '2026-08-05T00:01:00.000Z' },
               ],
               type: 'MultiLineString',
-              coordinates: [[[127, 37.5], [127.005, 37.501]]],
+              coordinates: [[[127, 37.5], [127.0025, 37.5005], [127.005, 37.501]]],
             },
             samples: [
             { distanceTodayKm: 1, ignitionOn: true, latitude: 37.5, longitude: 127, observedAt: '2026-08-05T00:00:00.000Z', speedKph: 20 },
@@ -516,10 +516,10 @@ test('renders selected control progress without letting a future destination cli
             roadMatchedGeometry: {
               anchors: [
                 { coordinateIndex: 0, lineIndex: 0, observedAt: '2026-08-05T00:06:00.000Z' },
-                { coordinateIndex: 1, lineIndex: 0, observedAt: '2026-08-05T00:07:00.000Z' },
+                { coordinateIndex: 2, lineIndex: 0, observedAt: '2026-08-05T00:07:00.000Z' },
               ],
               type: 'MultiLineString',
-              coordinates: [[[127.015, 37.502], [127.025, 37.5]]],
+              coordinates: [[[127.015, 37.502], [127.02, 37.501], [127.025, 37.5]]],
             },
             samples: [
             { distanceTodayKm: 3, ignitionOn: true, latitude: 37.502, longitude: 127.015, observedAt: '2026-08-05T00:06:00.000Z', speedKph: 24 },
@@ -534,6 +534,13 @@ test('renders selected control progress without letting a future destination cli
               { distanceTodayKm: 6, ignitionOn: true, latitude: 37.8, longitude: 127.8, observedAt: '2026-08-05T00:13:00.000Z', speedKph: 32 },
             ],
             trailMarker: { kind: 'RESTART', latitude: 37.7, longitude: 127.7, observedAt: '2026-08-05T00:12:00.000Z' },
+          },
+          {
+            roadMatchedGeometry: null,
+            samples: [
+              { distanceTodayKm: 6, ignitionOn: false, latitude: 37.9, longitude: 127.9, observedAt: '2026-08-05T00:15:00.000Z', speedKph: 0 },
+            ],
+            trailMarker: null,
           },
         ],
         sessionIndex: 0,
@@ -584,7 +591,19 @@ test('renders selected control progress without letting a future destination cli
   await page.getByRole('button', { name: '자취 보기' }).click();
   const timeline = page.getByRole('region', { name: '진행12가3456 자취 타임라인' });
   await expect(timeline).toBeVisible();
-  await expect(timeline.locator('header time')).toHaveText('09:00');
+  await expect(timeline.locator('header time')).toHaveText('09:15');
+  await expect.poll(() => page.evaluate(() => {
+    const routes = window.dsvMap?.getSource('operational-routes');
+    if (!routes) return [];
+    return routes.serialize().data.features
+      .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.kind === 'trail')
+      .map((feature) => feature.geometry.coordinates);
+  })).toEqual([
+    [[127, 37.5], [127.0025, 37.5005], [127.005, 37.501]],
+    [[127.015, 37.502], [127.02, 37.501], [127.025, 37.5]],
+    [[127.7, 37.7], [127.8, 37.8]],
+    [[127.9, 37.9], [127.9, 37.9]],
+  ]);
   await timeline.getByRole('slider', { name: '자취 시점' }).fill(String(Date.parse('2026-08-05T00:06:00.000Z')));
   await expect(timeline.locator('header time')).toHaveText('09:06');
   await expect.poll(() => page.evaluate(() => {
@@ -593,7 +612,10 @@ test('renders selected control progress without letting a future destination cli
     return routes.serialize().data.features
       .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.kind === 'trail')
       .map((feature) => feature.geometry.coordinates);
-  })).toEqual([[[127, 37.5], [127.005, 37.501]]]);
+  })).toEqual([
+    [[127, 37.5], [127.0025, 37.5005], [127.005, 37.501]],
+    [[127.015, 37.502], [127.015, 37.502]],
+  ]);
   await timeline.getByRole('slider', { name: '자취 시점' }).fill(String(Date.parse('2026-08-05T00:13:00.000Z')));
   await expect.poll(() => page.evaluate(() => {
     const destinations = window.dsvMap?.getSource('operational-destinations');
@@ -625,47 +647,13 @@ test('renders selected control progress without letting a future destination cli
       { casingColor: '#ffffff', color: '#1f8b4c' },
       { casingColor: '#ffffff', color: '#0066cc' },
     ],
-    trailMarkers: [
-      { interruptedAt: null, markerKind: 'interrupted', resolvedAt: null },
-      { interruptedAt: null, markerKind: 'end', resolvedAt: null },
-      { interruptedAt: null, markerKind: 'start', resolvedAt: null },
-      { interruptedAt: '2026-08-05T00:01:00.000Z', markerKind: 'restart', resolvedAt: '2026-08-05T00:06:00.000Z' },
-      { interruptedAt: '2026-08-05T00:07:00.000Z', markerKind: 'restart', resolvedAt: '2026-08-05T00:12:00.000Z' },
-    ],
+    trailMarkers: [],
     trails: [
-      [[127, 37.5], [127.005, 37.501]],
-      [[127.015, 37.502], [127.025, 37.5]],
+      [[127, 37.5], [127.0025, 37.5005], [127.005, 37.501]],
+      [[127.015, 37.502], [127.02, 37.501], [127.025, 37.5]],
+      [[127.7, 37.7], [127.8, 37.8]],
     ],
   });
-
-  await page.evaluate(() => {
-    const map = window.dsvMap;
-    map.jumpTo({ center: [127.015, 37.502], zoom: 15 });
-  });
-  await expect.poll(() => page.evaluate(() => {
-    const map = window.dsvMap;
-    return map.queryRenderedFeatures(map.project([127.015, 37.502]), { layers: ['operational-route-trail-points'] })
-      .map((feature) => feature.properties.markerKind);
-  })).toContain('restart');
-  const fireMapEvent = (type, coordinate) => page.evaluate(({ eventType, lngLat }) => {
-    const map = window.dsvMap;
-    const point = map.project(lngLat);
-    map.fire(eventType, {
-      lngLat: map.unproject(point),
-      originalEvent: new MouseEvent(eventType),
-      point,
-    });
-  }, { eventType: type, lngLat: coordinate });
-  await fireMapEvent('mousemove', [127.015, 37.502]);
-  const interruptionPopup = page.locator('.control-trail-interruption-popup');
-  await expect(interruptionPopup).toBeVisible();
-  await expect(interruptionPopup.locator('dt')).toHaveText(['끊김 발생', '해소까지']);
-  await expect(interruptionPopup.locator('dd')).toHaveText(['09:01', '5분']);
-  await fireMapEvent('click', [127.015, 37.502]);
-  await fireMapEvent('mousemove', [127.02, 37.51]);
-  await expect(interruptionPopup).toBeVisible();
-  await fireMapEvent('click', [127.02, 37.51]);
-  await expect(interruptionPopup).toHaveCount(0);
 
   await rows.nth(3).click();
   await expect(rows.nth(3)).toHaveClass(/selected/u);
@@ -1223,7 +1211,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
     },
     vehicles: [
       { coordinates: [127.0412, 37.5021], label: '99테 6006', markerImageId: expect.stringMatching(/^vehicle-marker-(?!8e8e93)/u), vehicleId: 'vehicle-g006-scheduled' },
-      { coordinates: [127.12, 37.61], label: '88테 5005', markerImageId: 'vehicle-marker-8e8e93', vehicleId: 'vehicle-g006-unscheduled' },
+      { coordinates: [127.12, 37.61], label: '88테 5005', markerImageId: 'vehicle-marker-009e73', vehicleId: 'vehicle-g006-unscheduled' },
       { coordinates: [126.9372235, 37.330948], label: '1대 예정', markerImageId: 'vehicle-marker-default', vehicleId: 'scheduled-vehicles' },
     ],
   });

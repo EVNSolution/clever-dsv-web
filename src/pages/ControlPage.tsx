@@ -569,7 +569,7 @@ function ControlPanels({
                 return <div
                   className={`control-vehicle-row${selectedVehicleId === vehicle.id ? ' selected' : ''}`}
                   key={vehicle.id}
-                  style={{ '--control-route-color': controlVehicleDisplayColor(vehicle.id, vehicleOrderCounts, vehicleColors) } as CSSProperties}
+                  style={{ '--control-route-color': controlVehicleDisplayColor(vehicle.id, vehicleColors) } as CSSProperties}
                 >
                   <i aria-hidden="true" />
                   <button

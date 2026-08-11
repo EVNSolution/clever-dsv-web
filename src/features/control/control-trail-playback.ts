@@ -16,12 +16,9 @@ export type VisibleTrailGeometryLine = {
 
 export function controlTrailBounds(history?: VehicleGpsTrailHistory): ControlTrailBounds | undefined {
   if (history === undefined) return undefined;
-  const times = history.sessions.flatMap((session) => session.segments.flatMap((segment) => [
-      ...segment.samples.map((sample) => Date.parse(sample.observedAt)),
-      ...(segment.trailMarker === null || segment.trailMarker === undefined
-        ? []
-        : [Date.parse(segment.trailMarker.observedAt)]),
-    ])).filter(Number.isFinite);
+  const times = history.sessions.flatMap((session) => session.segments.flatMap((segment) =>
+    segment.samples.map((sample) => Date.parse(sample.observedAt))
+  )).filter(Number.isFinite);
   if (times.length === 0) return undefined;
   return { startMs: Math.min(...times), endMs: Math.max(...times) };
 }
@@ -38,22 +35,28 @@ export function controlTrailSampleAt(
 }
 
 export function visibleTrailGeometryLines(
-  geometry: VehicleGpsTrailRoadMatchedGeometry,
+  geometry: VehicleGpsTrailRoadMatchedGeometry | null | undefined,
   cursorMs: number | undefined,
-): VisibleTrailGeometryLine[] {
+): VisibleTrailGeometryLine[] | undefined {
+  if (geometry === null || geometry === undefined) return undefined;
+  if (geometry.anchors === undefined || geometry.anchors.length < 2) return undefined;
+  const anchorsByLine = new Map<number, NonNullable<VehicleGpsTrailRoadMatchedGeometry['anchors']>>();
+  for (const anchor of geometry.anchors) {
+    anchorsByLine.set(anchor.lineIndex, [...(anchorsByLine.get(anchor.lineIndex) ?? []), anchor]);
+  }
+  if (geometry.coordinates.some((_, lineIndex) => (anchorsByLine.get(lineIndex)?.length ?? 0) < 2)) return undefined;
   const allLines = (): VisibleTrailGeometryLine[] => geometry.coordinates.map((coordinates, lineIndex) => ({ coordinates, lineIndex }));
   if (cursorMs === undefined) return allLines();
-  if (geometry.anchors === undefined || geometry.anchors.length === 0) return [];
-  const latestAnchorMs = Math.max(...geometry.anchors.map((anchor) => Date.parse(anchor.observedAt)).filter(Number.isFinite));
-  if (Number.isFinite(latestAnchorMs) && cursorMs >= latestAnchorMs) return allLines();
   return geometry.coordinates.flatMap((line, lineIndex) => {
-    const anchors = geometry.anchors
-      ?.filter((anchor) => anchor.lineIndex === lineIndex)
-      .sort((left, right) => left.coordinateIndex - right.coordinateIndex) ?? [];
-    if (anchors.length === 0 || Date.parse(anchors[0].observedAt) > cursorMs) return [];
+    const anchors = [...(anchorsByLine.get(lineIndex) ?? [])].sort((left, right) => {
+      const timeOrder = Date.parse(left.observedAt) - Date.parse(right.observedAt);
+      return timeOrder === 0 ? left.coordinateIndex - right.coordinateIndex : timeOrder;
+    });
+    const firstAnchor = anchors[0];
+    if (firstAnchor === undefined || Date.parse(firstAnchor.observedAt) > cursorMs) return [];
     const lastVisibleAnchor = [...anchors].reverse().find((anchor) => Date.parse(anchor.observedAt) <= cursorMs);
     if (lastVisibleAnchor === undefined) return [];
     const endIndex = Math.min(line.length - 1, lastVisibleAnchor.coordinateIndex);
-    return endIndex < 1 ? [] : [{ coordinates: line.slice(0, endIndex + 1), lineIndex }];
+    return [{ coordinates: line.slice(0, endIndex + 1), lineIndex }];
   });
 }

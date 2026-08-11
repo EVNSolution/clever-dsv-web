@@ -3,25 +3,12 @@ import type { DispatchListItem } from '../../services/dispatch';
 
 export type ControlVehicleVisibility = 'ALL' | 'WITH_ORDERS';
 
-export const CONTROL_VEHICLE_NO_ORDERS_COLOR = '#8e8e93';
-
 const controlVehiclePalette = [
-  '#0066cc',
-  '#c4458f',
-  '#d56b1d',
-  '#6f52b5',
-  '#007f78',
-  '#c4493d',
-  '#8a5a44',
-  '#2b7a9b',
-  '#7a7f00',
-  '#b33f62',
-  '#4b6cb7',
-  '#aa5a00',
-  '#008f5a',
-  '#7b4fa3',
-  '#b84c8a',
-  '#4e7d2a',
+  '#0072b2',
+  '#d55e00',
+  '#009e73',
+  '#cc79a7',
+  '#e69f00',
 ] as const;
 
 export function controlVehicleOrderCounts(orders: DispatchListItem[]): ReadonlyMap<string, number> {
@@ -47,7 +34,10 @@ export function controlVehicleColorMap(
   for (const order of orders) {
     if (order.vehicleId !== null) vehicleIds.add(order.vehicleId);
   }
-  return new Map([...vehicleIds].map((vehicleId) => [vehicleId, controlVehicleColor(vehicleId)]));
+  return new Map([...vehicleIds].sort().map((vehicleId, index) => [
+    vehicleId,
+    controlVehiclePalette[index % controlVehiclePalette.length],
+  ]));
 }
 
 export function visibleControlVehicles(
@@ -62,10 +52,7 @@ export function visibleControlVehicles(
 
 export function controlVehicleDisplayColor(
   vehicleId: string,
-  orderCounts: ReadonlyMap<string, number>,
   vehicleColors: ReadonlyMap<string, string>,
 ): string {
-  return (orderCounts.get(vehicleId) ?? 0) > 0
-    ? vehicleColors.get(vehicleId) ?? controlVehicleColor(vehicleId)
-    : CONTROL_VEHICLE_NO_ORDERS_COLOR;
+  return vehicleColors.get(vehicleId) ?? controlVehicleColor(vehicleId);
 }
