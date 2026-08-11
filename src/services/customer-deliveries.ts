@@ -259,7 +259,7 @@ function customerDeliveryFrom(value: unknown): CustomerDeliveryItem {
     proofStatus: requiredString(value, 'proofStatus'),
     sellerOrderId: requiredString(value, 'sellerOrderId'),
     sellerOrderKey: requiredString(value, 'sellerOrderKey'),
-    shippedBoxes: requiredPositiveInteger(value, 'shippedBoxes'),
+    shippedBoxes: requiredNonNegativeInteger(value, 'shippedBoxes'),
     vehicleDisplayName: optionalString(value, 'vehicleDisplayName'),
     vehicleId: optionalString(value, 'vehicleId'),
     vehicleLatitude: optionalNumber(value, 'vehicleLatitude'),
@@ -331,9 +331,9 @@ function requiredNumber(source: Record<string, unknown>, key: string): number {
   return value;
 }
 
-function requiredPositiveInteger(source: Record<string, unknown>, key: string): number {
+function requiredNonNegativeInteger(source: Record<string, unknown>, key: string): number {
   const value = source[key];
-  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) throw new Error(`${key} 필드 형식이 올바르지 않습니다.`);
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) throw new Error(`${key} 필드 형식이 올바르지 않습니다.`);
   return value;
 }
 

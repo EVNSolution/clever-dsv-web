@@ -632,6 +632,7 @@ function ControlPanels({
                 </span>
                 <span className="control-destination-order-count">
                   <b>{destination.orders.length}건</b>
+                  <small>총 {controlDestinationBoxTotal(destination.orders)}박스</small>
                 </span>
                 <time>{formatControlTime(sharedControlEta(destination.orders, estimatedArrivalByOrderId))}</time>
                 <time className={controlDestinationCompletedAt(destination.orders) === null ? 'empty' : 'completed'}>{formatControlTime(controlDestinationCompletedAt(destination.orders))}</time>
@@ -1424,6 +1425,10 @@ function controlDestinationCompletedAt(orders: DispatchListItem[]): string | nul
 
 function controlDestinationMeta(destination: ControlDestinationGroup): string {
   return destination.anchor.destinationAddress || destination.anchor.sellerOrderKey;
+}
+
+function controlDestinationBoxTotal(orders: DispatchListItem[]): number {
+  return orders.reduce((total, order) => total + (order.shippedBoxes ?? 0), 0);
 }
 
 function controlEtaTimestamp(order: DispatchListItem, configuredEtas: ReadonlyMap<string, string>): number {

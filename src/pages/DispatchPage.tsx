@@ -400,8 +400,10 @@ export function DispatchPage({ title, description }: { title: string; descriptio
   const uploadIssueRows = uploadPreview?.rows.filter((row) => row.issues.length > 0) ?? [];
   const uploadNoteRows = uploadPreview?.rows.filter((row) => row.notes !== null) ?? [];
   const uploadIssueEntries = uploadIssues(uploadPreview, uploadSheet);
-  const uploadIssueCells = new Set(uploadIssueEntries.flatMap((entry) =>
-    entry.columnIndex === null ? [] : [`${entry.rowNumber - 1}:${entry.columnIndex}`]));
+  const uploadErrorCells = new Set(uploadIssueEntries.flatMap((entry) =>
+    entry.columnIndex === null || entry.issue.severity !== 'error' ? [] : [`${entry.rowNumber - 1}:${entry.columnIndex}`]));
+  const uploadWarningCells = new Set(uploadIssueEntries.flatMap((entry) =>
+    entry.columnIndex === null || entry.issue.severity !== 'review' ? [] : [`${entry.rowNumber - 1}:${entry.columnIndex}`]));
   const driverCandidates = uploadResourceCandidates(uploadPreview, ['DRIVER_MISSING', 'DRIVER_NOT_FOUND'], 'driverName');
   const vehicleCandidates = uploadResourceCandidates(uploadPreview, ['VEHICLE_MISSING', 'VEHICLE_NOT_FOUND'], 'vehiclePlate');
 
@@ -449,10 +451,11 @@ export function DispatchPage({ title, description }: { title: string; descriptio
             {uploadSheet ? (
               <DispatchSheetPreview
                 activity={uploadActivity}
+                errorCells={uploadErrorCells}
                 focusTarget={uploadCellFocusTarget}
-                issueCells={uploadIssueCells}
                 onCellChange={editUploadSheetCell}
                 sheet={uploadSheet}
+                warningCells={uploadWarningCells}
               />
             ) : null}
             {uploadSheet === null && uploadActivity !== 'idle'
@@ -471,7 +474,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
               </div>
             ) : null}
             {!uploadFileName && uploadError ? <p className="dispatch-upload-error" role="alert">{uploadError}</p> : null}
-            {uploadPreview ? <div className="dispatch-upload-summary" role="status"><span>전체 <b>{uploadPreview.summary.totalRows}</b></span><span>주소 확인 <b>{resolvedAddressRows}</b></span><span>정상 <b>{uploadPreview.summary.readyRows}</b></span>{(uploadPreview.summary.updateCandidateRows ?? 0) > 0 ? <span>변경 <b>{uploadPreview.summary.updateCandidateRows}</b></span> : null}<span>확인 <b>{uploadPreview.summary.reviewRows}</b></span><span>오류 <b>{uploadPreview.summary.errorRows}</b></span></div> : null}
+            {uploadPreview ? <div className="dispatch-upload-summary" role="status"><span>전체 <b>{uploadPreview.summary.totalRows}</b></span><span>주소 확인 <b>{resolvedAddressRows}</b></span><span>정상 <b>{uploadPreview.summary.readyRows}</b></span>{(uploadPreview.summary.updateCandidateRows ?? 0) > 0 ? <span>변경 <b>{uploadPreview.summary.updateCandidateRows}</b></span> : null}<span>주의 <b>{uploadPreview.summary.reviewRows}</b></span><span>오류 <b>{uploadPreview.summary.errorRows}</b></span></div> : null}
             {uploadNoteRows.length > 0 ? (
               <div className="dispatch-upload-notes" aria-label="특이사항 미리보기">
                 {uploadNoteRows.map((row) => (
@@ -485,9 +488,9 @@ export function DispatchPage({ title, description }: { title: string; descriptio
               </div>
             ) : null}
             {uploadIssueRows.length ? (
-              <details className="dispatch-upload-issues">
+              <details className={`dispatch-upload-issues${(uploadPreview?.summary.errorRows ?? 0) > 0 ? ' has-error' : ''}`}>
                 <summary>
-                  <span>오류 상세</span>
+                  <span>주의 및 오류</span>
                   <span className="dispatch-upload-issues-toggle">
                     <span className="dispatch-upload-toggle-open">펼치기</span>
                     <span className="dispatch-upload-toggle-close">접기</span>
@@ -500,7 +503,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
                     const addressDetails = uploadAddressDetails(uploadPreview, entry);
                     const suggestions = uploadAddressSuggestions(uploadPreview, entry);
                     return (
-                      <div className="dispatch-upload-issue-row" key={`${entry.rowNumber}:${entry.issue.code}:${entry.issue.field}`}>
+                      <div className={`dispatch-upload-issue-row is-${entry.issue.severity}`} key={`${entry.rowNumber}:${entry.issue.code}:${entry.issue.field}`}>
                         <button
                           className="dispatch-upload-issue-location"
                           type="button"
@@ -631,16 +634,18 @@ function DispatchUploadActivity({
 
 function DispatchSheetPreview({
   activity,
+  errorCells,
   focusTarget,
-  issueCells,
   onCellChange,
   sheet,
+  warningCells,
 }: {
   activity: UploadActivity;
+  errorCells: Set<string>;
   focusTarget: SheetCellFocusTarget | null;
-  issueCells: Set<string>;
   onCellChange: (rowIndex: number, columnIndex: number, value: string) => void;
   sheet: DispatchFileParseResult['sheet'];
+  warningCells: Set<string>;
 }): ReactElement {
   const sheetScrollRef = useRef<HTMLDivElement>(null);
   const cancelBlurCommit = useRef(false);
@@ -724,10 +729,12 @@ function DispatchSheetPreview({
                 {columns.map((columnIndex) => {
                   const value = row[columnIndex] ?? '';
                   const editing = editingCell?.rowIndex === rowIndex && editingCell.columnIndex === columnIndex;
-                  const invalid = issueCells.has(`${rowIndex}:${columnIndex}`);
+                  const cellKey = `${rowIndex}:${columnIndex}`;
+                  const invalid = errorCells.has(cellKey);
+                  const warning = warningCells.has(cellKey);
                   return (
                     <td
-                      className={invalid ? 'is-error' : undefined}
+                      className={invalid ? 'is-error' : warning ? 'is-warning' : undefined}
                       data-sheet-cell={`${rowIndex}:${columnIndex}`}
                       key={columnIndex}
                     >
