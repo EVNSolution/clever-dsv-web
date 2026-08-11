@@ -119,25 +119,31 @@ test('the first five control vehicles receive distinct fixed high-contrast color
 
 test('vehicle trail map prefers clipped matched geometry without restart markers', () => {
   const adminShell = readFileSync(new URL('../../src/components/AdminShell.tsx', import.meta.url), 'utf8');
+  const playback = readSrc('features/control/control-trail-playback.ts');
   const trailRoutes = adminShell.match(/function vehicleGpsTrailMapRoutes[\s\S]*?\n\}/u)?.[0] ?? '';
   expect(trailRoutes).toContain('visibleTrailGeometryLines(segment.roadMatchedGeometry, cursorMs)');
+  expect(trailRoutes).toContain('visibleTrailRawLines(segment.samples, segment.roadMatchedGeometry, cursorMs)');
   expect(trailRoutes).toContain('segment.samples');
-  expect(trailRoutes).toContain('[sample.longitude, sample.latitude]');
-  expect(trailRoutes).toContain('line.coordinates.length === 1 ? [line.coordinates[0]!, line.coordinates[0]!]');
+  expect(playback).toContain('[sample.longitude, sample.latitude]');
+  expect(trailRoutes).toContain("line.coordinates.length === 1 && line.id.startsWith('matched:')");
   expect(trailRoutes).not.toContain('trailMarker');
   expect(trailRoutes).not.toContain('startMarker');
+  expect(readSrc('components/map/OperationalRoutes.ts')).not.toMatch(/restart|interrupted|Interruption|#f59e0b|#fff7ed/u);
+  expect(readSrc('styles/features/control.css')).not.toContain('control-trail-interruption-popup');
 });
 
 test('vehicle trail playback uses raw sample timestamps and a native timeline control', () => {
   const adminShell = readSrc('components/AdminShell.tsx');
   const controlPage = readSrc('pages/ControlPage.tsx');
   const playback = readSrc('features/control/control-trail-playback.ts');
-  expect(adminShell).toContain('Date.parse(sample.observedAt) <= cursorMs');
+  expect(playback).toContain('Date.parse(sample.observedAt) <= cursorMs');
   expect(adminShell).toContain('setControlTrailCursorMs(controlTrailRange?.endMs)');
   expect(controlPage).toContain('aria-label="자취 시점"');
   expect(controlPage).toContain('type="range"');
   expect(playback).toContain('Date.parse(sample.observedAt) <= cursorMs');
   expect(playback).toContain('Date.parse(anchor.observedAt) <= cursorMs');
+  expect(playback).toContain("Date.parse(`${history.serviceDate}T00:00:00+09:00`)");
+  expect(controlPage).toContain("if (value === endMs) return '24:00'");
   expect(playback).not.toContain('Date.parse(session.startedAt)');
 });
 

@@ -784,12 +784,12 @@ function customerTrailMapRoutes(trails: RemoteCustomerDeliveries['trails']): Map
     color: '#d92d20',
     coordinates: segment.coordinates,
     dashed: true,
-    endMarker: index < trail.segments.length - 1 ? 'interrupted' as const : 'end' as const,
+    ...(index === trail.segments.length - 1 ? { endMarker: 'end' as const } : {}),
     id: `trail:${trail.vehicleId}:${index}`,
     kind: 'trail' as const,
     selected: true,
     sortOrder: 200 + index,
-    startMarker: index === 0 ? 'start' as const : 'restart' as const,
+    ...(index === 0 ? { startMarker: 'start' as const } : {}),
   })));
 }
 
