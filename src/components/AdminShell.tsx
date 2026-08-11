@@ -435,7 +435,9 @@ export function AdminShell({
                   estimatedArrivalByOrderId={controlEstimatedArrivalByOrderId}
                   onManagementChange={setControlManagement}
                   onOrdersChange={handleControlOrdersChange}
-                  onDestinationSelect={setSelectedControlDestinationId}
+                  onDestinationSelect={(destinationId) => {
+                    setSelectedControlDestinationId((current) => current === destinationId ? undefined : destinationId);
+                  }}
                   onVehicleSelect={(vehicleId) => {
                     setSelectedControlDestinationId(undefined);
                     setSelectedControlVehicleId((current) => current === vehicleId ? undefined : vehicleId);

@@ -1329,6 +1329,11 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
     routeIds: ['route-plan-g006-scheduled:completed', 'route-plan-g006-scheduled:planned'],
   });
 
+  await destinationRow.click();
+  await expect(destinationRow).toHaveAttribute('aria-expanded', 'false');
+  await expect(destinationRow).not.toHaveClass(/selected/u);
+  await expect(destinationRow.locator('.control-destination-details')).toHaveCount(0);
+
   await selectedVehicle.click();
   await expect(selectedVehicle).toHaveAttribute('aria-pressed', 'false');
   await expect.poll(() => page.evaluate(() => ({
