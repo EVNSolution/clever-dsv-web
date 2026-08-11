@@ -116,6 +116,17 @@ test('vehicle trail markers remain independent from road-matched lines', () => {
   expect(trailRoutes).toContain('return [...matchedRoutes, ...markerRoutes]');
 });
 
+test('vehicle trail playback uses timestamp anchors and a native timeline control', () => {
+  const adminShell = readSrc('components/AdminShell.tsx');
+  const controlPage = readSrc('pages/ControlPage.tsx');
+  const playback = readSrc('features/control/control-trail-playback.ts');
+  expect(adminShell).toContain('visibleTrailGeometryLines');
+  expect(controlPage).toContain('aria-label="자취 시점"');
+  expect(controlPage).toContain('type="range"');
+  expect(playback).toContain('Date.parse(anchor.observedAt) <= cursorMs');
+  expect(playback).not.toContain('Date.parse(session.startedAt)');
+});
+
 test('service and page imports follow dependency rules', () => {
   expect(exists('services/routing.ts')).toBe(false);
 

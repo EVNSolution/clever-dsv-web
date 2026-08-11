@@ -498,7 +498,14 @@ test('renders selected control progress without letting a future destination cli
         routePlanId,
         segments: [
           {
-            roadMatchedGeometry: { type: 'MultiLineString', coordinates: [[[127, 37.5], [127.005, 37.501]]] },
+            roadMatchedGeometry: {
+              anchors: [
+                { coordinateIndex: 0, lineIndex: 0, observedAt: '2026-08-05T00:00:00.000Z' },
+                { coordinateIndex: 1, lineIndex: 0, observedAt: '2026-08-05T00:01:00.000Z' },
+              ],
+              type: 'MultiLineString',
+              coordinates: [[[127, 37.5], [127.005, 37.501]]],
+            },
             samples: [
             { distanceTodayKm: 1, ignitionOn: true, latitude: 37.5, longitude: 127, observedAt: '2026-08-05T00:00:00.000Z', speedKph: 20 },
             { distanceTodayKm: 2, ignitionOn: true, latitude: 37.501, longitude: 127.005, observedAt: '2026-08-05T00:01:00.000Z', speedKph: 22 },
@@ -506,7 +513,14 @@ test('renders selected control progress without letting a future destination cli
             trailMarker: { kind: 'START', latitude: 37.5, longitude: 127, observedAt: '2026-08-05T00:00:00.000Z' },
           },
           {
-            roadMatchedGeometry: { type: 'MultiLineString', coordinates: [[[127.015, 37.502], [127.025, 37.5]]] },
+            roadMatchedGeometry: {
+              anchors: [
+                { coordinateIndex: 0, lineIndex: 0, observedAt: '2026-08-05T00:06:00.000Z' },
+                { coordinateIndex: 1, lineIndex: 0, observedAt: '2026-08-05T00:07:00.000Z' },
+              ],
+              type: 'MultiLineString',
+              coordinates: [[[127.015, 37.502], [127.025, 37.5]]],
+            },
             samples: [
             { distanceTodayKm: 3, ignitionOn: true, latitude: 37.502, longitude: 127.015, observedAt: '2026-08-05T00:06:00.000Z', speedKph: 24 },
             { distanceTodayKm: 4, ignitionOn: true, latitude: 37.5, longitude: 127.025, observedAt: '2026-08-05T00:07:00.000Z', speedKph: 18 },
@@ -567,6 +581,20 @@ test('renders selected control progress without letting a future destination cli
   for (const [index, color] of expectedColors.entries()) {
     await expect(rows.nth(index).locator('.control-order-sequence')).toHaveCSS('background-color', color);
   }
+  await page.getByRole('button', { name: '자취 보기' }).click();
+  const timeline = page.getByRole('region', { name: '진행12가3456 자취 타임라인' });
+  await expect(timeline).toBeVisible();
+  await expect(timeline.locator('header time')).toHaveText('09:00');
+  await timeline.getByRole('slider', { name: '자취 시점' }).fill(String(Date.parse('2026-08-05T00:06:00.000Z')));
+  await expect(timeline.locator('header time')).toHaveText('09:06');
+  await expect.poll(() => page.evaluate(() => {
+    const routes = window.dsvMap?.getSource('operational-routes');
+    if (!routes) return [];
+    return routes.serialize().data.features
+      .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.kind === 'trail')
+      .map((feature) => feature.geometry.coordinates);
+  })).toEqual([[[127, 37.5], [127.005, 37.501]]]);
+  await timeline.getByRole('slider', { name: '자취 시점' }).fill(String(Date.parse('2026-08-05T00:13:00.000Z')));
   await expect.poll(() => page.evaluate(() => {
     const destinations = window.dsvMap?.getSource('operational-destinations');
     const routes = window.dsvMap?.getSource('operational-routes');
@@ -755,6 +783,39 @@ test('loads a historical control date with current dispatch contract fields', as
   await expect(page.getByRole('button', { name: '관제 기준일 날짜 변경' })).toContainText('2026. 07. 22.');
   await expect(page.getByLabel('고객사별 주문 리스트')).toContainText('과거 고객사');
   await expect(page.getByText('배차 항목 응답 형식이 올바르지 않습니다.')).toHaveCount(0);
+  expect(api.unexpected).toEqual([]);
+});
+
+test('reports a selected vehicle trail failure instead of presenting it as no history', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Envelope(controlSummary),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
+      items: [{
+        displayName: 'Trail Error Truck',
+        driverAssignments: [],
+        status: 'ACTIVE',
+        telemetryActivity: 'ACTIVE',
+        vehicleId: 'vehicle-trail-error',
+        vehicleLatitude: 37.5,
+        vehicleLongitude: 127,
+        vehiclePlate: '오류12가3456',
+        vehiclePositionObservedAt: '2026-07-23T00:30:00.000Z',
+        vehiclePositionStale: false,
+        vehicleStopped: false,
+      }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/vehicles/vehicle-trail-error/gps-trail-history': v1Error(500, 'trail unavailable'),
+    'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/dispatches': emptyV1List(),
+  });
+
+  await page.goto('/control');
+  await page.getByRole('button', { name: /오류12가3456/u }).click();
+
+  await expect(page.getByRole('alert')).toHaveText('차량 자취를 불러오지 못했습니다.');
+  await expect(page.getByRole('button', { name: '자취 보기' })).toBeDisabled();
   expect(api.unexpected).toEqual([]);
 });
 
@@ -2229,6 +2290,7 @@ test('pins the exact normalized G005 v1 read allowlist', () => {
   const clientSource = readFileSync(new URL('../../src/api/client.ts', import.meta.url), 'utf8');
   expect(extractAllowlist(clientSource, 'v1ReadAllowlist')).toEqual([
     'GET session',
+    'POST session/logout',
     'GET map/profile',
     'GET control',
     'GET control/routes',

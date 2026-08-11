@@ -31,6 +31,11 @@ export type VehicleGpsTrailSample = {
 };
 
 export type VehicleGpsTrailRoadMatchedGeometry = {
+  anchors?: Array<{
+    coordinateIndex: number;
+    lineIndex: number;
+    observedAt: string;
+  }>;
   coordinates: Array<Array<[longitude: number, latitude: number]>>;
   type: 'MultiLineString';
 };
@@ -228,7 +233,7 @@ function adaptVehicleGpsTrailRoadMatchedGeometry(
   body: unknown,
 ): VehicleGpsTrailRoadMatchedGeometry | null {
   if (value === null) return null;
-  if (!isObject(value) || !hasExactKeys(value, ['coordinates', 'type']) || value.type !== 'MultiLineString' || !Array.isArray(value.coordinates)) {
+  if (!isObject(value) || !hasOnlyKeys(value, ['anchors', 'coordinates', 'type']) || value.type !== 'MultiLineString' || !Array.isArray(value.coordinates)) {
     throw invalidVehicleGpsTrailHistory(body);
   }
   const coordinates = value.coordinates.map((line) => {
@@ -240,7 +245,33 @@ function adaptVehicleGpsTrailRoadMatchedGeometry(
       return [coordinate[0], coordinate[1]] as [number, number];
     });
   });
-  return { coordinates, type: 'MultiLineString' };
+  const anchors = value.anchors === undefined
+    ? undefined
+    : adaptVehicleGpsTrailAnchors(value.anchors, coordinates, body);
+  return { ...(anchors === undefined ? {} : { anchors }), coordinates, type: 'MultiLineString' };
+}
+
+function adaptVehicleGpsTrailAnchors(
+  value: unknown,
+  coordinates: VehicleGpsTrailRoadMatchedGeometry['coordinates'],
+  body: unknown,
+): NonNullable<VehicleGpsTrailRoadMatchedGeometry['anchors']> {
+  if (!Array.isArray(value)) throw invalidVehicleGpsTrailHistory(body);
+  return value.map((anchor) => {
+    if (
+      !isObject(anchor)
+      || !hasExactKeys(anchor, ['coordinateIndex', 'lineIndex', 'observedAt'])
+      || !isNonNegativeInteger(anchor.coordinateIndex)
+      || !isNonNegativeInteger(anchor.lineIndex)
+      || !isDateTime(anchor.observedAt)
+      || coordinates[anchor.lineIndex]?.[anchor.coordinateIndex] === undefined
+    ) throw invalidVehicleGpsTrailHistory(body);
+    return {
+      coordinateIndex: anchor.coordinateIndex,
+      lineIndex: anchor.lineIndex,
+      observedAt: anchor.observedAt,
+    };
+  });
 }
 
 function adaptVehicleGpsTrailMarker(value: unknown, body: unknown): VehicleGpsTrailMarker | null {

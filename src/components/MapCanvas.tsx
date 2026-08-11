@@ -75,6 +75,7 @@ export type MapCanvasRoute = {
 export type MapCanvasVehiclePoint = {
   color?: string;
   id: string;
+  interactive?: boolean;
   label: string;
   latitude: number;
   longitude: number;
