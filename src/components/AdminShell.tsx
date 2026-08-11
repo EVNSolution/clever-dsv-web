@@ -24,6 +24,7 @@ import {
   controlTrailBounds,
   controlTrailSampleAt,
   visibleTrailGeometryLines,
+  visibleTrailRawLines,
 } from '../features/control/control-trail-playback';
 import type { ManagementData } from '../demo/management';
 import type { DepartureLocation } from './DepartureMarker';
@@ -624,24 +625,25 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory, cursorMs?: nu
     return timeOrder === 0 ? left.sessionIndex - right.sessionIndex : timeOrder;
   });
   return sessions.flatMap((session, sessionOrder) => session.segments.flatMap((segment, segmentOrder): MapCanvasRoute[] => {
-    const rawCoordinates = segment.samples
-      .filter((sample) => cursorMs === undefined || Date.parse(sample.observedAt) <= cursorMs)
-      .map((sample) => [sample.longitude, sample.latitude] as [number, number]);
     const matchedLines = visibleTrailGeometryLines(segment.roadMatchedGeometry, cursorMs);
-    const lines = matchedLines === undefined
-      ? (rawCoordinates.length === 0 ? [] : [{ coordinates: rawCoordinates, lineIndex: 0 }])
-      : matchedLines;
+    const rawLines = visibleTrailRawLines(segment.samples, segment.roadMatchedGeometry, cursorMs);
+    const lines = [
+      ...(matchedLines ?? []).map((line) => ({ coordinates: line.coordinates, id: `matched:${line.lineIndex}` })),
+      ...rawLines.map((coordinates, lineIndex) => ({ coordinates, id: `raw:${lineIndex}` })),
+    ];
     return lines.flatMap((line): MapCanvasRoute[] => {
       if (line.coordinates.length === 0) return [];
-      const visibleCoordinates = line.coordinates.length === 1 ? [line.coordinates[0]!, line.coordinates[0]!] : line.coordinates;
+      const visibleCoordinates = line.coordinates.length === 1 && line.id.startsWith('matched:')
+        ? [line.coordinates[0]!, line.coordinates[0]!]
+        : line.coordinates;
       return [{
       color: '#d92d20',
       coordinates: visibleCoordinates,
       dashed: true,
-      id: `vehicle-trail:${session.routePlanId}:${session.sessionIndex}:${segmentOrder}:${line.lineIndex}`,
+      id: `vehicle-trail:${session.routePlanId}:${session.sessionIndex}:${segmentOrder}:${line.id}`,
       kind: 'trail' as const,
       selected: true,
-      sortOrder: 200 + sessionOrder * 100 + segmentOrder * 10 + line.lineIndex,
+      sortOrder: 200 + sessionOrder * 100 + segmentOrder * 10,
       }];
     });
   }));

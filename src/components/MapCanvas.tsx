@@ -59,17 +59,13 @@ export type MapCanvasRoute = {
   color: string;
   coordinates: MapCanvasCoordinate[];
   dashed?: boolean;
-  endMarker?: 'end' | 'interrupted';
+  endMarker?: 'end';
   id: string;
   kind?: 'route' | 'trail';
   selected?: boolean;
   sortOrder?: number;
-  startMarker?: 'restart' | 'start';
+  startMarker?: 'start';
   startMarkerCoordinate?: MapCanvasCoordinate;
-  trailInterruption?: {
-    interruptedAt: string;
-    resolvedAt: string;
-  };
 };
 
 export type MapCanvasVehiclePoint = {
