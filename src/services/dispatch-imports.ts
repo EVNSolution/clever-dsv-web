@@ -420,18 +420,24 @@ function previewLocally(input: DispatchImportInput): DispatchImportPreview {
   const vehicleConflicts = conflictingMappings(assignedResourceRows, (row) => row.vehiclePlate, (row) => row.driverName);
   const rows = input.rows.map((row): DispatchImportPreviewRow => {
     const issues: DispatchImportIssue[] = [];
-    const isUnassignedResourceRow = row.driverName === '' || row.vehiclePlate === '';
-    const drivers = isUnassignedResourceRow ? [] : management.drivers.filter((driver) => driver.name === row.driverName);
-    const vehicles = isUnassignedResourceRow ? [] : management.vehicles.filter((vehicle) => vehicle.plate === row.vehiclePlate);
+    const hasDriverName = row.driverName !== '';
+    const hasVehiclePlate = row.vehiclePlate !== '';
+    const drivers = hasDriverName ? management.drivers.filter((driver) => driver.name === row.driverName) : [];
+    const vehicles = hasDriverName && hasVehiclePlate
+      ? management.vehicles.filter((vehicle) => vehicle.plate === row.vehiclePlate)
+      : [];
+    const assignedVehicleId = drivers.length === 1 && !hasVehiclePlate
+      ? management.assignments.find((assignment) => assignment.driverId === drivers[0]?.id)?.vehicleId ?? null
+      : vehicles.length === 1 ? vehicles[0]?.id ?? null : null;
     for (const [field, value] of [
       ['destinationName', row.destinationName],
       ['conditionCode', row.conditionCode], ['address', row.address], ['customerCode', row.customerCode],
       ['sellerOrderKey', row.sellerOrderKey],
     ] as const) if (!value) issues.push(errorIssue('REQUIRED', field, '필수 값입니다.'));
     if (!Number.isInteger(row.shippedBoxes) || row.shippedBoxes <= 0) issues.push(errorIssue('SHIPPED_BOXES_INVALID', 'shippedBoxes', '박스 수량은 1 이상의 정수여야 합니다.'));
-    if (!isUnassignedResourceRow && drivers.length === 0) issues.push(errorIssue('DRIVER_NOT_FOUND', 'driverName', '등록된 배송원을 찾을 수 없습니다.'));
+    if (hasDriverName && drivers.length === 0) issues.push(errorIssue('DRIVER_NOT_FOUND', 'driverName', '등록된 배송원을 찾을 수 없습니다.'));
     if (drivers.length > 1) issues.push(errorIssue('DRIVER_AMBIGUOUS', 'driverName', '같은 이름의 배송원이 둘 이상입니다.'));
-    if (!isUnassignedResourceRow && vehicles.length === 0) issues.push(errorIssue('VEHICLE_NOT_FOUND', 'vehiclePlate', '등록된 차량 번호를 찾을 수 없습니다.'));
+    if (hasDriverName && hasVehiclePlate && vehicles.length === 0) issues.push(errorIssue('VEHICLE_NOT_FOUND', 'vehiclePlate', '등록된 차량 번호를 찾을 수 없습니다.'));
     if (duplicateOrders.has(row.sellerOrderKey)) issues.push(errorIssue('SELLER_ORDER_DUPLICATED', 'sellerOrderKey', '파일 안에서 SellerOrderKey가 중복됩니다.'));
     if (driverConflicts.has(row.driverName)) issues.push(errorIssue('DRIVER_VEHICLE_CONFLICT', 'vehiclePlate', '한 배송원에게 여러 차량이 지정되었습니다.'));
     if (vehicleConflicts.has(row.vehiclePlate)) issues.push(errorIssue('VEHICLE_DRIVER_CONFLICT', 'driverName', '한 차량에 여러 배송원이 지정되었습니다.'));
@@ -443,7 +449,7 @@ function previewLocally(input: DispatchImportInput): DispatchImportPreview {
       driverId: drivers.length === 1 ? drivers[0]?.id ?? null : null,
       issues,
       status: issues.length === 0 ? 'READY' : 'NEEDS_REVIEW',
-      vehicleId: vehicles.length === 1 ? vehicles[0]?.id ?? null : null,
+      vehicleId: assignedVehicleId,
     };
   });
   const errorRows = rows.filter((row) => row.issues.some((issue) => issue.severity === 'error')).length;
