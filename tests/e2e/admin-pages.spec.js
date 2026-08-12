@@ -127,6 +127,27 @@ test('admin settings persist after reload', async ({ page }) => {
   await expect(delayAlerts).not.toBeChecked();
 });
 
+test('settings actions and native inputs keep the light visual treatment', async ({ page }) => {
+  await page.goto('/settings');
+
+  const guideButton = page.getByRole('button', { name: '사용자 가이드' });
+  const inputs = page.locator('.setting-input');
+  await expect(guideButton).toBeVisible();
+  await expect(inputs).toHaveCount(5);
+
+  const guideStyle = await guideButton.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const icon = element.querySelector('svg').getBoundingClientRect();
+    return { alignItems: style.alignItems, display: style.display, gap: style.gap, iconHeight: icon.height, iconWidth: icon.width };
+  });
+  expect(guideStyle).toEqual({ alignItems: 'center', display: 'flex', gap: '7px', iconHeight: 18, iconWidth: 18 });
+
+  expect(await inputs.evaluateAll((elements) => elements.map((element) => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, color: style.color, colorScheme: style.colorScheme };
+  }))).toEqual(Array.from({ length: 5 }, () => ({ background: 'rgb(255, 255, 255)', color: 'rgb(29, 29, 31)', colorScheme: 'light' })));
+});
+
 test('dispatch uses the shared planned departure setting', async ({ page }) => {
   await page.goto('/settings');
   await page.getByLabel('준비 시작 시간').fill('07:40');
