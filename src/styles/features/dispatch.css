@@ -514,6 +514,7 @@
 }
 .dispatch-assignment-action > p { margin:0; color:var(--color-risk); font-size:10px; font-weight:750; }
 .dispatch-assignment-action > div:last-child { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:6px; }
+.dispatch-assignment-action > div:last-child .btn:last-child { grid-column:1 / -1; }
 .dispatch-assignment-action .btn { min-width:0; min-height:34px; padding:0 8px; font-size:11px; white-space:nowrap; }
 .dispatch-action-count { margin-left:4px; font-size:9px; font-weight:850; opacity:.72; }
 
