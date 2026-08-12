@@ -394,6 +394,16 @@ test('session check remains visually silent', () => {
   expect(app).not.toContain('고객 세션 권한을 확인하고 있습니다.');
 });
 
+test('remote sessions are revalidated when the browser becomes active and while visible', () => {
+  const app = readRepo('src/App.tsx');
+  expect(app).toContain("window.addEventListener('focus', onFocus)");
+  expect(app).toContain("document.addEventListener('visibilitychange', onVisibilityChange)");
+  expect(app).toContain('SESSION_REVALIDATION_INTERVAL_MS = 60_000');
+  expect(app).toContain("document.visibilityState === 'hidden'");
+  expect(app).toContain('restoreSession()');
+  expect(readRepo('src/services/auth.ts')).toContain("requestV1ReadJson<SessionDto>('session', { cache: 'no-store' })");
+});
+
 test('package dependency inventory remains explicit', () => {
   const manifest = JSON.parse(readRepo('package.json'));
   expect(Object.keys(manifest.dependencies).sort()).toEqual([

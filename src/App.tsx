@@ -22,6 +22,8 @@ type SessionGate = {
   message?: string;
 };
 
+const SESSION_REVALIDATION_INTERVAL_MS = 60_000;
+
 function readPath(): AppPath {
   const decodedPath = decodeURI(window.location.pathname);
   const path: string = legacyPathMap[decodedPath as keyof typeof legacyPathMap] ?? decodedPath;
@@ -106,6 +108,39 @@ export function App(): ReactElement {
       });
     return () => { active = false; };
   }, [path, principal]);
+
+  useEffect(() => {
+    if (apiConfig.mode !== 'remote' || isPublicPath(path) || principal === null) return;
+    let active = true;
+    let checking = false;
+    const revalidate = async () => {
+      if (!active || checking || document.visibilityState === 'hidden') return;
+      checking = true;
+      try {
+        const restoredPrincipal = await restoreSession();
+        if (!active) return;
+        setPrincipal(restoredPrincipal);
+        setSessionGate(accessGateFor(restoredPrincipal, path));
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) return;
+      } finally {
+        checking = false;
+      }
+    };
+    const onFocus = () => { void revalidate(); };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void revalidate();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    const intervalId = window.setInterval(() => { void revalidate(); }, SESSION_REVALIDATION_INTERVAL_MS);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [path, principal?.id]);
 
   function go(nextPath: AppPath): void {
     navigate(nextPath);

@@ -98,7 +98,7 @@ export async function logout(): Promise<void> {
 
 export async function restoreSession(): Promise<Principal> {
   if (apiConfig.mode === 'mock') return { id: 'mock-admin', principalType: 'DSV_ADMIN', shopId: 'mock-shop', displayName: null, scopes: ['dsv:settings:read', 'dsv:settings:write', 'dsv:accounts:read', 'dsv:accounts:write'], customerId: 'mock-customer', driverId: null };
-  const session = await requestV1ReadJson<SessionDto>('session');
+  const session = await requestV1ReadJson<SessionDto>('session', { cache: 'no-store' });
   storeTransportSession(session);
   return principalFromSession(session);
 }
