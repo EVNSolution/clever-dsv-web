@@ -451,7 +451,7 @@
 .dispatch-driver-table { width:100%; border-collapse:separate; border-spacing:0; table-layout:fixed; font-size:11px; }
 .dispatch-driver-table th {
   position:sticky; top:0; z-index:2; height:34px; padding:0 12px; border-bottom:1px solid var(--color-control-border);
-  background:var(--color-white); color:var(--color-text-subtle); text-align:left; font-size:10px; font-weight:750;
+  background:var(--color-white); color:var(--color-text-subtle); text-align:left; font-size:10px; font-weight:750; white-space:nowrap;
 }
 .dispatch-driver-table th:nth-child(1) { width:31%; }
 .dispatch-driver-table th:nth-child(2) { width:49%; }
