@@ -28,7 +28,10 @@
 .record-scroll .page-table { margin-top:0; }
 .record-row { cursor:pointer; }
 .record-row:hover, .record-row.active { background:var(--color-primary-soft); }
-.setting-input { width:110px; min-height:34px; border:1px solid var(--color-border); border-radius:12px; padding:0 10px; font:inherit; }
+.setting-input {
+  box-sizing:border-box; width:110px; min-height:34px; border:1px solid var(--color-border); border-radius:12px;
+  padding:0 10px; background:var(--color-white); color:var(--color-ink); color-scheme:light; font:inherit;
+}
 .setting-input[type="time"] { width:140px; }
 .destination-list { display:grid; gap:10px; margin-top:14px; }
 .destination-button { width:100%; border:1px solid var(--color-border); border-radius:16px; background:var(--color-white); padding:8px 12px; text-align:left; cursor:pointer; display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center; }
