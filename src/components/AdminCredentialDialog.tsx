@@ -12,6 +12,7 @@ export function AdminCredentialDialog({
   onUpdated: (principal: Principal) => void;
 }): ReactElement {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const loginIdIntentRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -28,7 +29,7 @@ export function AdminCredentialDialog({
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const currentPassword = String(form.get('currentPassword') ?? '');
-    const loginId = String(form.get('newLoginId') ?? '').trim();
+    const loginId = loginIdIntentRef.current ? String(form.get('newLoginId') ?? '').trim() : '';
     const password = String(form.get('password') ?? '');
     const passwordConfirm = String(form.get('passwordConfirm') ?? '');
     if (!loginId && !password) {
@@ -49,6 +50,7 @@ export function AdminCredentialDialog({
       });
       onUpdated(principal);
       formElement.reset();
+      loginIdIntentRef.current = false;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '계정 설정을 저장하지 못했습니다.');
     } finally {
@@ -78,7 +80,21 @@ export function AdminCredentialDialog({
           <input name="currentPassword" type="password" required autoComplete="current-password" disabled={submitting} />
         </label>
         <label>새 로그인 아이디
-          <input name="newLoginId" autoComplete="off" autoCapitalize="none" spellCheck={false} minLength={3} maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,63}" placeholder="변경할 때만 입력" disabled={submitting} />
+          <input
+            name="newLoginId"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            minLength={3}
+            maxLength={64}
+            pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,63}"
+            placeholder="변경할 때만 입력"
+            disabled={submitting}
+            onFocus={(event) => {
+              if (!loginIdIntentRef.current) event.currentTarget.value = '';
+              loginIdIntentRef.current = true;
+            }}
+          />
         </label>
         <label>새 비밀번호
           <input name="password" type="password" autoComplete="new-password" minLength={12} maxLength={256} placeholder="변경할 때만 입력" disabled={submitting} />

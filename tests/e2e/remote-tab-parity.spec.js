@@ -2048,6 +2048,7 @@ test('DSV admin without account scopes can update own credentials from shell', a
   await page.getByRole('button', { name: '계정 설정' }).click();
   const dialog = page.getByRole('dialog', { name: '계정 설정' });
   await expect(dialog.getByLabel('새 로그인 아이디')).toHaveAttribute('autocomplete', 'off');
+  await dialog.getByLabel('새 로그인 아이디').evaluate((input) => { input.value = 'saved-operator-id'; });
   await dialog.getByLabel('현재 비밀번호').fill('CurrentPass!234');
   await dialog.getByRole('button', { name: '저장', exact: true }).click();
   await expect(dialog.getByRole('alert')).toHaveText('변경할 로그인 아이디 또는 새 비밀번호를 입력하세요.');
