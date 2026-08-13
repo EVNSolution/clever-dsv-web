@@ -44,6 +44,13 @@ export async function deleteAdminAccount(accountId: string): Promise<void> {
   await requestLegacyJson(`admin-accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
 }
 
+export async function revokeAdminAccountSession(accountId: string): Promise<boolean> {
+  const response = await requestLegacyJson<unknown>('admin-accounts/' + encodeURIComponent(accountId) + '/session', { method: 'DELETE' });
+  const revoked = objectField(response, 'revoked');
+  if (typeof revoked !== 'boolean') throw new Error('운영 계정 세션 응답 형식이 올바르지 않습니다.');
+  return revoked;
+}
+
 function parseInvitation(value: unknown): AdminAccountInvitation {
   if (!isObject(value)) throw new Error('운영 계정 초대 응답 형식이 올바르지 않습니다.');
   return {

@@ -6,6 +6,7 @@ import {
   deleteAdminAccount,
   inviteAdminAccount,
   loadAdminAccounts,
+  revokeAdminAccountSession,
   setAdminAccountStatus,
 } from '../services/admin-accounts';
 import type { AdminAccount } from '../services/admin-accounts';
@@ -95,6 +96,22 @@ export function AdminAccountsPanel({
     }
   };
 
+  const revokeSession = async (account: AdminAccount) => {
+    setError('');
+    setMessage('');
+    setPendingAccountId(account.id);
+    try {
+      const revoked = await revokeAdminAccountSession(account.id);
+      setMessage(revoked
+        ? account.loginId + ' 계정의 활성 세션을 종료했습니다.'
+        : account.loginId + ' 계정에 종료할 활성 세션이 없습니다.');
+    } catch (revokeError) {
+      setError(errorMessage(revokeError));
+    } finally {
+      setPendingAccountId(undefined);
+    }
+  };
+
   const sortedAccounts = [...accounts].sort((left, right) => compareAuthority(left, right, authoritySort));
 
   return (
@@ -134,6 +151,7 @@ export function AdminAccountsPanel({
                       <td>{formatDateTime(account.lastAuthenticatedAt)}</td>
                       <td>
                         {canWrite ? <span className="settings-account-row-actions">
+                          {account.status === 'ACTIVE' && !isCurrent ? <button type="button" disabled={pending} onClick={() => void revokeSession(account)}>강제 로그아웃</button> : null}
                           <button type="button" disabled={pending || (isCurrent && account.status === 'ACTIVE')} onClick={() => void toggleStatus(account)}>{account.status === 'ACTIVE' ? '비활성화' : '활성화'}</button>
                           {account.status === 'DISABLED' && !isCurrent ? <button className="danger" type="button" disabled={pending} onClick={() => setDeleteTarget(account)}>삭제</button> : null}
                         </span> : null}
