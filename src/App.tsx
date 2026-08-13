@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { adminAccountSetupPath, adminCustomerDeliveryPath, adminTabs, customerAccountSetupPath, customerDeliveryPath, customerLoginPath, defaultPath, legacyPathMap } from './app-routes';
+import { accountPasswordPath, adminAccountSetupPath, adminCustomerDeliveryPath, adminTabs, customerAccountSetupPath, customerDeliveryPath, customerLoginPath, defaultPath, legacyPathMap } from './app-routes';
 import type { AppPath } from './app-routes';
 import { AdminShell } from './components/AdminShell';
 import { AdminAccountSetupPage } from './pages/AdminAccountSetupPage';
@@ -14,6 +14,7 @@ import { hasRole, logout, restoreSession } from './services/auth';
 import type { Principal, PrincipalRole } from './services/auth';
 import { MapPreview } from './components/MapPreview';
 import { logoutCustomerAccount } from './services/customer-accounts';
+import { PasswordChangePage } from './pages/PasswordChangePage';
 
 const CustomerDeliveryInquiryPage = lazy(() => import('./pages/CustomerDeliveryInquiryPage').then((module) => ({ default: module.CustomerDeliveryInquiryPage })));
 
@@ -27,7 +28,7 @@ const SESSION_REVALIDATION_INTERVAL_MS = 60_000;
 function readPath(): AppPath {
   const decodedPath = decodeURI(window.location.pathname);
   const path: string = legacyPathMap[decodedPath as keyof typeof legacyPathMap] ?? decodedPath;
-  if (path === '/login' || path === customerLoginPath || path === customerAccountSetupPath || path === adminAccountSetupPath || path === adminCustomerDeliveryPath || path === customerDeliveryPath || adminTabs.some((tab) => tab.path === path)) return path as AppPath;
+  if (path === '/login' || path === accountPasswordPath || path === customerLoginPath || path === customerAccountSetupPath || path === adminAccountSetupPath || path === adminCustomerDeliveryPath || path === customerDeliveryPath || adminTabs.some((tab) => tab.path === path)) return path as AppPath;
   return defaultPath;
 }
 
@@ -76,6 +77,11 @@ export function App(): ReactElement {
     }
     const requiredRole = roleForPath(path);
     if (principal) {
+      if (principal.mustChangePassword && path !== accountPasswordPath) {
+        navigate(accountPasswordPath);
+        setPath(accountPasswordPath);
+        return;
+      }
       setSessionGate(accessGateFor(principal, path));
       return;
     }
@@ -86,6 +92,12 @@ export function App(): ReactElement {
         if (!active) return;
         if (!hasRole(restoredPrincipal, requiredRole)) {
           setSessionGate({ status: 'blocked', message: '이 계정은 현재 화면을 볼 수 없습니다.' });
+          return;
+        }
+        if (restoredPrincipal.mustChangePassword && path !== accountPasswordPath) {
+          setPrincipal(restoredPrincipal);
+          navigate(accountPasswordPath);
+          setPath(accountPasswordPath);
           return;
         }
         if (!hasRequiredScopes(restoredPrincipal, path)) {
@@ -119,6 +131,12 @@ export function App(): ReactElement {
       try {
         const restoredPrincipal = await restoreSession();
         if (!active) return;
+        if (restoredPrincipal.mustChangePassword && path !== accountPasswordPath) {
+          setPrincipal(restoredPrincipal);
+          navigate(accountPasswordPath);
+          setPath(accountPasswordPath);
+          return;
+        }
         setPrincipal(restoredPrincipal);
         setSessionGate(accessGateFor(restoredPrincipal, path));
       } catch (error) {
@@ -171,6 +189,9 @@ export function App(): ReactElement {
   if (path === customerLoginPath) return <CustomerLoginPage onLogin={(nextPath) => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(nextPath); }} />;
   if (path === customerAccountSetupPath) return <CustomerAccountSetupPage onComplete={(nextPath) => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(nextPath); }} />;
   if (path === adminAccountSetupPath) return <AdminAccountSetupPage onComplete={(nextPath) => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(nextPath); }} />;
+  if (path === accountPasswordPath && effectiveSessionGate.status === 'ready') {
+    return <PasswordChangePage onLogout={handleLogout} onUpdated={(updatedPrincipal) => { setPrincipal(updatedPrincipal); setSessionGate({ status: 'ready' }); go(defaultPath); }} />;
+  }
   if (effectiveSessionGate.status === 'checking') {
     if (path === '/control') {
       return (
@@ -212,6 +233,7 @@ export function App(): ReactElement {
       </Suspense>
     );
   }
+  if (path === accountPasswordPath) return <SessionState label="비밀번호 변경 준비 중" />;
   return (
     <AdminShell
       activePath={path}
@@ -250,6 +272,7 @@ const requiredScopesByPath: Record<AppPath, string[]> = {
   [adminCustomerDeliveryPath]: ['dsv:customers:read', 'dsv:dispatches:read'],
   [customerDeliveryPath]: ['dsv:customer-deliveries:read'],
   '/login': [],
+  [accountPasswordPath]: ['dsv:session:read'],
   [customerLoginPath]: [],
   [customerAccountSetupPath]: [],
   [adminAccountSetupPath]: [],

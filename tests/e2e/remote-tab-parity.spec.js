@@ -1905,12 +1905,17 @@ test('admin account status and delete actions stay attached to the selected row'
   };
   let statusBody;
   let deleteRequested = false;
+  let sessionRevokeRequested = false;
   const api = await installApiFixtures(page, adminFixtures({
     'GET /api/dsv/v1/session': v1Envelope({
       ...adminSession,
       scopes: [...adminSession.scopes, 'dsv:accounts:read', 'dsv:accounts:write'],
     }, 'g006-account-action-session'),
     'GET /api/dsv/admin-accounts': legacyEnvelope({ accounts: [targetAccount, currentAccount] }),
+    ['DELETE /api/dsv/admin-accounts/' + targetAccount.id + '/session']: () => {
+      sessionRevokeRequested = true;
+      return legacyEnvelope({ accountId: targetAccount.id, revoked: true });
+    },
     [`PATCH /api/dsv/admin-accounts/${targetAccount.id}/status`]: ({ request }) => {
       statusBody = request.postDataJSON();
       return legacyEnvelope({ account: { ...targetAccount, status: 'DISABLED' } });
@@ -1927,6 +1932,11 @@ test('admin account status and delete actions stay attached to the selected row'
   const targetRow = table.getByRole('row').filter({ hasText: 'asd' });
   const currentRow = table.getByRole('row').filter({ hasText: 'dsv-admin' });
   await expect(table.locator('tbody tr').nth(0)).toContainText('dsv-admin');
+  await targetRow.getByRole('button', { name: '강제 로그아웃', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'asd 계정의 활성 세션을 종료했습니다.' })).toBeVisible();
+  await expect(currentRow.getByRole('button', { name: '강제 로그아웃', exact: true })).toHaveCount(0);
+  expect(sessionRevokeRequested).toBe(true);
+
   await targetRow.getByRole('button', { name: '비활성화', exact: true }).click();
 
   await expect(table.locator('tbody tr').nth(0)).toContainText('dsv-admin');

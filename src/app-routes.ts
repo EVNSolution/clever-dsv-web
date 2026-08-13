@@ -7,6 +7,7 @@ export const adminTabs = [
 ] as const;
 
 export const defaultPath = '/control';
+export const accountPasswordPath = '/account/password';
 export const customerDeliveryPath = '/customer/delivery-inquiry';
 export const adminCustomerDeliveryPath = '/customer/delivery-inquiry/admin';
 export const customerLoginPath = '/customer/login';
@@ -25,4 +26,4 @@ export const legacyPathMap = {
 } as const;
 
 export type AdminPath = (typeof adminTabs)[number]['path'];
-export type AppPath = AdminPath | '/login' | typeof adminCustomerDeliveryPath | typeof customerDeliveryPath | typeof customerLoginPath | typeof customerAccountSetupPath | typeof adminAccountSetupPath;
+export type AppPath = AdminPath | '/login' | typeof accountPasswordPath | typeof adminCustomerDeliveryPath | typeof customerDeliveryPath | typeof customerLoginPath | typeof customerAccountSetupPath | typeof adminAccountSetupPath;

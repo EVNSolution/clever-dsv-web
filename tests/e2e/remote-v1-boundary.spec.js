@@ -1520,6 +1520,48 @@ test('blocks a protected route before data calls when the route read scope is mi
   expect(api.unexpected).toEqual([]);
 });
 
+test('forces temporary-password administrators to change credentials before loading operations', async ({ page }) => {
+  let passwordChanged = false;
+  let submittedBody;
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': () => v1Envelope(passwordChanged
+      ? { ...fullAdminSession, mustChangePassword: false }
+      : { ...adminSession, mustChangePassword: true, scopes: ['dsv:session:read'] }),
+    'PATCH /api/dsv/auth/credentials': ({ request }) => {
+      submittedBody = request.postDataJSON();
+      passwordChanged = true;
+      return {
+        data: { ...fullAdminSession, csrfToken: 'csrf-after-password-change', mustChangePassword: false },
+        error: null,
+      };
+    },
+    'GET /api/dsv/v1/control': v1Envelope(controlSummary),
+    'GET /api/dsv/v1/control/routes': v1Envelope({ routes: [], serviceDate: controlSummary.serviceDate }),
+    'GET /api/dsv/v1/vehicles?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/dispatches': emptyV1List(),
+  });
+
+  await page.goto('/control');
+
+  await expect(page).toHaveURL(/\/account\/password$/u);
+  await expect(page.getByRole('heading', { name: '비밀번호 변경' })).toBeVisible();
+  expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/control')).toBe(false);
+  expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/vehicles')).toBe(false);
+  expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/dispatches')).toBe(false);
+
+  await page.getByLabel('현재 비밀번호').fill('temporary-password');
+  await page.getByLabel('새 비밀번호', { exact: true }).fill('new-secure-password');
+  await page.getByLabel('새 비밀번호 확인').fill('new-secure-password');
+  await page.getByRole('button', { name: '비밀번호 변경' }).click();
+
+  await expect(page).toHaveURL(/\/control$/u);
+  await expect.poll(() => api.calls.filter((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session').length).toBeGreaterThanOrEqual(2);
+  expect(submittedBody).toEqual({ currentPassword: 'temporary-password', password: 'new-secure-password' });
+  expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/control')).toBe(true);
+  expect(api.unexpected).toEqual([]);
+});
+
 test('requires every read scope used by the remote master-data page before management calls', async ({ page }) => {
   const api = await installApiFixtures(page, {
     'GET /api/dsv/v1/session': v1Envelope({
@@ -2254,6 +2296,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'GET admin-accounts',
     'POST admin-accounts/invitations',
     'PATCH admin-accounts/[^/]+/status',
+    'DELETE admin-accounts/[^/]+/session',
     'DELETE admin-accounts/[^/]+',
     'POST admin/auth/invitations/validate',
     'POST admin/auth/complete',
