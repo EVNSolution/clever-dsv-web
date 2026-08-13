@@ -2,9 +2,9 @@
 
 | 항목 | 값 |
 | --- | --- |
-| Runbook version | `1.0.0` |
+| Runbook version | `1.1.0` |
 | 상태 | Active |
-| 최종 검증일 | 2026-08-04 |
+| 최종 검증일 | 2026-08-13 |
 | 대상 | `clever-route-server`, `clever-dsv-web` |
 | 운영 웹 | `https://dsv.cleversystem.ai` |
 | 운영 API | `https://clever-route-api.cleversystem.ai` |
@@ -46,6 +46,17 @@
 - 배포 artifact key: `dsv-web/releases/<release-id>.tgz`
 
 프런트엔드는 백엔드 배포 workflow에 포함되지 않는다. 두 저장소가 모두 변경되면 각각 배포해야 한다.
+
+### 공개 진입점
+
+- 저장소: `../clever-route-server`
+- 설정: `infra/caddy/Caddyfile`의 `dsv.cleversystem.ai` 블록
+- 배포 수단: GitHub Actions의 `Edge Caddy deploy`
+- 적용 범위: DSV 정적 응답의 브라우저 보안 헤더
+
+공개 진입점은 백엔드와 같은 저장소에 있지만 별도 workflow를 사용한다. DSV
+보안 헤더 변경을 백엔드 `Route Ops simple deploy`나 프런트 정적 릴리스 교체로
+대신하지 않는다. Shopify 호스트 블록은 DSV 헤더를 상속하지 않는다.
 
 ## 공통 사전 확인
 
@@ -169,6 +180,31 @@ docker ps -a --format '{{.Names}}' | grep -x 'clever-dsv-web-candidate' && exit 
 
 SSM shell은 기본적으로 `/bin/sh`에서 실행될 수 있으므로 `set -o pipefail`을 사용하지 않는다. `set -eu`를 사용한다.
 
+## DSV 보안 헤더 배포
+
+이 절차는 `infra/caddy/Caddyfile`의 DSV 블록이 변경된 경우에만 수행한다. 먼저
+후보 설정을 운영 서버에서 검증하되 공개 진입점은 변경하지 않는다.
+
+```bash
+cd ../clever-route-server
+
+gh workflow run "Edge Caddy deploy" --ref main \
+  -f source_ref=main \
+  -f dry_run=true \
+  -f skip_smoke=false
+```
+
+dry-run 성공 후 같은 workflow를 실제 reload로 실행한다. 이 단계는 Caddy를
+재시작하지 않으며, DSV 보안 헤더 또는 기존 Route·Shopify 호스트 smoke가 실패하면
+직전 Caddyfile로 복구한다.
+
+```bash
+gh workflow run "Edge Caddy deploy" --ref main \
+  -f source_ref=main \
+  -f dry_run=false \
+  -f skip_smoke=false
+```
+
 ## 배포 후 자동 검증
 
 화면 디자인 검증은 사용자가 수행한다. 에이전트는 아래 런타임 검증까지만 담당한다.
@@ -196,6 +232,17 @@ docker inspect clever-dsv-web \
 
 기대 결과는 public HTML이 새 빌드 asset을 가리키고, `current`가 새 release를 가리키며, 컨테이너가 `running unless-stopped clever-route_default`인 상태다.
 
+### DSV 보안 헤더
+
+```bash
+curl -fsSI https://dsv.cleversystem.ai/ | grep -Ei \
+  '^(content-security-policy|permissions-policy|referrer-policy|x-content-type-options|x-frame-options):'
+```
+
+기대 결과는 CSP가 스크립트를 동일 출처로 제한하고 framing을 거부하며,
+`X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+`X-Content-Type-Options: nosniff`가 함께 반환되는 상태다.
+
 ## 중단과 복구
 
 - 백엔드 workflow 실패 시 운영 상태를 임의로 수동 변경하지 않는다. workflow 로그를 기준으로 복구한다.
@@ -212,4 +259,5 @@ docker inspect clever-dsv-web \
 
 ## 변경 이력
 
+- `1.1.0` — DSV 도메인 전용 보안 헤더의 Edge Caddy 배포와 검증 절차를 추가했다.
 - `1.0.0` — 백엔드 GitHub Actions 배포, 프런트 S3/SSM 정적 릴리스 교체, 중복 컨테이너 방지 및 검증 절차를 최초 고정했다.
