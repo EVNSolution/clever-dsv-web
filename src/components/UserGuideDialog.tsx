@@ -30,7 +30,8 @@ import {
 import 'pdfjs-dist/web/pdf_viewer.css';
 import '../styles/features/user-guide.css';
 
-GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+// The bare URL may retain the pre-fix application/octet-stream response in existing browser caches.
+GlobalWorkerOptions.workerSrc = `${pdfWorkerUrl}?mime=application-javascript`;
 
 const guideUrl = '/api/dsv/guides/operator';
 const guideDownloadUrl = `${guideUrl}?download=1`;
