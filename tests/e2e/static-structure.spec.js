@@ -273,6 +273,14 @@ test('public DSV admin account setup and credentials keep top-level account cont
   expect(credentials).toContain('DSV 관제 운영 계정');
 });
 
+test('user guide load failures remain diagnosable without assuming an auth failure', () => {
+  const guide = readSrc('components/UserGuideDialog.tsx');
+  expect(guide).toContain("console.error('Failed to load the DSV user guide.', error)");
+  expect(guide).toContain('새 창에서 열거나 잠시 후 다시 시도해 주세요.');
+  expect(guide).not.toContain('로그인 상태를 확인한 뒤');
+  expect(guide).not.toContain('loadError');
+});
+
 test('dispatch keeps customer grouping as an explicit list view', () => {
   const dispatch = readSrc('pages/DispatchPage.tsx');
   const dispatchCss = readSrc('styles/features/dispatch.css');

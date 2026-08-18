@@ -19,4 +19,6 @@
 - DSV 운영 배포는 반드시 `docs/runbooks/dsv-production-deploy.md`의 현재 버전을 따른다.
 - 이미 문서화된 배포 경로를 다시 탐색하거나 대체 경로를 임의로 만들지 않는다.
 - 프런트엔드와 백엔드의 배포 경로는 서로 다르다. 백엔드는 GitHub Actions, 프런트엔드는 정적 릴리스 교체 방식을 사용한다.
+- 프런트 nginx 설정의 정본은 `ops/nginx/dsv-web.conf`다. 운영 서버의 설정만 직접 수정하거나 별도 사본을 정본으로 취급하지 않는다.
+- PDF.js 모듈 워커 때문에 `.mjs`는 반드시 `Content-Type: application/javascript`로 응답해야 한다. 프런트 배포 후 실제 워커 URL의 응답 헤더를 검증한다.
 - 배포 실행 기록, 임시 명령 결과, 압축 파일은 `docs/runbooks/.local/` 또는 `/tmp`에 두고 커밋하지 않는다.

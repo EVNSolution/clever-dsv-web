@@ -54,7 +54,6 @@ export function UserGuideDialog({ onClose }: { onClose: () => void }): ReactElem
   const lastSearchRef = useRef('');
   const touchStartRef = useRef<{ x: number; y: number } | undefined>(undefined);
   const [loadState, setLoadState] = useState<LoadState>('loading');
-  const [loadError, setLoadError] = useState('');
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [outlineOpen, setOutlineOpen] = useState(() => !window.matchMedia('(max-width: 1024px)').matches);
   const [viewMode, setViewMode] = useState<ViewMode>('continuous');
@@ -123,8 +122,8 @@ export function UserGuideDialog({ onClose }: { onClose: () => void }): ReactElem
       findController.setDocument(pdfDocument);
       viewer.setDocument(pdfDocument);
       setOutline((await pdfDocument.getOutline() ?? []) as OutlineItem[]);
-    }).catch(() => {
-      setLoadError('사용자 가이드를 불러오지 못했습니다. 로그인 상태를 확인한 뒤 다시 시도해 주세요.');
+    }).catch((error: unknown) => {
+      console.error('Failed to load the DSV user guide.', error);
       setLoadState('error');
     });
 
@@ -276,7 +275,7 @@ export function UserGuideDialog({ onClose }: { onClose: () => void }): ReactElem
           >
             <div className="pdfViewer user-guide-pdf-viewer" ref={viewerElementRef} />
             {loadState === 'loading' ? <div className="user-guide-state" role="status">사용자 가이드를 불러오는 중입니다.</div> : null}
-            {loadState === 'error' ? <div className="user-guide-state error" role="alert"><strong>가이드를 열 수 없습니다.</strong><span>{loadError}</span></div> : null}
+            {loadState === 'error' ? <div className="user-guide-state error" role="alert"><strong>가이드를 열 수 없습니다.</strong><span>문서를 불러오지 못했습니다. 새 창에서 열거나 잠시 후 다시 시도해 주세요.</span></div> : null}
           </div>
         </div>
       </div>

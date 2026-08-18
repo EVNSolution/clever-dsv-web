@@ -2,9 +2,9 @@
 
 | 항목 | 값 |
 | --- | --- |
-| Runbook version | `1.1.0` |
+| Runbook version | `1.2.0` |
 | 상태 | Active |
-| 최종 검증일 | 2026-08-13 |
+| 최종 검증일 | 2026-08-18 |
 | 대상 | `clever-route-server`, `clever-dsv-web` |
 | 운영 웹 | `https://dsv.cleversystem.ai` |
 | 운영 API | `https://clever-route-api.cleversystem.ai` |
@@ -38,7 +38,8 @@
 - Docker image: `nginx:1.27-alpine`
 - Docker network: `clever-route_default`
 - restart policy: `unless-stopped`
-- nginx 설정: `/srv/clever-dsv-web/nginx.conf`
+- nginx 설정 정본: `ops/nginx/dsv-web.conf`
+- nginx 운영 경로: `/srv/clever-dsv-web/nginx.conf`
 - 릴리스 디렉터리: `/srv/clever-dsv-web/releases/<release-id>`
 - 현재 릴리스 링크: `/srv/clever-dsv-web/current`
 - 정적 파일 mount: `/usr/share/nginx/html:ro`
@@ -122,11 +123,16 @@ cd ../clever-dsv-web
 npm ci
 VITE_DSV_API_MODE=remote npm run build
 
+docker run --rm \
+  -v "$PWD/ops/nginx/dsv-web.conf:/etc/nginx/conf.d/default.conf:ro" \
+  nginx:1.27-alpine nginx -t
+
 COMMIT_SHA="$(git rev-parse --short=8 HEAD)"
 RELEASE_ID="$(date -u +%Y%m%dT%H%M%SZ)-${COMMIT_SHA}"
 ARCHIVE="/tmp/${RELEASE_ID}.tgz"
 COPYFILE_DISABLE=1 tar -C dist -czf "$ARCHIVE" .
 shasum -a 256 "$ARCHIVE"
+shasum -a 256 ops/nginx/dsv-web.conf
 ```
 
 ### 2. S3 업로드
@@ -134,12 +140,19 @@ shasum -a 256 "$ARCHIVE"
 ```bash
 BUCKET=clever-route-prod-artifacts-902837199612-ap-northeast-2
 KEY="dsv-web/releases/${RELEASE_ID}.tgz"
+NGINX_SHA256="$(shasum -a 256 ops/nginx/dsv-web.conf | awk '{print $1}')"
+NGINX_KEY="dsv-web/config/nginx/${NGINX_SHA256}.conf"
 
 aws s3 cp "$ARCHIVE" "s3://${BUCKET}/${KEY}" --region ap-northeast-2
+aws s3 cp ops/nginx/dsv-web.conf "s3://${BUCKET}/${NGINX_KEY}" --region ap-northeast-2
 aws s3api head-object \
   --region ap-northeast-2 \
   --bucket "$BUCKET" \
   --key "$KEY"
+aws s3api head-object \
+  --region ap-northeast-2 \
+  --bucket "$BUCKET" \
+  --key "$NGINX_KEY"
 ```
 
 ### 3. SSM 대상 확인
@@ -159,17 +172,18 @@ test -n "$INSTANCE_ID" && test "$INSTANCE_ID" != None
 
 아래 불변 조건을 지키는 단일 `AWS-RunShellScript` 명령으로 교체한다.
 
-1. S3 object의 presigned URL을 만든다. URL은 저장하거나 커밋하지 않는다.
-2. `/srv/clever-dsv-web/releases/<release-id>.staging`에 압축을 푼다.
-3. 로컬에서 계산한 SHA-256과 서버에서 받은 archive의 SHA-256을 비교한다.
-4. `index.html`이 없으면 중단한다.
-5. `clever-dsv-web-candidate`를 기존 network, nginx 설정, staging mount로 잠시 실행한다.
-6. candidate의 `/` 응답이 새 `index.html`의 asset 이름을 포함하는지 확인한다.
+1. 릴리스와 nginx 설정 S3 object의 presigned URL을 만든다. URL은 저장하거나 커밋하지 않는다.
+2. `/srv/clever-dsv-web/releases/<release-id>.staging`에 압축을 풀고 nginx 설정은 `/srv/clever-dsv-web/nginx.conf.candidate`에 받는다.
+3. 로컬에서 계산한 SHA-256과 서버에서 받은 두 파일의 SHA-256을 각각 비교한다.
+4. `index.html`이 없거나 nginx 설정 SHA-256이 다르면 중단한다.
+5. `clever-dsv-web-candidate`를 기존 network, candidate nginx 설정, staging mount로 잠시 실행한다.
+6. candidate의 `/` 응답이 새 `index.html`의 asset 이름을 포함하고 PDF 워커 `.mjs`가 `application/javascript`로 응답하는지 확인한다.
 7. 검증된 staging을 최종 release 디렉터리로 이동하고 `current` symlink를 교체한다.
-8. 기존 `clever-dsv-web` 컨테이너를 제거한 뒤 같은 이름으로 정확히 한 개만 다시 만든다.
-9. network는 `clever-route_default`, restart policy는 `unless-stopped`, mount는 모두 read-only로 유지한다.
-10. 새 컨테이너의 `/` 응답을 다시 확인한다.
-11. candidate와 `/tmp` archive를 제거한다.
+8. 기존 nginx 설정은 `/srv/clever-dsv-web/nginx.conf.previous`로 보존하고 검증된 candidate 설정을 `/srv/clever-dsv-web/nginx.conf`로 이동한다.
+9. 기존 `clever-dsv-web` 컨테이너를 제거한 뒤 같은 이름으로 정확히 한 개만 다시 만든다.
+10. network는 `clever-route_default`, restart policy는 `unless-stopped`, mount는 모두 read-only로 유지한다.
+11. 새 컨테이너의 `/` 응답과 PDF 워커 MIME을 다시 확인한다.
+12. candidate와 `/tmp` archive를 제거한다.
 
 임시 candidate는 검증 중에만 존재해야 한다. 완료 후 아래 결과에서 `clever-dsv-web`이 정확히 한 개여야 한다.
 
@@ -228,9 +242,19 @@ curl -fsS --retry 3 --retry-delay 2 https://dsv.cleversystem.ai/
 readlink -f /srv/clever-dsv-web/current
 docker inspect clever-dsv-web \
   --format '{{.State.Status}} {{.HostConfig.RestartPolicy.Name}} {{.HostConfig.NetworkMode}}'
+
+set -- /srv/clever-dsv-web/current/assets/pdf.worker-*.mjs
+test -f "$1"
+WORKER_ASSET="${1##*/}"
+curl -fsSI --retry 3 --retry-delay 2 \
+  "https://dsv.cleversystem.ai/assets/${WORKER_ASSET}" \
+  | tr -d '\r' \
+  | grep -Eiq '^content-type: application/javascript(;|$)'
+
+test "$(sha256sum /srv/clever-dsv-web/nginx.conf | awk '{print $1}')" = "<expected-nginx-sha256>"
 ```
 
-기대 결과는 public HTML이 새 빌드 asset을 가리키고, `current`가 새 release를 가리키며, 컨테이너가 `running unless-stopped clever-route_default`인 상태다.
+기대 결과는 public HTML이 새 빌드 asset을 가리키고, `current`가 새 release를 가리키며, 컨테이너가 `running unless-stopped clever-route_default`인 상태다. PDF 워커는 `application/octet-stream`이 아니라 `application/javascript`로 응답해야 하며 운영 nginx 설정 SHA-256은 배포한 정본과 같아야 한다.
 
 ### DSV 보안 헤더
 
@@ -243,11 +267,17 @@ curl -fsSI https://dsv.cleversystem.ai/ | grep -Ei \
 `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
 `X-Content-Type-Options: nosniff`가 함께 반환되는 상태다.
 
+### PDF 도움말 장애 판별
+
+- 팝업에서 PDF.js의 `Setting up fake worker` 경고가 나오면 먼저 실제 `pdf.worker-*.mjs` 응답의 `Content-Type`을 확인한다.
+- 인증된 PDF URL이 새 창에서는 열리지만 팝업만 실패하고 워커가 `application/octet-stream`으로 응답하면 nginx MIME 설정 문제다.
+- 이 문제를 해결하기 위해 `X-Content-Type-Options: nosniff`를 제거하거나 PDF API를 공개하지 않는다. `ops/nginx/dsv-web.conf`와 운영 설정의 SHA-256을 맞춘다.
+
 ## 중단과 복구
 
 - 백엔드 workflow 실패 시 운영 상태를 임의로 수동 변경하지 않는다. workflow 로그를 기준으로 복구한다.
 - 프런트 candidate 검증 실패 시 기존 `clever-dsv-web`은 건드리지 않고 staging만 제거한다.
-- 프런트 교체 후 검증 실패 시 직전 `current` 대상 release로 동일한 nginx 컨테이너를 다시 만든다.
+- 프런트 교체 후 검증 실패 시 직전 `current` 대상 release와 `/srv/clever-dsv-web/nginx.conf.previous`를 함께 복원한 뒤 동일한 nginx 컨테이너를 다시 만든다.
 - 운영 컨테이너 이름을 바꾸거나 `clever-dsv-web-2` 같은 중복 컨테이너를 남기지 않는다.
 - 릴리스 정리와 Docker image prune은 배포와 별도 작업이다. 배포 과정에서 임의로 수행하지 않는다.
 
@@ -259,5 +289,6 @@ curl -fsSI https://dsv.cleversystem.ai/ | grep -Ei \
 
 ## 변경 이력
 
+- `1.2.0` — 프런트 nginx 설정을 저장소 정본으로 관리하고 PDF.js `.mjs` MIME 검증과 설정 복구 절차를 추가했다.
 - `1.1.0` — DSV 도메인 전용 보안 헤더의 Edge Caddy 배포와 검증 절차를 추가했다.
 - `1.0.0` — 백엔드 GitHub Actions 배포, 프런트 S3/SSM 정적 릴리스 교체, 중복 컨테이너 방지 및 검증 절차를 최초 고정했다.

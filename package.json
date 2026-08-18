@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "VITE_DSV_API_MODE=mock vite --host 0.0.0.0 --port 5174",
     "dev:remote": "VITE_DSV_API_MODE=remote VITE_DSV_API_PROXY_TARGET=http://127.0.0.1:3001 VITE_DSV_SHOP_DOMAIN=dsv-demo.local vite --host 0.0.0.0 --port 5174",
-    "build": "tsc -p tsconfig.json --noEmit && VITE_DSV_API_MODE=${VITE_DSV_API_MODE:-remote} vite build",
+    "build": "tsc -p tsconfig.json --noEmit && VITE_DSV_API_MODE=${VITE_DSV_API_MODE:-remote} vite build && node scripts/verify-static-server-contract.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 4174",
     "test:static": "playwright test --config=playwright.static.config.cjs",
     "test:e2e": "VITE_DSV_API_MODE=mock playwright test",
