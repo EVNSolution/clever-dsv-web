@@ -128,8 +128,8 @@ test('compact viewport uses a full-screen navigation menu', async ({ page }) => 
   await expect(page.getByRole('link', { name: '관제' })).not.toBeVisible();
 
   const closedNavigationBox = await navigation.boundingBox();
-  expect(closedNavigationBox).toMatchObject({ x: 12, y: 12, width: 196, height: 56 });
-  await expect(page.locator('.sidebar-brand-title')).toBeVisible();
+  expect(closedNavigationBox).toMatchObject({ x: 12, y: 12, width: 76, height: 56 });
+  await expect(page.locator('.sidebar-brand-title')).not.toBeVisible();
   const settingsContentBox = await page.locator('.page-content').boundingBox();
   expect(settingsContentBox.y).toBeGreaterThanOrEqual(80);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
@@ -305,6 +305,9 @@ test('compact control starts with centered collapsed cards and opens empty state
   const mapBox = await page.locator('.map-card').boundingBox();
   expect(mapBox).toMatchObject({ x: 0, y: 0, width: 390, height: 844 });
   const bellBox = await page.locator('.notification-bell').boundingBox();
+  const navigationBox = await page.locator('.left-tabs').boundingBox();
+  expect(navigationBox).toMatchObject({ x: 12, y: 12, width: 196, height: 56 });
+  await expect(page.locator('.sidebar-brand-title')).toBeVisible();
   const mapControlsBox = await page.locator('.maplibregl-ctrl-bottom-right').boundingBox();
   const cardsBox = await page.locator('.control-side').boundingBox();
   expect(390 - bellBox.x - bellBox.width).toBe(12);

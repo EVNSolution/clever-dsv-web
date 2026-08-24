@@ -132,6 +132,11 @@
     opacity:1; visibility:visible; clip-path:inset(0); transform:translateX(0);
     transition-delay:0s;
   }
+  .static-page:not(.nav-expanded) .left-tabs { width:76px; }
+  .static-page:not(.nav-expanded) .sidebar-brand { width:60px; }
+  .static-page:not(.nav-expanded) .sidebar-brand-title {
+    opacity:0; visibility:hidden; clip-path:inset(0 100% 0 0); transform:translateX(-4px);
+  }
   .page.nav-expanded .left-tabs {
     inset:0; width:100vw; height:100vh; height:100dvh;
     padding:max(18px, env(safe-area-inset-top)) 28px max(18px, env(safe-area-inset-bottom)) 16px;
