@@ -128,8 +128,11 @@ test('compact viewport uses a full-screen navigation menu', async ({ page }) => 
   await expect(page.getByRole('link', { name: '관제' })).not.toBeVisible();
 
   const closedNavigationBox = await navigation.boundingBox();
-  expect(closedNavigationBox).toMatchObject({ x: 12, y: 12, width: 76, height: 56 });
+  expect(closedNavigationBox).toMatchObject({ x: 0, y: 0, width: 390, height: 72 });
   await expect(page.locator('.sidebar-brand-title')).not.toBeVisible();
+  await expect(page.locator('.mobile-header-title')).toHaveText('설정');
+  await expect(page.locator('.mobile-header-title')).toBeVisible();
+  await expect(page.locator('.page-hero h2')).not.toBeVisible();
   const pageBox = await page.locator('main.page').boundingBox();
   expect(pageBox.y).toBe(0);
   await expect(page.locator('main.page')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
@@ -140,11 +143,13 @@ test('compact viewport uses a full-screen navigation menu', async ({ page }) => 
   await menuButton.click();
   await expect(page.getByRole('button', { name: '사이드바 접기', exact: true })).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('.sidebar-brand-title')).toBeVisible();
+  await expect(page.locator('.mobile-header-title')).not.toBeVisible();
   await expect(page.getByRole('link', { name: '관제' })).toBeVisible();
   await expect(page.locator('.main-tab-copy small').first()).toBeVisible();
   await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
   await expect.poll(async () => (await navigation.boundingBox()).x).toBe(0);
   await expect.poll(async () => (await navigation.boundingBox()).width).toBeCloseTo(390, 1);
+  await expect.poll(async () => (await navigation.boundingBox()).height).toBeCloseTo(844, 1);
   const openNavigationBox = await navigation.boundingBox();
   expect(openNavigationBox.x).toBe(0);
   expect(openNavigationBox.y).toBe(0);
@@ -154,6 +159,8 @@ test('compact viewport uses a full-screen navigation menu', async ({ page }) => 
 
   await page.getByRole('link', { name: '관리' }).click();
   await expectPath(page, '/master-data');
+  await expect(page.locator('.mobile-header-title')).toHaveText('관리');
+  await expect(page.locator('.mobile-header-title')).toBeVisible();
   await expect(page.getByRole('button', { name: '사이드바 펼치기' })).toHaveAttribute('aria-expanded', 'false');
   await expect(page.getByRole('link', { name: '관제' })).not.toBeVisible();
 

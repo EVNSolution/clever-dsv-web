@@ -347,6 +347,7 @@ export function AdminShell({
           <span className="sidebar-brand-mark" aria-hidden="true">C</span>
           <h1 className="sidebar-brand-title">CLEVER DSV</h1>
         </button>
+        <span className="mobile-header-title" aria-hidden="true">{activeTab.label}</span>
         {adminTabs.map((tab) => (
           <a
             key={tab.path}

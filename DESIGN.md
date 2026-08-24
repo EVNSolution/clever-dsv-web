@@ -3,73 +3,96 @@
 ## Source of truth
 
 - Status: Active
-- Last refreshed: 2026-08-04
-- Product surfaces: 관제, 배차, 이력, 관리, 설정, 고객 배송조회
-- Evidence: 현재 React 컴포넌트와 `src/styles` 구현, 자동화된 Playwright 계약, 사용자 피드백
+- Last refreshed: 2026-08-24
+- Primary product surfaces: 관제, 배차, 이력, 관리, 설정, 고객 배송조회
+- Evidence reviewed: 현재 React 컴포넌트, `src/styles` 구현, 자동화된 Playwright 계약, 운영 화면과 사용자 피드백
+- 과거 HTML 데모는 시각적 역사 자료일 뿐 현재 디자인 정본이 아니다. 현재 화면과 이 문서가 충돌하면 구현을 확인하고 문서를 함께 갱신한다.
 
-과거 HTML 데모는 시각적 역사 자료일 뿐 현재 디자인 정본이 아니다. 현재 화면과 이 문서가 충돌하면 구현을 확인하고 문서를 함께 갱신한다.
+## Brand
 
-## Product character
+- Personality: 차분하고 정확한 운영 도구
+- Trust signals: 일관된 상태 표현, 예측 가능한 배치, 운영 데이터와 오류의 명시적 표시
+- Avoid: 시뮬레이션 문구, 금속성 그라데이션, 광택, 중첩 카드, 장식용 아이콘, hover에 따른 레이아웃 이동
 
-- 성격: 차분하고 정확한 운영 도구
-- 목표: 현재 상태, 선택 대상과 다음 행동을 빠르게 읽게 한다.
-- 금지: 시뮬레이션 문구, 금속성 그라데이션, 광택, 중첩 카드, 장식용 아이콘, hover에 따른 레이아웃 이동
+## Product goals
+
+- Goals: 현재 상태, 선택 대상과 다음 행동을 빠르게 읽게 한다.
+- Non-goals: 장식 중심의 대시보드, 실제 오류를 가리는 mock 대체, 백엔드 계약 전 예상 기능 구현
+- Success signals: 주요 작업을 한 화면에서 찾을 수 있고 화면 폭이 변해도 핵심 행동과 정보 순서가 유지된다.
+
+## Personas and jobs
+
+- Primary personas: 배차 담당자, 관제 담당자, 운영 관리자, 배송 조회 고객
+- User jobs: 주문 배차, 차량과 배송지 관제, 이력 확인, 운영 기준 관리, 배송 상태 조회
+- Key contexts of use: 데스크톱 운영 화면과 좁은 반응형 웹 화면
 
 ## Information architecture
 
-- 관리자 메뉴: 관제, 배차, 이력, 관리, 설정
-- 고객 화면: 고객 배송조회
-- 계층: 페이지 제목 → 작업 섹션 → 표, 지도 또는 타임라인 → 선택 상세
+- Primary navigation: 관제, 배차, 이력, 관리, 설정
+- Core routes/screens: 관리자 5개 화면과 고객 배송조회
+- Content hierarchy: 페이지 제목 → 작업 섹션 → 표, 지도 또는 타임라인 → 선택 상세
 - 메뉴와 제목에는 여러 업무 대상을 구분점이나 슬래시로 결합하지 않는다.
+
+## Design principles
+
+- Principle 1: 현재 상태와 다음 행동을 장식보다 먼저 보인다.
+- Principle 2: 같은 개념은 화면과 폭이 달라도 같은 명칭과 상태 표현을 사용한다.
+- Tradeoffs: 좁은 화면에서는 정보 밀도보다 작업 순서와 터치 가능 영역을 우선한다.
 
 ## Visual language
 
-- Pretendard Variable을 전역 글꼴로 사용한다.
-- 흰색 표면과 검정 텍스트를 기본으로 한다.
-- 파랑은 선택과 주요 행동, 초록은 진행 상태, 빨강은 오류에만 사용한다.
-- 색상만으로 상태를 전달하지 않고 텍스트, 아이콘 또는 외곽선을 함께 사용한다.
-- 4px 단위를 기본 간격으로 사용하되 모든 내부 요소에 동일 패딩을 중첩하지 않는다.
-- 큰 반경과 외곽선은 최상위 작업 패널에 집중하고, 표와 내부 제목에는 불필요한 카드와 그림자를 만들지 않는다.
+- Color: 흰색 표면과 검정 텍스트를 기본으로 하며 파랑은 선택과 주요 행동, 초록은 진행, 빨강은 오류에만 사용한다.
+- Typography: Pretendard Variable을 전역 글꼴로 사용한다.
+- Spacing/layout rhythm: 4px 단위를 기본으로 하고 동일 패딩을 중첩하지 않는다.
+- Shape/radius/elevation: 큰 반경과 외곽선은 최상위 작업 패널에 집중하고 내부 제목과 표에 불필요한 카드와 그림자를 만들지 않는다.
+- Motion: 상태 이해에 필요한 짧은 전환만 사용하고 reduced-motion 환경에서는 제거한다.
+- Imagery/iconography: 장식용 아이콘을 두지 않고 아이콘은 행동 또는 상태 의미를 보조한다.
 
-## Data presentation
+## Components
 
-- 비교 데이터는 카드보다 실제 `table` 구조를 우선한다.
-- 표 헤더와 본문 글자 크기는 정보 밀도를 해치지 않는 범위에서 일관되게 유지한다.
-- 상태 pill은 꼭 필요한 짧은 상태에만 사용한다.
-- 스크롤 가능한 영역은 콘텐츠 폭을 밀지 않으며 시각적 스크롤바를 숨기더라도 키보드와 포인터 스크롤은 유지한다.
-- 지도 마커, 순서 번호와 레이블은 하나의 시각 단위로 다룬다.
+- Existing components to reuse: `AdminShell`, `AdminPageHeader`, `AdminSectionHeader`, 기존 버튼과 상태 pill
+- New/changed components: 768px 이하 비관제 페이지의 공용 고정 헤더는 기존 `AdminShell` 내비게이션을 변형해 사용한다.
+- Variants and states: 데스크톱 사이드 메뉴, 모바일 접힌 고정 헤더, 모바일 전체 화면 확장 메뉴, 관제 지도 오버레이
+- Token/component ownership: 토큰은 `src/styles/foundation/tokens.css`, 공통 셸은 `src/styles/components`, 반응형 보정은 `src/styles/responsive`가 소유한다.
 
-## Interaction
+## Accessibility
 
-- 선택된 행, 차량, 배송지와 경로는 같은 상태를 공유한다.
-- 로딩 중에는 기존 레이아웃 크기를 유지한다. 지도 화면은 정적 프리뷰 다음 실제 지도, 운영 데이터 순서로 표시한다.
-- remote 오류를 mock 데이터로 감추지 않는다.
-- 빈 상태는 이유와 다음 행동을 작업 영역 안에서 설명한다.
-- 버튼, 표 행과 메뉴는 명확한 `focus-visible`을 유지한다.
-- reduced-motion 환경에서는 불필요한 전환을 제거한다.
+- Target standard: 실제 표 semantics, 접근 가능한 이름과 명확한 focus-visible을 유지한다.
+- Keyboard/focus behavior: 선택, 취소, 메뉴 펼치기와 주요 명령을 키보드로 실행할 수 있어야 한다.
+- Contrast/readability: 색상만으로 상태를 전달하지 않고 텍스트, 아이콘 또는 외곽선을 함께 사용한다.
+- Screen-reader semantics: 모바일 고정 헤더의 시각적 페이지명은 중복 낭독하지 않고 기존 페이지 제목 semantics를 유지한다.
+- Reduced motion and sensory considerations: reduced-motion 환경에서 불필요한 전환을 제거한다.
 
 ## Responsive behavior
 
-- 데스크톱을 기본으로 하되 1500px, 1120px, 920px와 768px 이하 구간을 지원한다.
-- 중간 폭에서는 사이드 메뉴가 가로 메뉴로 변형되지 않는다.
-- 작은 화면은 고정 브랜드 헤더와 전체 화면 메뉴를 사용한다.
-- 관제의 보조 카드는 작은 화면에서 접힌 상태로 시작하며, 펼치면 작업 가능한 전체 영역을 사용한다.
+- Supported breakpoints/devices: 1500px, 1120px, 920px, 768px 이하 구간을 지원한다.
+- Layout adaptations: 중간 폭에서는 사이드 메뉴를 유지한다. 768px 이하 비관제 페이지는 72px 공용 고정 헤더에 `C` 메뉴 버튼과 현재 페이지명을 표시하고, 본문 페이지 제목은 시각적으로 반복하지 않는다.
+- Touch/hover differences: 모바일 메뉴는 전체 화면으로 확장되고 충분한 터치 영역을 제공한다. 관제 화면은 지도 오버레이와 접힌 보조 카드 구조를 유지한다.
 - 좁은 관리 화면은 선택 전 목록을, 선택 후 상세를 우선하되 각 영역의 최소 폭을 유지한다.
 
-## CSS ownership
+## Interaction states
 
-- 진입점과 layer 순서: `src/styles/index.css`
-- 토큰: `src/styles/foundation/tokens.css`
-- reset과 기본 요소: `src/styles/foundation`
-- 공통 셸과 UI: `src/styles/components`
-- 화면별 규칙: `src/styles/features`
-- 반응형 보정: `src/styles/responsive`
-- 새 의존성이나 새 전역 스타일 파일보다 기존 layer와 소유 파일을 먼저 사용한다.
+- Loading: 기존 레이아웃 크기를 유지하고 지도는 정적 프리뷰, 실제 지도, 운영 데이터 순서로 표시한다.
+- Empty: 이유와 다음 행동을 작업 영역 안에서 설명한다.
+- Error: remote 오류를 mock 데이터로 감추지 않는다.
+- Success: 완료 상태와 후속 행동을 텍스트로 명시한다.
+- Disabled: 비활성 이유를 상태와 문맥으로 이해할 수 있게 한다.
+- Offline/slow network: 기존 화면을 갑자기 대체하지 않고 실패 또는 지연 상태를 명시한다.
 
-## Accessibility and verification
+## Content voice
 
-- 실제 표 semantics와 접근 가능한 이름을 유지한다.
-- 핵심 정보는 hover 없이도 읽을 수 있어야 하며 tooltip은 보조 정보에만 사용한다.
-- 키보드로 선택, 취소, 펼치기와 주요 명령을 실행할 수 있어야 한다.
-- 코드 변경은 빌드와 관련 Playwright 테스트로 검증한다.
-- 최종 화면의 시각적 판단은 사용자가 수행하며 에이전트 완료 조건에 수동 화면 검증을 포함하지 않는다.
+- Tone: 짧고 정확한 운영 문장
+- Terminology: 하나의 명칭은 하나의 업무 개념만 나타낸다.
+- Microcopy rules: 시뮬레이션 문구를 사용하지 않고 행동 버튼은 결과가 분명한 동사로 쓴다.
+
+## Implementation constraints
+
+- Framework/styling system: React와 기존 CSS layer 구조를 사용한다.
+- Design-token constraints: 새 전역 값보다 기존 토큰과 컴포넌트 규칙을 우선한다.
+- Performance constraints: 불필요한 UI 의존성이나 별도 상태 계층을 추가하지 않는다.
+- Compatibility constraints: 운영 nginx와 PDF.js `.mjs` MIME 계약을 유지한다.
+- Test/screenshot expectations: 코드 변경은 빌드와 관련 Playwright 테스트로 검증한다. 최종 화면의 시각적 판단은 사용자가 수행한다.
+
+## Open questions
+
+- [ ] 비관제 모바일 공용 헤더의 오른쪽 공통 액션이 실제로 필요해질 때 기능 계약과 함께 정의한다.

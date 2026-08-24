@@ -279,7 +279,7 @@ test('compact dispatch stacks the map and driver workspace without horizontal ov
   });
 
   expect(layout.bodyWidth).toBe(449);
-  expect(layout.headerWidth).toBe(76);
+  expect(layout.headerWidth).toBe(449);
   expect(layout.contentY).toBeGreaterThanOrEqual(80);
   expect(layout.panels).toHaveLength(2);
   expect(layout.panels.every((panel) => Math.abs(panel.width - layout.workspaceWidth) <= 1)).toBe(true);

@@ -49,6 +49,7 @@ h1 { margin: 0; font-size: clamp(22px, 2.4vw, 34px); line-height: 1.05; letter-s
   font-size:18px; line-height:1; letter-spacing:-.04em;
   transition:clip-path .2s ease, opacity .16s linear, transform .2s ease, visibility 0s linear .2s;
 }
+.mobile-header-title { display:none; }
 .nav-expanded .sidebar-brand { width:180px; justify-content:flex-start; }
 .nav-expanded .sidebar-brand-title {
   opacity:1; visibility:visible; clip-path:inset(0); transform:translateX(0);
