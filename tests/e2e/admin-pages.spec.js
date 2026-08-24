@@ -130,7 +130,9 @@ test('admin settings persist after reload', async ({ page }) => {
 test('settings actions and native inputs keep the light visual treatment', async ({ page }) => {
   await page.goto('/settings');
 
-  const guideButton = page.getByRole('button', { name: '사용자 가이드' });
+  const guideButton = page.getByRole('button', { name: '앱 가이드 및 체크리스트' });
+  const webGuideButton = page.getByRole('button', { name: '웹 가이드' });
+  await expect(webGuideButton).toBeVisible();
   const inputs = page.locator('.setting-input');
   await expect(guideButton).toBeVisible();
   await expect(inputs).toHaveCount(5);
@@ -141,6 +143,9 @@ test('settings actions and native inputs keep the light visual treatment', async
     return { alignItems: style.alignItems, display: style.display, gap: style.gap, iconHeight: icon.height, iconWidth: icon.width };
   });
   expect(guideStyle).toEqual({ alignItems: 'center', display: 'flex', gap: '7px', iconHeight: 18, iconWidth: 18 });
+  const [webGuideBox, appGuideBox] = await Promise.all([webGuideButton.boundingBox(), guideButton.boundingBox()]);
+  expect(webGuideBox.y).toBe(appGuideBox.y);
+  expect(webGuideBox.x).toBeLessThan(appGuideBox.x);
 
   expect(await inputs.evaluateAll((elements) => elements.map((element) => {
     const style = getComputedStyle(element);

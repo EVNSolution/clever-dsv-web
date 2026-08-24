@@ -118,7 +118,7 @@ async function installApiFixtures(page, fixtures) {
 }
 
 async function installGuideFixture(page) {
-  await page.route('**/api/dsv/guides/operator*', async (route) => {
+  await page.route(/\/api\/dsv\/guides\/(operator|driver)(\?.*)?$/, async (route) => {
     await route.fulfill({
       body: guidePdf,
       contentType: 'application/pdf',
@@ -1754,14 +1754,14 @@ test('settings renders the complete backend defaults', async ({ page }) => {
   expectOnlyFixtureCalls(api);
 });
 
-test('settings opens the protected guide with outline, paging, search, and file actions', async ({ page }) => {
+test('settings opens the protected web guide with outline, paging, search, and file actions', async ({ page }) => {
   const api = await installApiFixtures(page, adminFixtures({
     'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings()),
   }));
   await installGuideFixture(page);
 
   await page.goto('/settings');
-  await page.getByRole('button', { name: '사용자 가이드', exact: true }).click();
+  await page.getByRole('button', { name: '웹 가이드', exact: true }).click();
 
   const dialog = page.getByRole('dialog', { name: 'CLEVER DSV 사용자 가이드' });
   await expect(dialog).toBeVisible();
@@ -1777,7 +1777,26 @@ test('settings opens the protected guide with outline, paging, search, and file 
   await dialog.getByLabel('가이드 검색').fill('CLEVER');
   await dialog.getByRole('button', { name: '다음 검색 결과' }).click();
   await expect(dialog.getByText('1 / 1', { exact: true })).toBeVisible();
-  await dialog.getByRole('button', { name: '사용자 가이드 닫기' }).click();
+  await dialog.getByRole('button', { name: '가이드 닫기' }).click();
+  await expect(dialog).toHaveCount(0);
+  expectOnlyFixtureCalls(api);
+});
+
+test('settings opens the protected driver app guide and checklist', async ({ page }) => {
+  const api = await installApiFixtures(page, adminFixtures({
+    'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings()),
+  }));
+  await installGuideFixture(page);
+
+  await page.goto('/settings');
+  await page.getByRole('button', { name: '앱 가이드 및 체크리스트', exact: true }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'CLEVER Driver 앱 가이드 및 체크리스트' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel('현재 페이지')).toHaveValue('1');
+  await expect(dialog.getByRole('link', { name: '새 창' })).toHaveAttribute('href', '/api/dsv/guides/driver');
+  await expect(dialog.getByRole('link', { name: '다운로드' })).toHaveAttribute('href', '/api/dsv/guides/driver?download=1');
+  await dialog.getByRole('button', { name: '가이드 닫기' }).click();
   await expect(dialog).toHaveCount(0);
   expectOnlyFixtureCalls(api);
 });
@@ -1790,7 +1809,7 @@ test('settings guide uses a full-screen mobile viewer and an overlay outline', a
   await installGuideFixture(page);
 
   await page.goto('/settings');
-  await page.getByRole('button', { name: '사용자 가이드', exact: true }).click();
+  await page.getByRole('button', { name: '웹 가이드', exact: true }).click();
 
   const dialog = page.getByRole('dialog', { name: 'CLEVER DSV 사용자 가이드' });
   await expect(dialog.locator('.user-guide-pdf-viewer .page[data-page-number="1"] canvas')).toBeVisible();

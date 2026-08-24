@@ -24,6 +24,7 @@ type LoadState = 'error' | 'loading' | 'ready';
 type SaveState = 'error' | 'idle' | 'saving' | 'saved';
 type GeocodeState = 'error' | 'idle' | 'loading' | 'resolved';
 type SettingsView = 'accounts' | 'operations';
+type Guide = 'driver' | 'operator';
 
 const defaultOperationalSettings: OperationalSettings = defaultAdminSettings;
 
@@ -43,7 +44,7 @@ export function SettingsPage({ description, principalId, principalScopes, title 
   const [settingsRevision, setSettingsRevision] = useState(0);
   const [geocodeState, setGeocodeState] = useState<GeocodeState>('idle');
   const [geocodeMessage, setGeocodeMessage] = useState('');
-  const [guideOpen, setGuideOpen] = useState(false);
+  const [activeGuide, setActiveGuide] = useState<Guide | null>(null);
   const geocodeRequest = useRef(0);
 
   useEffect(() => {
@@ -150,7 +151,8 @@ export function SettingsPage({ description, principalId, principalScopes, title 
               {resetNotice ? <span role="status">{resetNotice}</span> : null}
             </div> : null}
           <div className="settings-actions">
-            <button className="btn settings-guide-button" type="button" onClick={() => setGuideOpen(true)}><BookOpen aria-hidden="true" />사용자 가이드</button>
+            <button className="btn settings-guide-button" type="button" onClick={() => setActiveGuide('operator')}><BookOpen aria-hidden="true" />웹 가이드</button>
+            <button className="btn settings-guide-button" type="button" onClick={() => setActiveGuide('driver')}><BookOpen aria-hidden="true" />앱 가이드 및 체크리스트</button>
             {activeView === 'operations' ? <>
               <button className="btn" type="button" disabled={loadState !== 'ready' || saveState === 'saving'} onClick={resetDraft}>초기화</button>
               <button className="btn primary" type="button" disabled={loadState !== 'ready' || saveState === 'saving'} onClick={() => void saveDraft()}>
@@ -160,7 +162,12 @@ export function SettingsPage({ description, principalId, principalScopes, title 
           </div>
         </div>
       )} />
-      {guideOpen ? <Suspense fallback={null}><UserGuideDialog onClose={() => setGuideOpen(false)} /></Suspense> : null}
+      {activeGuide ? <Suspense fallback={null}><UserGuideDialog
+        description={activeGuide === 'operator' ? '관제 운영자 가이드 2026. 8. 11.' : '설치 및 현장 교육 가이드 Rev. 1.0'}
+        onClose={() => setActiveGuide(null)}
+        title={activeGuide === 'operator' ? 'CLEVER DSV 사용자 가이드' : 'CLEVER Driver 앱 가이드 및 체크리스트'}
+        url={`/api/dsv/guides/${activeGuide}`}
+      /></Suspense> : null}
       <div className="settings-view-tabs" role="tablist" aria-label="설정 구분">
         <button className={activeView === 'operations' ? 'active' : ''} type="button" role="tab" aria-selected={activeView === 'operations'} onClick={() => setActiveView('operations')}>운영</button>
         {canReadAccounts ? <button className={activeView === 'accounts' ? 'active' : ''} type="button" role="tab" aria-selected={activeView === 'accounts'} onClick={() => setActiveView('accounts')}>계정</button> : null}

@@ -52,6 +52,7 @@
   .page-content.records-page .record-scroll { max-height:min(58dvh, 520px); overflow:auto; }
   .settings-hero { align-items:flex-start; flex-direction:column; }
   .settings-header-tools { width:100%; justify-content:space-between; }
+  .settings-actions { flex-wrap:wrap; }
   .settings-feedback { text-align:left; }
   .settings-location-grid { grid-template-columns:1fr; }
   .settings-location-map-shell { min-height:320px; }

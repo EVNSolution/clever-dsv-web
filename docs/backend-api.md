@@ -46,7 +46,7 @@ Content-Type: application/json
 
 고객 배송조회 권한은 인증된 customer principal에서 결정한다. query parameter의 customer ID는 고객 권한의 근거가 아니다. 관리자 전용 고객 조회만 `customers/deliveries?customerId=...`를 사용한다.
 
-설정 화면의 관제 운영자 가이드는 `GET /api/dsv/guides/operator`에서 제공한다. 이 경로는 `dsv:settings:read` scope가 있는 DSV 세션을 요구하며, 로그인하지 않은 직접 URL 요청은 `401`로 거부한다. PDF.js 렌더링을 위해 단일 byte range 요청과 `206 Partial Content`를 지원하고 `Cache-Control: private, no-store`를 사용한다. `?download=1`은 같은 인증 경계에서 첨부 파일로 응답한다. PDF 바이너리 응답은 JSON envelope를 사용하지 않는다.
+설정 화면의 관제 웹 가이드는 `GET /api/dsv/guides/operator`, Driver 앱 가이드 및 체크리스트는 `GET /api/dsv/guides/driver`에서 제공한다. 두 경로는 `dsv:settings:read` scope가 있는 DSV 세션을 요구하며, 로그인하지 않은 직접 URL 요청은 `401`로 거부한다. PDF.js 렌더링을 위해 단일 byte range 요청과 `206 Partial Content`를 지원하고 `Cache-Control: private, no-store`를 사용한다. `?download=1`은 같은 인증 경계에서 첨부 파일로 응답한다. PDF 바이너리 응답은 JSON envelope를 사용하지 않는다.
 
 ## v1 reads
 

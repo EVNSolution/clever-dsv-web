@@ -33,9 +33,6 @@ import '../styles/features/user-guide.css';
 // The bare URL may retain the pre-fix application/octet-stream response in existing browser caches.
 GlobalWorkerOptions.workerSrc = `${pdfWorkerUrl}?mime=application-javascript`;
 
-const guideUrl = '/api/dsv/guides/operator';
-const guideDownloadUrl = `${guideUrl}?download=1`;
-
 type LoadState = 'error' | 'loading' | 'ready';
 type ViewMode = 'continuous' | 'page';
 type OutlineItem = {
@@ -44,7 +41,13 @@ type OutlineItem = {
   title: string;
 };
 
-export function UserGuideDialog({ onClose }: { onClose: () => void }): ReactElement {
+export function UserGuideDialog({ description, onClose, title, url }: {
+  description: string;
+  onClose: () => void;
+  title: string;
+  url: string;
+}): ReactElement {
+  const downloadUrl = `${url}?download=1`;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -116,7 +119,7 @@ export function UserGuideDialog({ onClose }: { onClose: () => void }): ReactElem
     eventBus.on('updatefindcontrolstate', onFindState);
     eventBus.on('updatefindmatchescount', onFindMatchesCount);
 
-    const loadingTask = getDocument({ url: guideUrl, withCredentials: true });
+    const loadingTask = getDocument({ url, withCredentials: true });
     void loadingTask.promise.then(async (pdfDocument) => {
       setPageCount(pdfDocument.numPages);
       linkService.setDocument(pdfDocument);
@@ -124,7 +127,7 @@ export function UserGuideDialog({ onClose }: { onClose: () => void }): ReactElem
       viewer.setDocument(pdfDocument);
       setOutline((await pdfDocument.getOutline() ?? []) as OutlineItem[]);
     }).catch((error: unknown) => {
-      console.error('Failed to load the DSV user guide.', error);
+      console.error('Failed to load the DSV guide.', error);
       setLoadState('error');
     });
 
@@ -137,7 +140,7 @@ export function UserGuideDialog({ onClose }: { onClose: () => void }): ReactElem
       void loadingTask.destroy();
       if (dialog.open) dialog.close();
     };
-  }, []);
+  }, [url]);
 
   const setPage = (page: number) => {
     const viewer = viewerRef.current;
@@ -218,14 +221,14 @@ export function UserGuideDialog({ onClose }: { onClose: () => void }): ReactElem
         <div>
           <span className="user-guide-title-icon"><FileText aria-hidden="true" /></span>
           <span>
-            <h2 id="user-guide-title" ref={titleRef} tabIndex={-1}>CLEVER DSV 사용자 가이드</h2>
-            <small>관제 운영자 가이드 · 2026. 8. 11.</small>
+            <h2 id="user-guide-title" ref={titleRef} tabIndex={-1}>{title}</h2>
+            <small>{description}</small>
           </span>
         </div>
         <nav aria-label="사용자 가이드 파일 작업">
-          <a href={guideUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" /><span>새 창</span></a>
-          <a href={guideDownloadUrl}><Download aria-hidden="true" /><span>다운로드</span></a>
-          <button aria-label="사용자 가이드 닫기" type="button" onClick={onClose}><X aria-hidden="true" /></button>
+          <a href={url} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" /><span>새 창</span></a>
+          <a href={downloadUrl}><Download aria-hidden="true" /><span>다운로드</span></a>
+          <button aria-label="가이드 닫기" type="button" onClick={onClose}><X aria-hidden="true" /></button>
         </nav>
       </header>
 
@@ -275,7 +278,7 @@ export function UserGuideDialog({ onClose }: { onClose: () => void }): ReactElem
             tabIndex={0}
           >
             <div className="pdfViewer user-guide-pdf-viewer" ref={viewerElementRef} />
-            {loadState === 'loading' ? <div className="user-guide-state" role="status">사용자 가이드를 불러오는 중입니다.</div> : null}
+            {loadState === 'loading' ? <div className="user-guide-state" role="status">가이드를 불러오는 중입니다.</div> : null}
             {loadState === 'error' ? <div className="user-guide-state error" role="alert"><strong>가이드를 열 수 없습니다.</strong><span>문서를 불러오지 못했습니다. 새 창에서 열거나 잠시 후 다시 시도해 주세요.</span></div> : null}
           </div>
         </div>
