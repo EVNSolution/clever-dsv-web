@@ -130,6 +130,9 @@ test('compact viewport uses a full-screen navigation menu', async ({ page }) => 
   const closedNavigationBox = await navigation.boundingBox();
   expect(closedNavigationBox).toMatchObject({ x: 12, y: 12, width: 76, height: 56 });
   await expect(page.locator('.sidebar-brand-title')).not.toBeVisible();
+  const pageBox = await page.locator('main.page').boundingBox();
+  expect(pageBox.y).toBe(0);
+  await expect(page.locator('main.page')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   const settingsContentBox = await page.locator('.page-content').boundingBox();
   expect(settingsContentBox.y).toBeGreaterThanOrEqual(80);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);

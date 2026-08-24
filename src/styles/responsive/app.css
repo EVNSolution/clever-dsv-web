@@ -168,8 +168,9 @@
   .page.nav-expanded .top-cluster,
   .page.nav-expanded .grid { pointer-events:none; }
   .static-page .top-cluster { left:auto; right:12px; top:14px; }
-  .static-page .page-content { margin:80px 0 0; padding:0 12px 12px; border-radius:0; }
-  .page.nav-expanded .page-content { margin:80px 0 0; }
+  .static-page { padding-top:80px; }
+  .static-page .page-content { margin:0; padding:0 12px 12px; border-radius:0; }
+  .page.nav-expanded:not(.static-page) .page-content { margin:80px 0 0; }
   .settings-location-panel { padding:0; }
   .settings-location-grid { grid-template-columns:1fr; }
   .settings-location-fields { margin:0; padding:20px 22px; }
