@@ -13,6 +13,9 @@ if (pdfWorkers.length === 0) {
 }
 
 const nginxConfig = readFileSync(nginxConfigPath, 'utf8');
+if (!/location\s+=\s+\/index\.html\s*\{[\s\S]*?Cache-Control\s+"no-cache, no-store, must-revalidate"\s+always\s*;[\s\S]*?\}/.test(nginxConfig)) {
+  throw new Error('The canonical nginx config must prevent stale index.html responses.');
+}
 if (!/location\s+~\*\s+\\\.mjs\$[\s\S]*?types\s*\{\s*application\/javascript\s+mjs\s*;\s*\}/.test(nginxConfig)) {
   throw new Error('The canonical nginx config must serve .mjs files as application/javascript.');
 }
