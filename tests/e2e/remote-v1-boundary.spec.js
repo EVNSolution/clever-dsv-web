@@ -2310,7 +2310,6 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'POST customer/auth/complete',
     'POST customer/auth/login',
     'POST drivers',
-    'POST drivers/signup-invite',
     'PATCH drivers/[^/]+',
     'DELETE drivers/[^/]+',
     'POST vehicles',

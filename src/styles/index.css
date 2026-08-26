@@ -22,6 +22,7 @@
 @import "./features/records.css" layer(features);
 @import "./features/management.css" layer(features);
 @import "./features/customer.css" layer(features);
+@import "./features/driver-app.css" layer(features);
 
 @import "./responsive/admin.css" layer(responsive);
 @import "./responsive/app.css" layer(responsive);

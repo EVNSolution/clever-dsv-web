@@ -137,16 +137,7 @@
 .driver-invite-header button { width:34px; height:34px; flex:0 0 auto; display:grid; place-items:center; border:0; border-radius:10px; background:transparent; color:var(--color-muted); cursor:pointer; }
 .driver-invite-header button:hover { background:var(--color-row-hover); color:var(--color-ink); }
 .driver-invite-header button svg { width:18px; height:18px; }
-.driver-invite-tabs { min-height:52px; box-sizing:border-box; padding:8px 18px; display:grid; grid-template-columns:1fr 1fr; gap:6px; border-bottom:1px solid var(--color-border); background:#fbfbfc; }
-.driver-invite-tabs button { border:0; border-radius:9px; background:transparent; color:var(--color-muted); font:900 12px/1 var(--font-sans); cursor:pointer; }
-.driver-invite-tabs button[aria-selected="true"] { background:var(--color-white); color:var(--color-ink); box-shadow:0 1px 5px rgba(0,0,0,.1); }
 .driver-invite-body { max-height:calc(100dvh - 242px); overflow:auto; padding:28px; }
-.driver-invite-ready { min-height:260px; display:flex; align-items:center; justify-content:center; flex-direction:column; text-align:center; }
-.driver-invite-icon { width:64px; height:64px; display:grid; place-items:center; border-radius:20px; background:var(--color-primary-soft); color:var(--color-primary); }
-.driver-invite-icon svg { width:30px; height:30px; }
-.driver-invite-ready strong { margin-top:18px; font-size:18px; font-weight:1000; letter-spacing:-.035em; }
-.driver-invite-ready > p { max-width:480px; margin:9px 0 0; color:var(--color-muted); font-size:13px; font-weight:650; line-height:1.55; }
-.driver-invite-ready .driver-invite-warning { margin-top:20px; padding:10px 12px; border-radius:10px; background:var(--color-warning-soft); color:#855900; font-size:12px; font-weight:800; }
 .driver-invite-result { display:grid; grid-template-columns:250px minmax(0, 1fr); gap:26px; align-items:center; }
 .driver-invite-qr-card { min-width:0; padding:16px; display:flex; align-items:center; flex-direction:column; border:1px solid var(--color-border); border-radius:18px; background:#fafafa; text-align:center; }
 .driver-invite-qr-card > svg:first-child { width:18px; height:18px; align-self:flex-start; color:var(--color-muted); }
@@ -155,14 +146,8 @@
 .driver-invite-details { min-width:0; display:grid; gap:14px; }
 .driver-invite-section-title { display:flex; align-items:center; gap:7px; color:var(--color-ink); font-size:13px; font-weight:900; }
 .driver-invite-section-title svg { width:17px; height:17px; color:var(--color-primary); }
-.driver-invite-success { display:flex; align-items:center; gap:7px; color:var(--color-success); font-size:13px; font-weight:900; }
-.driver-invite-success svg { width:17px; height:17px; padding:2px; border-radius:99px; background:var(--color-success-soft); }
 .driver-invite-details label { min-width:0; display:grid; gap:7px; color:var(--color-muted); font-size:11px; font-weight:850; }
 .driver-invite-details input { width:100%; min-height:40px; box-sizing:border-box; border:1px solid var(--color-control-border); border-radius:10px; padding:0 11px; background:var(--color-row-hover); color:var(--color-ink); font:700 12px/1.2 var(--font-sans); text-overflow:ellipsis; }
-.driver-invite-details dl { margin:0; display:grid; gap:8px; }
-.driver-invite-details dl div { display:grid; grid-template-columns:72px minmax(0, 1fr); gap:10px; }
-.driver-invite-details dt { color:var(--color-muted); font-size:12px; font-weight:750; }
-.driver-invite-details dd { margin:0; color:var(--color-ink); font-size:12px; font-weight:850; }
 .driver-invite-details > p { margin:0; color:var(--color-muted); font-size:11px; font-weight:650; line-height:1.5; }
 .driver-invite-open-link { min-height:36px; width:max-content; box-sizing:border-box; display:inline-flex; align-items:center; gap:7px; border:1px solid var(--color-control-border); border-radius:9px; padding:0 12px; background:var(--color-white); color:var(--color-ink); font-size:11px; font-weight:850; text-decoration:none; }
 .driver-invite-open-link svg { width:14px; height:14px; }

@@ -13,6 +13,7 @@ export const adminCustomerDeliveryPath = '/customer/delivery-inquiry/admin';
 export const customerLoginPath = '/customer/login';
 export const customerAccountSetupPath = '/customer/account/setup';
 export const adminAccountSetupPath = '/admin/account/setup';
+export const driverAppPath = '/driver-app';
 export const legacyPathMap = {
   '/관제': '/control',
   '/배송원': '/master-data',
@@ -26,4 +27,4 @@ export const legacyPathMap = {
 } as const;
 
 export type AdminPath = (typeof adminTabs)[number]['path'];
-export type AppPath = AdminPath | '/login' | typeof accountPasswordPath | typeof adminCustomerDeliveryPath | typeof customerDeliveryPath | typeof customerLoginPath | typeof customerAccountSetupPath | typeof adminAccountSetupPath;
+export type AppPath = AdminPath | '/login' | typeof accountPasswordPath | typeof adminCustomerDeliveryPath | typeof customerDeliveryPath | typeof customerLoginPath | typeof customerAccountSetupPath | typeof adminAccountSetupPath | typeof driverAppPath;

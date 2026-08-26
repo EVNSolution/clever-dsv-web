@@ -50,7 +50,6 @@
   .dsv-admin-invite-form { border-right:0; border-bottom:1px solid var(--color-border); }
   .dsv-admin-invite-preview { min-height:420px; }
   .driver-invite-header { min-height:66px; padding:0 16px; }
-  .driver-invite-tabs { min-height:52px; padding:8px 12px; }
   .driver-invite-body { max-height:calc(100dvh - 230px); padding:20px; }
   .driver-invite-result { grid-template-columns:1fr; }
   .driver-invite-qr-card { width:250px; max-width:100%; box-sizing:border-box; justify-self:center; }

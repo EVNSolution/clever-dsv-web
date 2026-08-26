@@ -1424,32 +1424,15 @@ test('management keeps a successful create when the post-write list refresh fail
   expectOnlyFixtureCalls(api);
 });
 
-test('management issues a driver signup invite without an existing driver', async ({ page, context }) => {
-  const signupToken = 'A'.repeat(43);
-  const signupUrl = `clever-driver://signup?token=${signupToken}`;
-  let requestBody;
-  let csrfToken;
-  const api = await installApiFixtures(page, adminFixtures({
-    ...managementListFixtures(),
-    'POST /api/dsv/drivers/signup-invite': ({ request }) => {
-      requestBody = request.postData();
-      csrfToken = request.headers()['x-csrf-token'];
-      return legacyEnvelope({
-        invite: {
-          expiresAt: '2026-08-05T02:00:00.000Z',
-          signupUrl,
-        },
-      });
-    },
-  }));
+test('management copies one HTTPS driver install and signup page', async ({ page, context }) => {
+  const api = await installApiFixtures(page, adminFixtures(managementListFixtures()));
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 
   await page.goto('/master-data');
   const driverList = page.getByLabel('배송원 리스트');
-  await driverList.getByRole('button', { name: '초대 생성', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '배송원 초대' });
-  const appDownloadUrl = 'https://drive.google.com/file/d/1XRXAqREGtJJRMUsRnKgRAhFsiikE4V1y/view?usp=share_link';
-  await expect(dialog.getByRole('tab', { name: '설치', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await driverList.getByRole('button', { name: '앱 설치 안내', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '배송원 앱 안내' });
+  const appDownloadUrl = 'https://dsv.cleversystem.ai/driver-app';
   await expect(dialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true })).toBeVisible();
   await expect(dialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true }).locator('path')).toHaveAttribute('d', /M/u);
   await expect(dialog.getByLabel('배송원 앱 설치 링크', { exact: true })).toHaveValue(appDownloadUrl);
@@ -1457,28 +1440,7 @@ test('management issues a driver signup invite without an existing driver', asyn
   await dialog.getByRole('button', { name: '설치 링크 복사', exact: true }).click();
   await expect(dialog.getByText('설치 링크를 복사했습니다.', { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(appDownloadUrl);
-
-  await dialog.getByRole('tab', { name: '초대', exact: true }).click();
-  await expect(dialog.getByRole('tab', { name: '초대', exact: true })).toHaveAttribute('aria-selected', 'true');
-  await expect(dialog).toContainText('배송원 정보는 미리 입력하지 않습니다.');
-  await expect(dialog.getByRole('textbox')).toHaveCount(0);
-  await dialog.getByRole('button', { name: '초대 링크 생성', exact: true }).click();
-
-  await expect(dialog.getByLabel('배송원 가입 링크', { exact: true })).toHaveValue(signupUrl);
-  await expect(dialog.getByLabel('배송원 가입 링크 QR 코드', { exact: true })).toBeVisible();
-  await expect(dialog.getByLabel('배송원 가입 링크 QR 코드', { exact: true }).locator('path')).toHaveAttribute('d', /M/u);
-  await expect(dialog).toContainText('1회');
-  expect(requestBody).toBeNull();
-  expect(csrfToken).toBe('g006-admin-csrf');
-
-  await dialog.getByRole('button', { name: '초대 링크 복사', exact: true }).click();
-  await expect(dialog.getByText('초대 링크를 복사했습니다.', { exact: true })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(signupUrl);
-  const storedValues = await page.evaluate(() => JSON.stringify({
-    local: Object.values(window.localStorage),
-    session: Object.values(window.sessionStorage),
-  }));
-  expect(storedValues).not.toContain(signupToken);
+  await expect(dialog).toContainText('일회용 초대 링크는 필요하지 않습니다.');
   expectOnlyFixtureCalls(api);
 });
 

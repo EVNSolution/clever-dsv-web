@@ -1,21 +1,13 @@
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Copy, Download, ExternalLink, QrCode, UserPlus, X } from 'lucide-react';
-import { issueDriverSignupInvite } from '../services/management';
-import type { DriverSignupInvite } from '../services/management';
-import { createQrCodeModules } from '../utils/qr-code';
+import { Copy, Download, ExternalLink, X } from 'lucide-react';
 
-const DRIVER_APP_DOWNLOAD_URL = 'https://drive.google.com/file/d/1XRXAqREGtJJRMUsRnKgRAhFsiikE4V1y/view?usp=share_link';
-type InviteTab = 'install' | 'invite';
+import { DRIVER_APP_INSTALL_PAGE_URL } from '../config/driver-app';
+import { createQrCodeModules } from '../utils/qr-code';
 
 export function DriverInviteDialog({ onClose }: { onClose: () => void }): ReactElement {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [activeTab, setActiveTab] = useState<InviteTab>('install');
-  const [invite, setInvite] = useState<DriverSignupInvite | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<'copied' | 'error' | 'idle'>('idle');
-  const [downloadCopyState, setDownloadCopyState] = useState<'copied' | 'error' | 'idle'>('idle');
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -25,41 +17,18 @@ export function DriverInviteDialog({ onClose }: { onClose: () => void }): ReactE
     };
   }, []);
 
-  const issueInvite = async () => {
-    setBusy(true);
-    setError(null);
-    setCopyState('idle');
+  const copyInstallLink = async () => {
     try {
-      setInvite(await issueDriverSignupInvite());
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '배송원 초대 링크를 만들지 못했습니다.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const copyInvite = async () => {
-    if (invite === null) return;
-    try {
-      await navigator.clipboard.writeText(invite.signupUrl);
+      await navigator.clipboard.writeText(DRIVER_APP_INSTALL_PAGE_URL);
       setCopyState('copied');
     } catch {
       setCopyState('error');
     }
   };
 
-  const copyDownloadLink = async () => {
-    try {
-      await navigator.clipboard.writeText(DRIVER_APP_DOWNLOAD_URL);
-      setDownloadCopyState('copied');
-    } catch {
-      setDownloadCopyState('error');
-    }
-  };
-
   return (
     <dialog
-      aria-describedby={activeTab === 'install' ? 'driver-install-description' : 'driver-invite-description'}
+      aria-describedby="driver-install-description"
       aria-labelledby="driver-invite-title"
       className="driver-invite-dialog"
       onCancel={(event) => {
@@ -70,99 +39,35 @@ export function DriverInviteDialog({ onClose }: { onClose: () => void }): ReactE
     >
       <header className="driver-invite-header">
         <span>
-          <strong id="driver-invite-title">배송원 초대</strong>
-          <small>{activeTab === 'install' ? '배송원 앱 설치 경로를 전달하세요.' : '가입 링크를 만들어 배송원에게 전달하세요.'}</small>
+          <strong id="driver-invite-title">배송원 앱 안내</strong>
+          <small>설치 링크 하나만 전달하면 앱에서 바로 회원가입할 수 있습니다.</small>
         </span>
-        <button aria-label="배송원 초대 닫기" type="button" onClick={onClose}><X aria-hidden="true" /></button>
+        <button aria-label="배송원 앱 안내 닫기" type="button" onClick={onClose}><X aria-hidden="true" /></button>
       </header>
 
-      <div aria-label="배송원 초대 구성" className="driver-invite-tabs" role="tablist">
-        <button
-          aria-controls="driver-install-panel"
-          aria-selected={activeTab === 'install'}
-          id="driver-install-tab"
-          role="tab"
-          tabIndex={activeTab === 'install' ? 0 : -1}
-          type="button"
-          onClick={() => setActiveTab('install')}
-        >설치</button>
-        <button
-          aria-controls="driver-invite-panel"
-          aria-selected={activeTab === 'invite'}
-          id="driver-invite-tab"
-          role="tab"
-          tabIndex={activeTab === 'invite' ? 0 : -1}
-          type="button"
-          onClick={() => setActiveTab('invite')}
-        >초대</button>
-      </div>
-
       <div className="driver-invite-body">
-        {activeTab === 'install' ? (
-          <div aria-labelledby="driver-install-tab" className="driver-invite-result" id="driver-install-panel" role="tabpanel">
-            <div className="driver-invite-qr-card">
-              <Download aria-hidden="true" />
-              <LinkQrCode label="배송원 앱 설치 링크 QR 코드" value={DRIVER_APP_DOWNLOAD_URL} />
-              <small>배송원이 사용할 휴대전화로 스캔하세요.</small>
-            </div>
-            <div className="driver-invite-details">
-              <span className="driver-invite-section-title"><Download aria-hidden="true" /> Android 앱 설치</span>
-              <label>설치 링크
-                <input aria-label="배송원 앱 설치 링크" readOnly value={DRIVER_APP_DOWNLOAD_URL} onFocus={(event) => event.currentTarget.select()} />
-              </label>
-              <p id="driver-install-description">QR을 스캔하거나 링크를 열어 최신 배송원 앱 설치 파일을 내려받습니다.</p>
-              <a className="driver-invite-open-link" href={DRIVER_APP_DOWNLOAD_URL} rel="noopener noreferrer" target="_blank"><ExternalLink aria-hidden="true" /> 설치 페이지 열기</a>
-              {downloadCopyState === 'copied' ? <span className="driver-invite-copy-status success" role="status">설치 링크를 복사했습니다.</span> : null}
-              {downloadCopyState === 'error' ? <span className="driver-invite-copy-status" role="alert">설치 링크를 복사하지 못했습니다. 링크를 직접 선택해 복사해 주세요.</span> : null}
-            </div>
+        <div className="driver-invite-result">
+          <div className="driver-invite-qr-card">
+            <Download aria-hidden="true" />
+            <LinkQrCode label="배송원 앱 설치 링크 QR 코드" value={DRIVER_APP_INSTALL_PAGE_URL} />
+            <small>배송원이 사용할 휴대전화로 스캔하세요.</small>
           </div>
-        ) : (
-          <div aria-labelledby="driver-invite-tab" id="driver-invite-panel" role="tabpanel">
-            {invite === null ? (
-              <div className="driver-invite-ready">
-                <span className="driver-invite-icon"><UserPlus aria-hidden="true" /></span>
-                <strong>배송원 정보는 미리 입력하지 않습니다.</strong>
-                <p id="driver-invite-description">초대받은 배송원이 앱에서 이름, 휴대전화 번호와 로그인 정보를 입력하면 배송원 리스트에 자동으로 추가됩니다.</p>
-                <p className="driver-invite-warning">새 링크를 만들면 이전에 사용하지 않은 초대 링크는 즉시 만료됩니다.</p>
-              </div>
-            ) : (
-              <div className="driver-invite-result" id="driver-invite-description">
-                <div className="driver-invite-qr-card">
-                  <QrCode aria-hidden="true" />
-                  <LinkQrCode label="배송원 가입 링크 QR 코드" value={invite.signupUrl} />
-                  <small>배송원 앱이 설치된 휴대전화로 스캔하세요.</small>
-                </div>
-                <div className="driver-invite-details">
-                  <span className="driver-invite-success"><Check aria-hidden="true" /> 초대 링크가 생성되었습니다.</span>
-                  <label>가입 링크
-                    <input aria-label="배송원 가입 링크" readOnly value={invite.signupUrl} onFocus={(event) => event.currentTarget.select()} />
-                  </label>
-                  <dl>
-                    <div><dt>유효기간</dt><dd>{formatExpiry(invite.expiresAt)}</dd></div>
-                    <div><dt>사용 횟수</dt><dd>1회</dd></div>
-                  </dl>
-                  <p>가입이 완료되면 이 링크는 사용할 수 없으며, 새 배송원이 관리 목록에 표시됩니다.</p>
-                  {copyState === 'copied' ? <span className="driver-invite-copy-status success" role="status">초대 링크를 복사했습니다.</span> : null}
-                  {copyState === 'error' ? <span className="driver-invite-copy-status" role="alert">초대 링크를 복사하지 못했습니다. 링크를 직접 선택해 복사해 주세요.</span> : null}
-                </div>
-              </div>
-            )}
+          <div className="driver-invite-details">
+            <span className="driver-invite-section-title"><Download aria-hidden="true" /> CLEVER Driver 설치</span>
+            <label>설치 링크
+              <input aria-label="배송원 앱 설치 링크" readOnly value={DRIVER_APP_INSTALL_PAGE_URL} onFocus={(event) => event.currentTarget.select()} />
+            </label>
+            <p id="driver-install-description">설치 후 앱 로그인 화면에서 회원가입을 누르면 됩니다. 일회용 초대 링크는 필요하지 않습니다.</p>
+            <a className="driver-invite-open-link" href={DRIVER_APP_INSTALL_PAGE_URL} rel="noopener noreferrer" target="_blank"><ExternalLink aria-hidden="true" /> 설치 페이지 열기</a>
+            {copyState === 'copied' ? <span className="driver-invite-copy-status success" role="status">설치 링크를 복사했습니다.</span> : null}
+            {copyState === 'error' ? <span className="driver-invite-copy-status" role="alert">설치 링크를 복사하지 못했습니다. 링크를 직접 선택해 복사해 주세요.</span> : null}
           </div>
-        )}
-        {activeTab === 'invite' && error ? <p className="driver-invite-error" role="alert">{error}</p> : null}
+        </div>
       </div>
 
       <footer className="driver-invite-footer">
         <button type="button" onClick={onClose}>닫기</button>
-        {activeTab === 'install' ? (
-          <button className="primary" type="button" onClick={() => void copyDownloadLink()}><Copy aria-hidden="true" /> 설치 링크 복사</button>
-        ) : invite === null ? (
-          <button className="primary" disabled={busy} type="button" onClick={() => void issueInvite()}>
-            {busy ? '생성 중' : error ? '다시 생성' : '초대 링크 생성'}
-          </button>
-        ) : (
-          <button className="primary" type="button" onClick={() => void copyInvite()}><Copy aria-hidden="true" /> 초대 링크 복사</button>
-        )}
+        <button className="primary" type="button" onClick={() => void copyInstallLink()}><Copy aria-hidden="true" /> 설치 링크 복사</button>
       </footer>
     </dialog>
   );
@@ -178,11 +83,4 @@ function LinkQrCode({ label, value }: { label: string; value: string }): ReactEl
       <path d={path} fill="#111" />
     </svg>
   );
-}
-
-function formatExpiry(value: string): string {
-  return new Intl.DateTimeFormat('ko-KR', {
-    dateStyle: 'long',
-    timeStyle: 'short',
-  }).format(new Date(value));
 }
