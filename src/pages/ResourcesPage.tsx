@@ -12,6 +12,11 @@ import {
 import { DriverInviteDialog } from '../components/DriverInviteDialog';
 import type { ManagementData, ManagementDriver, ManagementVehicle } from '../demo/management';
 import { managementId } from '../demo/management';
+import {
+  approveDriverAccountLink,
+  loadDriverAccountLinkReviews,
+  type DriverAccountLinkReview,
+} from '../services/driver-account-links';
 
 type ResourceEditor =
   | { id?: string; kind: 'driver' }
@@ -73,7 +78,42 @@ function DriverWorkspace({
   selectedId: string;
 }): ReactElement {
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [linkReviews, setLinkReviews] = useState<DriverAccountLinkReview[]>([]);
+  const [linkReviewError, setLinkReviewError] = useState('');
+  const [linkNotice, setLinkNotice] = useState('');
+  const [approvingAccountId, setApprovingAccountId] = useState('');
   const selectedDriver = data.drivers.find((driver) => driver.id === selectedId);
+  const selectedLinkReviews = selectedDriver === undefined
+    ? []
+    : linkReviews.filter((review) => review.driverId === selectedDriver.id);
+  useEffect(() => {
+    let active = true;
+    loadDriverAccountLinkReviews()
+      .then((reviews) => {
+        if (!active) return;
+        setLinkReviews(reviews);
+        setLinkReviewError('');
+      })
+      .catch(() => {
+        if (active) setLinkReviewError('앱 계정 연결 검토를 불러오지 못했습니다.');
+      });
+    return () => { active = false; };
+  }, []);
+  const approveLink = async (review: DriverAccountLinkReview): Promise<void> => {
+    const mismatch = review.reason === 'PHONE_MISMATCH' ? '연락처' : '이름';
+    if (!window.confirm(`${mismatch}가 다른 앱 계정을 ${review.driverName} 배송원에게 연결합니다.`)) return;
+    setApprovingAccountId(review.accountId);
+    try {
+      await approveDriverAccountLink(review);
+      setLinkReviews((current) => current.filter((item) => item.accountId !== review.accountId || item.driverId !== review.driverId));
+      setLinkNotice('앱 계정 연결을 승인했습니다.');
+      setLinkReviewError('');
+    } catch {
+      setLinkReviewError('앱 계정 연결 승인에 실패했습니다. 상태를 새로고침한 뒤 다시 확인하세요.');
+    } finally {
+      setApprovingAccountId('');
+    }
+  };
   const removeDriver = () => {
     if (!selectedDriver || !window.confirm(`${selectedDriver.name} 배송원을 영구 삭제합니다.`)) return;
     void onChange({
@@ -132,11 +172,30 @@ function DriverWorkspace({
               side={selectedDriver ? <span className="management-heading-side"><ManagementDetailAction name="배송원" onEdit={() => onEdit({ id: selectedDriver.id, kind: 'driver' })} /><ManagementSelectionClear onClick={() => onSelect(selectedDriver.id)} /></span> : undefined}
             />
             {selectedDriver ? (
-              <dl className="management-detail">
-                <div><dt>이름</dt><dd>{selectedDriver.name}</dd></div>
-                <div><dt>연락처</dt><dd>{selectedDriver.phone || '-'}</dd></div>
-                <div><dt>배정 차량</dt><dd>{assignedVehicles(data, selectedDriver.id)}</dd></div>
-              </dl>
+              <>
+                <dl className="management-detail">
+                  <div><dt>이름</dt><dd>{selectedDriver.name}</dd></div>
+                  <div><dt>연락처</dt><dd>{selectedDriver.phone || '-'}</dd></div>
+                  <div><dt>배정 차량</dt><dd>{assignedVehicles(data, selectedDriver.id)}</dd></div>
+                </dl>
+                {linkNotice === '' ? null : <p className="alert success driver-account-link-notice">{linkNotice}</p>}
+                {linkReviewError === '' ? null : <p className="alert error driver-account-link-notice" role="alert">{linkReviewError}</p>}
+                {selectedLinkReviews.map((review) => (
+                  <section className="driver-account-link-card" aria-label="앱 계정 연결 검토" key={`${review.accountId}:${review.driverId}`}>
+                    <AdminSectionHeader title="앱 계정 연결 검토" side={<span className="section-meta">수동 승인 필요</span>} />
+                    <p>{review.reason === 'PHONE_MISMATCH' ? '이름은 같지만 연락처가 다릅니다.' : '연락처는 같지만 이름이 다릅니다.'}</p>
+                    <dl className="management-detail compact">
+                      <div><dt>가입 계정</dt><dd>{review.accountName}</dd></div>
+                      <div><dt>연락처 비교</dt><dd>계정 연락처 {maskedPhone(review.accountPhoneLast4)} / 배송원 연락처 {maskedPhone(review.driverPhoneLast4)}</dd></div>
+                    </dl>
+                    <span className="management-actions">
+                      <button type="button" disabled={approvingAccountId !== ''} onClick={() => { void approveLink(review); }}>
+                        {approvingAccountId === review.accountId ? '승인 중' : '연결 승인'}
+                      </button>
+                    </span>
+                  </section>
+                ))}
+              </>
             ) : <EmptyState label="배송원을 선택하면 상세 정보를 확인할 수 있습니다." />}
           </>
         )}
@@ -144,6 +203,10 @@ function DriverWorkspace({
       {inviteOpen ? <DriverInviteDialog onClose={() => setInviteOpen(false)} /> : null}
     </div>
   );
+}
+
+function maskedPhone(last4: string | null): string {
+  return last4 === null ? '미등록' : `끝 ${last4}`;
 }
 
 function VehicleWorkspace({
