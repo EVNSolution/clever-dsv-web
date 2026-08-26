@@ -1756,7 +1756,14 @@ test('settings opens the protected driver app guide and checklist', async ({ pag
   const dialog = page.getByRole('dialog', { name: 'CLEVER Driver 앱 가이드 및 체크리스트' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByText('설치 및 현장 교육 가이드 Rev. 1.1', { exact: true })).toBeVisible();
-  await expect(dialog.getByLabel('현재 페이지')).toHaveValue('1');
+  const pageInput = dialog.getByLabel('현재 페이지');
+  await expect(pageInput).toHaveValue('1');
+  await pageInput.fill('99');
+  await pageInput.press('Enter');
+  await expect(pageInput).toHaveValue('1');
+  await pageInput.fill('not-a-page');
+  await dialog.getByRole('heading', { name: 'CLEVER Driver 앱 가이드 및 체크리스트' }).click();
+  await expect(pageInput).toHaveValue('1');
   await expect(dialog.getByRole('link', { name: '새 창' })).toHaveAttribute('href', '/api/dsv/guides/driver');
   await expect(dialog.getByRole('link', { name: '다운로드' })).toHaveAttribute('href', '/api/dsv/guides/driver?download=1');
   await dialog.getByRole('button', { name: '가이드 닫기' }).click();
