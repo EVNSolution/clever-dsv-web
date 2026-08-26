@@ -163,7 +163,7 @@ export function SettingsPage({ description, principalId, principalScopes, title 
         </div>
       )} />
       {activeGuide ? <Suspense fallback={null}><UserGuideDialog
-        description={activeGuide === 'operator' ? '관제 운영자 가이드 2026. 8. 11.' : '설치 및 현장 교육 가이드 Rev. 1.0'}
+        description={activeGuide === 'operator' ? '관제 운영자 가이드 2026. 8. 11.' : '설치 및 현장 교육 가이드 Rev. 1.1'}
         onClose={() => setActiveGuide(null)}
         title={activeGuide === 'operator' ? 'CLEVER DSV 사용자 가이드' : 'CLEVER Driver 앱 가이드 및 체크리스트'}
         url={`/api/dsv/guides/${activeGuide}`}
