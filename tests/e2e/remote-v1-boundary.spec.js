@@ -1627,6 +1627,59 @@ test('edits only customer notification settings in remote master data', async ({
   expect(api.unexpected).toEqual([]);
 });
 
+test('reviews and approves a partially matching driver app account without exposing full account phone', async ({ page }) => {
+  const accountId = '11111111-1111-4111-8111-111111111111';
+  const driverId = '22222222-2222-4222-8222-222222222222';
+  let approved = false;
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope({
+      ...fullAdminSession,
+      scopes: [...fullAdminSession.scopes, 'dsv:resources:write', 'dsv:accounts:read', 'dsv:accounts:write'],
+    }),
+    'GET /api/dsv/v1/drivers?limit=100': v1Envelope({
+      items: [{ displayName: '정재연', driverId, phone: '010-1111-2222', status: 'ACTIVE' }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/vehicles?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/destinations?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/conditions?limit=100': emptyV1List(),
+    'GET /api/dsv/driver-account-links/pending': () => ({
+      data: {
+        reviews: approved ? [] : [{
+          accountId,
+          accountName: '정재연',
+          accountPhoneLast4: '4444',
+          createdAt: '2026-08-26T02:00:00.000Z',
+          driverId,
+          driverName: '정재연',
+          driverPhoneLast4: '2222',
+          reason: 'PHONE_MISMATCH',
+        }],
+      },
+      error: null,
+    }),
+    [`POST /api/dsv/driver-account-links/${driverId}/approve`]: async ({ request }) => {
+      expect(await request.postDataJSON()).toEqual({ accountId });
+      approved = true;
+      return { data: { linked: { accountId, driverId } }, error: null };
+    },
+  });
+
+  await page.goto('/master-data');
+  await page.getByRole('row', { name: /정재연/ }).click();
+  const review = page.getByLabel('앱 계정 연결 검토');
+  await expect(review).toContainText('계정 연락처 끝 4444');
+  await expect(review).toContainText('배송원 연락처 끝 2222');
+  await expect(review).not.toContainText('010-');
+  page.once('dialog', (dialog) => dialog.accept());
+  await review.getByRole('button', { name: '연결 승인' }).click();
+  await expect(review).toHaveCount(0);
+  await expect(page.getByText('앱 계정 연결을 승인했습니다.')).toBeVisible();
+  expect(api.calls.some((call) => call.method === 'POST' && call.path === `/api/dsv/driver-account-links/${driverId}/approve`)).toBe(true);
+  expect(api.unexpected).toEqual([]);
+});
+
 test('fails closed when a v1 success envelope is missing requestId', async ({ page }) => {
   await seedCanonicalSentinels(page);
   const api = await installApiFixtures(page, {
@@ -2309,6 +2362,8 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'POST customer/auth/invitations/validate',
     'POST customer/auth/complete',
     'POST customer/auth/login',
+    'GET driver-account-links/pending',
+    'POST driver-account-links/[^/]+/approve',
     'POST drivers',
     'PATCH drivers/[^/]+',
     'DELETE drivers/[^/]+',
@@ -2329,6 +2384,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'src/services/manual-email.ts',
     'src/services/admin-accounts.ts',
     'src/services/customer-accounts.ts',
+    'src/services/driver-account-links.ts',
     'src/services/settings.ts',
   ].map((path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')).join('\n');
 

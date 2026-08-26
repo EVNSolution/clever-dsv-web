@@ -70,6 +70,8 @@ const legacyAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'POST', pattern: /^customer\/auth\/invitations\/validate$/u },
   { method: 'POST', pattern: /^customer\/auth\/complete$/u },
   { method: 'POST', pattern: /^customer\/auth\/login$/u },
+  { method: 'GET', pattern: /^driver-account-links\/pending$/u },
+  { method: 'POST', pattern: /^driver-account-links\/[^/]+\/approve$/u },
   { method: 'POST', pattern: /^drivers$/u },
   { method: 'PATCH', pattern: /^drivers\/[^/]+$/u },
   { method: 'DELETE', pattern: /^drivers\/[^/]+$/u },
