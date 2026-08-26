@@ -146,14 +146,19 @@ export function UserGuideDialog({ description, onClose, title, url }: {
     const viewer = viewerRef.current;
     if (!viewer) return;
     const next = Math.min(Math.max(page, 1), pageCount || 1);
+    setPageInput(String(next));
     viewer.currentPageNumber = next;
+  };
+
+  const commitPageInput = () => {
+    const page = Number(pageInput);
+    if (Number.isInteger(page)) setPage(page);
+    else setPageInput(String(currentPage));
   };
 
   const submitPage = (event: FormEvent) => {
     event.preventDefault();
-    const page = Number(pageInput);
-    if (Number.isInteger(page)) setPage(page);
-    else setPageInput(String(currentPage));
+    commitPageInput();
   };
 
   const changeMode = (mode: ViewMode) => {
@@ -246,7 +251,18 @@ export function UserGuideDialog({ description, onClose, title, url }: {
         <div className="user-guide-page-controls">
           <button type="button" aria-label="이전 페이지" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}><ChevronLeft aria-hidden="true" /></button>
           <form onSubmit={submitPage}>
-            <input aria-label="현재 페이지" inputMode="numeric" value={pageInput} onChange={(event) => setPageInput(event.target.value)} />
+            <input
+              aria-label="현재 페이지"
+              inputMode="numeric"
+              value={pageInput}
+              onBlur={commitPageInput}
+              onChange={(event) => setPageInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                commitPageInput();
+              }}
+            />
             <span>/ {pageCount || '-'}</span>
           </form>
           <button type="button" aria-label="다음 페이지" disabled={currentPage >= pageCount} onClick={() => setPage(currentPage + 1)}><ChevronRight aria-hidden="true" /></button>
