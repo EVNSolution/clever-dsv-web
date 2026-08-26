@@ -210,6 +210,19 @@ test('manual router, local state, layered plain CSS, and lazy map loading remain
   expect(routes).toContain("export const customerDeliveryPath = '/customer/delivery-inquiry'");
   expect(routes).toContain("export const customerLoginPath = '/customer/login'");
   expect(routes).toContain("export const customerAccountSetupPath = '/customer/account/setup'");
+  expect(routes).toContain("export const driverAppPath = '/driver-app'");
+});
+
+test('public driver app page keeps one HTTPS entry and the immutable Android artifact', () => {
+  const app = readSrc('App.tsx');
+  const config = readSrc('config/driver-app.ts');
+  const page = readSrc('pages/DriverAppInstallPage.tsx');
+
+  expect(app).toContain('path === driverAppPath');
+  expect(config).toContain("DRIVER_APP_INSTALL_PAGE_URL = 'https://dsv.cleversystem.ai/driver-app'");
+  expect(config).toContain('drive.usercontent.google.com/download?id=1XRXAqREGtJJRMUsRnKgRAhFsiikE4V1y');
+  expect(page).toContain('Android 설치 파일 받기');
+  expect(page).toContain('회원가입');
 });
 
 test('single-concept labels remain', () => {

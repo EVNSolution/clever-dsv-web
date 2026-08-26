@@ -88,7 +88,7 @@ function DriverWorkspace({
       <section className="page-panel management-list-panel" aria-label="배송원 리스트">
         <AdminSectionHeader
           title="배송원 리스트"
-          side={<span className="management-heading-side"><span className="section-meta">{data.drivers.length}명</span><span className="management-actions"><button className="invite" type="button" onClick={() => setInviteOpen(true)}>초대 생성</button></span><ManagementListActions name="배송원" canDelete={!!selectedDriver} onCreate={() => onEdit({ kind: 'driver' })} onDelete={removeDriver} /></span>}
+          side={<span className="management-heading-side"><span className="section-meta">{data.drivers.length}명</span><span className="management-actions"><button className="invite" type="button" onClick={() => setInviteOpen(true)}>앱 설치 안내</button></span><ManagementListActions name="배송원" canDelete={!!selectedDriver} onCreate={() => onEdit({ kind: 'driver' })} onDelete={removeDriver} /></span>}
         />
         <AdminTableFrame className="courier-list">
           <table className="courier-list-table page-table">

@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { accountPasswordPath, adminAccountSetupPath, adminCustomerDeliveryPath, adminTabs, customerAccountSetupPath, customerDeliveryPath, customerLoginPath, defaultPath, legacyPathMap } from './app-routes';
+import { accountPasswordPath, adminAccountSetupPath, adminCustomerDeliveryPath, adminTabs, customerAccountSetupPath, customerDeliveryPath, customerLoginPath, defaultPath, driverAppPath, legacyPathMap } from './app-routes';
 import type { AppPath } from './app-routes';
 import { AdminShell } from './components/AdminShell';
 import { AdminAccountSetupPage } from './pages/AdminAccountSetupPage';
@@ -15,6 +15,7 @@ import type { Principal, PrincipalRole } from './services/auth';
 import { MapPreview } from './components/MapPreview';
 import { logoutCustomerAccount } from './services/customer-accounts';
 import { PasswordChangePage } from './pages/PasswordChangePage';
+import { DriverAppInstallPage } from './pages/DriverAppInstallPage';
 
 const CustomerDeliveryInquiryPage = lazy(() => import('./pages/CustomerDeliveryInquiryPage').then((module) => ({ default: module.CustomerDeliveryInquiryPage })));
 
@@ -28,7 +29,7 @@ const SESSION_REVALIDATION_INTERVAL_MS = 60_000;
 function readPath(): AppPath {
   const decodedPath = decodeURI(window.location.pathname);
   const path: string = legacyPathMap[decodedPath as keyof typeof legacyPathMap] ?? decodedPath;
-  if (path === '/login' || path === accountPasswordPath || path === customerLoginPath || path === customerAccountSetupPath || path === adminAccountSetupPath || path === adminCustomerDeliveryPath || path === customerDeliveryPath || adminTabs.some((tab) => tab.path === path)) return path as AppPath;
+  if (path === '/login' || path === driverAppPath || path === accountPasswordPath || path === customerLoginPath || path === customerAccountSetupPath || path === adminAccountSetupPath || path === adminCustomerDeliveryPath || path === customerDeliveryPath || adminTabs.some((tab) => tab.path === path)) return path as AppPath;
   return defaultPath;
 }
 
@@ -37,7 +38,7 @@ function navigate(path: AppPath): void {
 }
 
 function isPublicPath(path: AppPath): boolean {
-  return path === '/login' || path === customerLoginPath || path === customerAccountSetupPath || path === adminAccountSetupPath;
+  return path === '/login' || path === driverAppPath || path === customerLoginPath || path === customerAccountSetupPath || path === adminAccountSetupPath;
 }
 
 export function App(): ReactElement {
@@ -186,6 +187,7 @@ export function App(): ReactElement {
     : sessionGate;
 
   if (path === '/login') return <LoginPage onLogin={() => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(defaultPath); }} />;
+  if (path === driverAppPath) return <DriverAppInstallPage />;
   if (path === customerLoginPath) return <CustomerLoginPage onLogin={(nextPath) => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(nextPath); }} />;
   if (path === customerAccountSetupPath) return <CustomerAccountSetupPage onComplete={(nextPath) => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(nextPath); }} />;
   if (path === adminAccountSetupPath) return <AdminAccountSetupPage onComplete={(nextPath) => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(nextPath); }} />;
@@ -276,6 +278,7 @@ const requiredScopesByPath: Record<AppPath, string[]> = {
   [customerLoginPath]: [],
   [customerAccountSetupPath]: [],
   [adminAccountSetupPath]: [],
+  [driverAppPath]: [],
 };
 
 function hasRequiredScopes(principal: Principal, path: AppPath): boolean {
