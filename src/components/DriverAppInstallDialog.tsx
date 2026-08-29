@@ -5,7 +5,7 @@ import { Copy, Download, ExternalLink, X } from 'lucide-react';
 import { DRIVER_APP_INSTALL_PAGE_URL } from '../config/driver-app';
 import { createQrCodeModules } from '../utils/qr-code';
 
-export function DriverInviteDialog({ onClose }: { onClose: () => void }): ReactElement {
+export function DriverAppInstallDialog({ onClose }: { onClose: () => void }): ReactElement {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [copyState, setCopyState] = useState<'copied' | 'error' | 'idle'>('idle');
 
@@ -29,7 +29,7 @@ export function DriverInviteDialog({ onClose }: { onClose: () => void }): ReactE
   return (
     <dialog
       aria-describedby="driver-install-description"
-      aria-labelledby="driver-invite-title"
+      aria-labelledby="driver-app-install-title"
       className="driver-invite-dialog"
       onCancel={(event) => {
         event.preventDefault();
@@ -39,7 +39,7 @@ export function DriverInviteDialog({ onClose }: { onClose: () => void }): ReactE
     >
       <header className="driver-invite-header">
         <span>
-          <strong id="driver-invite-title">배송원 앱 안내</strong>
+          <strong id="driver-app-install-title">배송원 앱 안내</strong>
           <small>설치 링크 하나만 전달하면 앱에서 바로 회원가입할 수 있습니다.</small>
         </span>
         <button aria-label="배송원 앱 안내 닫기" type="button" onClick={onClose}><X aria-hidden="true" /></button>

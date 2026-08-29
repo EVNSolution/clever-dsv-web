@@ -91,6 +91,13 @@ test('management keeps empty operational seeds until fixed dispatch import owns 
   expect(readSrc('pages/ResourcesPage.tsx')).toMatch(/등록된 차량이 없습니다/);
 });
 
+test('driver management owns an install dialog instead of an invite dialog', () => {
+  expect(exists('components/DriverAppInstallDialog.tsx')).toBe(true);
+  expect(exists('components/DriverInviteDialog.tsx')).toBe(false);
+  expect(readSrc('pages/ResourcesPage.tsx')).toContain('DriverAppInstallDialog');
+  expect(readSrc('pages/ResourcesPage.tsx')).not.toContain('DriverInviteDialog');
+});
+
 test('customer map does not depend on seeded vehicle identity', () => {
   const customerPage = readSrc('pages/CustomerDeliveryInquiryPage.tsx');
   expect(customerPage).not.toMatch(/mapVehicleIdForCustomerVehicle|vehicleId=\{/);

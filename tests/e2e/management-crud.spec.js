@@ -153,17 +153,17 @@ test('resources keep create and delete on lists and edit on details', async ({ p
   const driverDetail = driverWorkspace.getByLabel('배송원 상세');
   await expect(driverList.getByRole('button', { name: '앱 설치 안내', exact: true })).toBeVisible();
   await driverList.getByRole('button', { name: '앱 설치 안내', exact: true }).click();
-  const inviteDialog = page.getByRole('dialog', { name: '배송원 앱 안내' });
-  await expect(inviteDialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true })).toBeVisible();
-  await expect(inviteDialog.getByLabel('배송원 앱 설치 링크', { exact: true })).toHaveValue(
+  const installDialog = page.getByRole('dialog', { name: '배송원 앱 안내' });
+  await expect(installDialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true })).toBeVisible();
+  await expect(installDialog.getByLabel('배송원 앱 설치 링크', { exact: true })).toHaveValue(
     'https://dsv.cleversystem.ai/driver-app',
   );
-  await expect(inviteDialog.getByRole('link', { name: '설치 페이지 열기', exact: true })).toHaveAttribute(
+  await expect(installDialog.getByRole('link', { name: '설치 페이지 열기', exact: true })).toHaveAttribute(
     'href',
     'https://dsv.cleversystem.ai/driver-app',
   );
-  await expect(inviteDialog).toContainText('일회용 초대 링크는 필요하지 않습니다.');
-  await inviteDialog.getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(installDialog).toContainText('일회용 초대 링크는 필요하지 않습니다.');
+  await installDialog.getByRole('button', { name: '닫기', exact: true }).click();
   await expect(driverList.getByRole('button', { name: '배송원 등록', exact: true })).toBeVisible();
   await expect(driverList.getByRole('button', { name: '배송원 삭제', exact: true })).toBeDisabled();
   await expect(driverList.getByRole('button', { name: '배송원 수정', exact: true })).toHaveCount(0);
