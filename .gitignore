@@ -5,6 +5,11 @@ test-results/
 .env
 .env.*
 !.env.example
+google-services.json
+service-account*.json
+firebase-adminsdk*.json
+credentials.json
+*.credentials.json
 .DS_Store
 
 # Agent-only deployment evidence and temporary release artifacts.
