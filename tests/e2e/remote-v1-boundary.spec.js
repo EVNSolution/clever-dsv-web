@@ -139,6 +139,7 @@ function g003DispatchRows() {
 
 async function installApiFixtures(page, fixtures) {
   const resolvedFixtures = {
+    'GET /api/dsv/driver-account-links/pending': { data: { reviews: [] }, error: null },
     'GET /api/dsv/v1/map/profile': v1Envelope(mapProviderProfile, 'g006-map-profile'),
     'GET /api/dsv/v1/conditions?limit=100': emptyV1List(),
     'GET /api/dsv/manual-email': {

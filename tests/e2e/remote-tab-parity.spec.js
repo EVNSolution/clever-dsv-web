@@ -151,6 +151,7 @@ function expectOnlyFixtureCalls(api) {
 
 function managementListFixtures(overrides = {}) {
   return {
+    'GET /api/dsv/driver-account-links/pending': legacyEnvelope({ reviews: [] }),
     'GET /api/dsv/v1/drivers?limit=100': v1Envelope({
       items: [{
         age: 42,
@@ -1431,16 +1432,16 @@ test('management copies one HTTPS driver install and signup page', async ({ page
   await page.goto('/master-data');
   const driverList = page.getByLabel('배송원 리스트');
   await driverList.getByRole('button', { name: '앱 설치 안내', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: '배송원 앱 안내' });
+  const installDialog = page.getByRole('dialog', { name: '배송원 앱 안내' });
   const appDownloadUrl = 'https://dsv.cleversystem.ai/driver-app';
-  await expect(dialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true })).toBeVisible();
-  await expect(dialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true }).locator('path')).toHaveAttribute('d', /M/u);
-  await expect(dialog.getByLabel('배송원 앱 설치 링크', { exact: true })).toHaveValue(appDownloadUrl);
-  await expect(dialog.getByRole('link', { name: '설치 페이지 열기', exact: true })).toHaveAttribute('href', appDownloadUrl);
-  await dialog.getByRole('button', { name: '설치 링크 복사', exact: true }).click();
-  await expect(dialog.getByText('설치 링크를 복사했습니다.', { exact: true })).toBeVisible();
+  await expect(installDialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true })).toBeVisible();
+  await expect(installDialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true }).locator('path')).toHaveAttribute('d', /M/u);
+  await expect(installDialog.getByLabel('배송원 앱 설치 링크', { exact: true })).toHaveValue(appDownloadUrl);
+  await expect(installDialog.getByRole('link', { name: '설치 페이지 열기', exact: true })).toHaveAttribute('href', appDownloadUrl);
+  await installDialog.getByRole('button', { name: '설치 링크 복사', exact: true }).click();
+  await expect(installDialog.getByText('설치 링크를 복사했습니다.', { exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(appDownloadUrl);
-  await expect(dialog).toContainText('일회용 초대 링크는 필요하지 않습니다.');
+  await expect(installDialog).toContainText('일회용 초대 링크는 필요하지 않습니다.');
   expectOnlyFixtureCalls(api);
 });
 
