@@ -239,6 +239,8 @@ test('public driver app page reflects current store distribution and direct sign
   expect(config).not.toMatch(/drive\.usercontent\.google\.com|\.apk\b/i);
   expect(page).toContain('Google Play 내부 테스트');
   expect(page).toContain('Google Play에서 설치');
+  expect(page).toContain('/api/dsv/public/guides/driver?download=1');
+  expect(page).toContain('PDF 가이드 다운로드');
   expect(page).toContain('승인된 테스터 Google 계정');
   expect(page).toContain('전용 App Store 설치 링크 승인을 기다리고 있습니다.');
   expect(page).toContain('이름과 휴대전화 번호가 모두 일치');
@@ -248,6 +250,7 @@ test('public driver app page reflects current store distribution and direct sign
   expect(settings).not.toContain("setActiveGuide('driver')");
   expect(settings).not.toContain('/api/dsv/guides/driver');
   expect(onboarding).toContain('`/driver-app`');
+  expect(onboarding).toContain('PDF 가이드 다운로드');
   expect(onboarding).toContain('일회용 초대 링크나 QR 코드를 생성하지 않는다.');
 });
 
