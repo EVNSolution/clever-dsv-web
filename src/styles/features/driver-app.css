@@ -14,8 +14,8 @@
 .driver-app-platform-label { color:var(--color-primary); font-size:11px; font-weight:950; text-transform:uppercase; }
 .driver-app-platform h2,.driver-app-ios h2 { margin:5px 0 0; font-size:17px; font-weight:950; letter-spacing:-.03em; }
 .driver-app-platform p,.driver-app-ios p { margin:7px 0 0; color:var(--color-muted); font-size:12px; line-height:1.55; }
-.driver-app-download { min-height:48px; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; gap:8px; border-radius:13px; padding:0 18px; background:var(--color-primary); color:var(--color-white); font-size:13px; font-weight:900; text-decoration:none; }
-.driver-app-download svg { width:17px; height:17px; }
+.driver-app-store-link { min-height:48px; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; gap:8px; border-radius:13px; padding:0 18px; background:var(--color-primary); color:var(--color-white); font-size:13px; font-weight:900; text-decoration:none; }
+.driver-app-store-link svg { width:17px; height:17px; }
 .driver-app-steps { margin:28px; padding:0; display:grid; gap:12px; list-style:none; }
 .driver-app-steps li { display:flex; align-items:flex-start; gap:12px; }
 .driver-app-steps li > span { width:28px; height:28px; flex:0 0 auto; display:grid; place-items:center; border-radius:99px; background:var(--color-complete-soft); color:var(--color-muted); font-size:12px; font-weight:950; }
@@ -33,7 +33,7 @@
   .driver-app-hero { padding:34px 20px 28px; }
   .driver-app-hero h1 { font-size:28px; }
   .driver-app-platform { margin:0 20px; grid-template-columns:1fr; }
-  .driver-app-download { width:100%; }
+  .driver-app-store-link { width:100%; }
   .driver-app-steps { margin:24px 20px; }
   .driver-app-ios { margin:0 20px 24px; }
   .driver-app-trust { padding:14px 20px; }

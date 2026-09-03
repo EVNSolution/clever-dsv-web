@@ -124,38 +124,47 @@
 .address-similarity { margin:0 10px; padding:10px 12px; display:flex; align-items:center; gap:10px; border:1px solid #e1b86a; border-radius:10px; background:var(--color-white)af0; color:#6d4b0d; font-size:11px; }
 .address-similarity strong { margin-right:auto; }
 
-.driver-invite-dialog {
+.driver-invite-dialog,
+.driver-install-dialog {
   width:min(720px, calc(100vw - 32px)); max-width:none; max-height:calc(100dvh - 32px); box-sizing:border-box;
   margin:auto; padding:0; overflow:hidden; border:1px solid rgba(0,0,0,.08); border-radius:22px;
   background:var(--color-white); color:var(--color-ink); box-shadow:0 28px 90px rgba(0,0,0,.24); font-family:var(--font-sans);
 }
-.driver-invite-dialog::backdrop { background:rgba(16,20,24,.46); backdrop-filter:blur(2px); }
-.driver-invite-header { min-height:72px; padding:0 22px; display:flex; align-items:center; justify-content:space-between; gap:16px; border-bottom:1px solid var(--color-border); }
-.driver-invite-header > span { min-width:0; display:grid; gap:4px; }
-.driver-invite-header strong { font-size:17px; font-weight:1000; letter-spacing:-.03em; }
-.driver-invite-header small { color:var(--color-muted); font-size:12px; font-weight:650; }
-.driver-invite-header button { width:34px; height:34px; flex:0 0 auto; display:grid; place-items:center; border:0; border-radius:10px; background:transparent; color:var(--color-muted); cursor:pointer; }
-.driver-invite-header button:hover { background:var(--color-row-hover); color:var(--color-ink); }
-.driver-invite-header button svg { width:18px; height:18px; }
-.driver-invite-body { max-height:calc(100dvh - 242px); overflow:auto; padding:28px; }
-.driver-invite-result { display:grid; grid-template-columns:250px minmax(0, 1fr); gap:26px; align-items:center; }
-.driver-invite-qr-card { min-width:0; padding:16px; display:flex; align-items:center; flex-direction:column; border:1px solid var(--color-border); border-radius:18px; background:#fafafa; text-align:center; }
-.driver-invite-qr-card > svg:first-child { width:18px; height:18px; align-self:flex-start; color:var(--color-muted); }
-.driver-invite-qr { width:210px; height:210px; margin:5px auto 8px; }
-.driver-invite-qr-card small { color:var(--color-muted); font-size:11px; font-weight:700; line-height:1.4; }
-.driver-invite-details { min-width:0; display:grid; gap:14px; }
-.driver-invite-section-title { display:flex; align-items:center; gap:7px; color:var(--color-ink); font-size:13px; font-weight:900; }
-.driver-invite-section-title svg { width:17px; height:17px; color:var(--color-primary); }
-.driver-invite-details label { min-width:0; display:grid; gap:7px; color:var(--color-muted); font-size:11px; font-weight:850; }
-.driver-invite-details input { width:100%; min-height:40px; box-sizing:border-box; border:1px solid var(--color-control-border); border-radius:10px; padding:0 11px; background:var(--color-row-hover); color:var(--color-ink); font:700 12px/1.2 var(--font-sans); text-overflow:ellipsis; }
-.driver-invite-details > p { margin:0; color:var(--color-muted); font-size:11px; font-weight:650; line-height:1.5; }
-.driver-invite-open-link { min-height:36px; width:max-content; box-sizing:border-box; display:inline-flex; align-items:center; gap:7px; border:1px solid var(--color-control-border); border-radius:9px; padding:0 12px; background:var(--color-white); color:var(--color-ink); font-size:11px; font-weight:850; text-decoration:none; }
-.driver-invite-open-link svg { width:14px; height:14px; }
-.driver-invite-copy-status { color:var(--color-risk); font-size:11px; font-weight:800; }
-.driver-invite-copy-status.success { color:var(--color-success); }
+.driver-install-dialog { width:min(600px, calc(100vw - 32px)); }
+.driver-invite-dialog::backdrop,
+.driver-install-dialog::backdrop { background:rgba(16,20,24,.46); backdrop-filter:blur(2px); }
+.driver-invite-header,
+.driver-install-header { min-height:72px; padding:0 22px; display:flex; align-items:center; justify-content:space-between; gap:16px; border-bottom:1px solid var(--color-border); }
+.driver-invite-header > span,
+.driver-install-header > span { min-width:0; display:grid; gap:4px; }
+.driver-invite-header strong,
+.driver-install-header strong { font-size:17px; font-weight:1000; letter-spacing:-.03em; }
+.driver-invite-header small,
+.driver-install-header small { color:var(--color-muted); font-size:12px; font-weight:650; }
+.driver-invite-header button,
+.driver-install-header button { width:34px; height:34px; flex:0 0 auto; display:grid; place-items:center; border:0; border-radius:10px; background:transparent; color:var(--color-muted); cursor:pointer; }
+.driver-invite-header button:hover,
+.driver-install-header button:hover { background:var(--color-row-hover); color:var(--color-ink); }
+.driver-invite-header button svg,
+.driver-install-header button svg { width:18px; height:18px; }
+.driver-install-body { max-height:calc(100dvh - 242px); overflow:auto; padding:28px; }
+.driver-install-details { min-width:0; display:grid; gap:14px; }
+.driver-install-section-title { display:flex; align-items:center; gap:7px; color:var(--color-ink); font-size:13px; font-weight:900; }
+.driver-install-section-title svg { width:17px; height:17px; color:var(--color-primary); }
+.driver-install-details label { min-width:0; display:grid; gap:7px; color:var(--color-muted); font-size:11px; font-weight:850; }
+.driver-install-details input { width:100%; min-height:40px; box-sizing:border-box; border:1px solid var(--color-control-border); border-radius:10px; padding:0 11px; background:var(--color-row-hover); color:var(--color-ink); font:700 12px/1.2 var(--font-sans); text-overflow:ellipsis; }
+.driver-install-details > p { margin:0; color:var(--color-muted); font-size:11px; font-weight:650; line-height:1.5; }
+.driver-install-open-link { min-height:36px; width:max-content; box-sizing:border-box; display:inline-flex; align-items:center; gap:7px; border:1px solid var(--color-control-border); border-radius:9px; padding:0 12px; background:var(--color-white); color:var(--color-ink); font-size:11px; font-weight:850; text-decoration:none; }
+.driver-install-open-link svg { width:14px; height:14px; }
+.driver-install-copy-status { color:var(--color-risk); font-size:11px; font-weight:800; }
+.driver-install-copy-status.success { color:var(--color-success); }
 .driver-invite-error { margin:16px 0 0; padding:11px 12px; border-radius:10px; background:var(--color-risk-soft); color:var(--color-risk); font-size:12px; font-weight:800; text-align:center; }
-.driver-invite-footer { min-height:68px; padding:0 18px; display:flex; align-items:center; justify-content:flex-end; gap:8px; border-top:1px solid var(--color-border); background:#fbfbfc; }
-.driver-invite-footer button { min-height:38px; display:inline-flex; align-items:center; justify-content:center; gap:7px; border:1px solid var(--color-control-border); border-radius:10px; padding:0 15px; background:var(--color-white); color:var(--color-ink); font:850 12px/1 var(--font-sans); cursor:pointer; }
-.driver-invite-footer button.primary { min-width:120px; border-color:var(--color-black); background:var(--color-black); color:var(--color-white); }
+.driver-invite-footer,
+.driver-install-footer { min-height:68px; padding:0 18px; display:flex; align-items:center; justify-content:flex-end; gap:8px; border-top:1px solid var(--color-border); background:#fbfbfc; }
+.driver-invite-footer button,
+.driver-install-footer button { min-height:38px; display:inline-flex; align-items:center; justify-content:center; gap:7px; border:1px solid var(--color-control-border); border-radius:10px; padding:0 15px; background:var(--color-white); color:var(--color-ink); font:850 12px/1 var(--font-sans); cursor:pointer; }
+.driver-invite-footer button.primary,
+.driver-install-footer button.primary { min-width:120px; border-color:var(--color-black); background:var(--color-black); color:var(--color-white); }
 .driver-invite-footer button:disabled { opacity:.45; cursor:default; }
-.driver-invite-footer button svg { width:15px; height:15px; }
+.driver-invite-footer button svg,
+.driver-install-footer button svg { width:15px; height:15px; }

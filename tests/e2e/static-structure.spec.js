@@ -91,11 +91,17 @@ test('management keeps empty operational seeds until fixed dispatch import owns 
   expect(readSrc('pages/ResourcesPage.tsx')).toMatch(/등록된 차량이 없습니다/);
 });
 
-test('driver management owns an install dialog instead of an invite dialog', () => {
+test('driver management owns a link-only install dialog without invite QR remnants', () => {
   expect(exists('components/DriverAppInstallDialog.tsx')).toBe(true);
   expect(exists('components/DriverInviteDialog.tsx')).toBe(false);
+  expect(exists('utils/qr-code.ts')).toBe(false);
   expect(readSrc('pages/ResourcesPage.tsx')).toContain('DriverAppInstallDialog');
   expect(readSrc('pages/ResourcesPage.tsx')).not.toContain('DriverInviteDialog');
+  expect(readSrc('components/DriverAppInstallDialog.tsx')).not.toMatch(/QrCode|driver-invite|<svg/u);
+  expect(readSrc('components/DriverAppInstallDialog.tsx')).toContain("typeof navigator.share === 'function' && window.matchMedia('(pointer: coarse)').matches");
+  expect(readSrc('components/DriverAppInstallDialog.tsx')).toContain('await copyInstallLink()');
+  expect(readSrc('styles/features/management.css')).not.toContain('driver-invite-qr');
+  expect(readSrc('styles/responsive/admin.css')).not.toContain('driver-invite-qr');
 });
 
 test('customer map does not depend on seeded vehicle identity', () => {
@@ -220,16 +226,29 @@ test('manual router, local state, layered plain CSS, and lazy map loading remain
   expect(routes).toContain("export const driverAppPath = '/driver-app'");
 });
 
-test('public driver app page keeps one HTTPS entry and the immutable Android artifact', () => {
+test('public driver app page reflects current store distribution and direct signup', () => {
   const app = readSrc('App.tsx');
   const config = readSrc('config/driver-app.ts');
   const page = readSrc('pages/DriverAppInstallPage.tsx');
+  const settings = readSrc('pages/SettingsPage.tsx');
+  const onboarding = readRepo('docs/driver-app-onboarding.md');
 
   expect(app).toContain('path === driverAppPath');
   expect(config).toContain("DRIVER_APP_INSTALL_PAGE_URL = 'https://dsv.cleversystem.ai/driver-app'");
-  expect(config).toContain('drive.usercontent.google.com/download?id=1XRXAqREGtJJRMUsRnKgRAhFsiikE4V1y');
-  expect(page).toContain('Android 설치 파일 받기');
+  expect(config).toContain("DRIVER_ANDROID_PLAY_URL = 'https://play.google.com/apps/internaltest/4700236589179130460'");
+  expect(config).not.toMatch(/drive\.usercontent\.google\.com|\.apk\b/i);
+  expect(page).toContain('Google Play 내부 테스트');
+  expect(page).toContain('Google Play에서 설치');
+  expect(page).toContain('승인된 테스터 Google 계정');
+  expect(page).toContain('전용 App Store 설치 링크 승인을 기다리고 있습니다.');
+  expect(page).toContain('이름과 휴대전화 번호가 모두 일치');
   expect(page).toContain('회원가입');
+  expect(page).not.toMatch(/App Store Connect|build 11|TestFlight|Android 설치 파일 받기|이 출처의 앱 설치|최신 정식 APK/u);
+  expect(settings).toContain('href={driverAppPath}');
+  expect(settings).not.toContain("setActiveGuide('driver')");
+  expect(settings).not.toContain('/api/dsv/guides/driver');
+  expect(onboarding).toContain('`/driver-app`');
+  expect(onboarding).toContain('일회용 초대 링크나 QR 코드를 생성하지 않는다.');
 });
 
 test('single-concept labels remain', () => {
