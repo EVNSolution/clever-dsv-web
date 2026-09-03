@@ -1433,15 +1433,15 @@ test('management copies one HTTPS driver install and signup page', async ({ page
   const driverList = page.getByLabel('배송원 리스트');
   await driverList.getByRole('button', { name: '앱 설치 안내', exact: true }).click();
   const installDialog = page.getByRole('dialog', { name: '배송원 앱 안내' });
-  const appDownloadUrl = 'https://dsv.cleversystem.ai/driver-app';
-  await expect(installDialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true })).toBeVisible();
-  await expect(installDialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true }).locator('path')).toHaveAttribute('d', /M/u);
-  await expect(installDialog.getByLabel('배송원 앱 설치 링크', { exact: true })).toHaveValue(appDownloadUrl);
-  await expect(installDialog.getByRole('link', { name: '설치 페이지 열기', exact: true })).toHaveAttribute('href', appDownloadUrl);
+  const installPageUrl = 'https://dsv.cleversystem.ai/driver-app';
+  await expect(installDialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true })).toHaveCount(0);
+  await expect(installDialog.getByLabel('배송원 앱 설치 링크', { exact: true })).toHaveValue(installPageUrl);
+  await expect(installDialog.getByRole('link', { name: '설치 페이지 열기', exact: true })).toHaveAttribute('href', installPageUrl);
   await installDialog.getByRole('button', { name: '설치 링크 복사', exact: true }).click();
   await expect(installDialog.getByText('설치 링크를 복사했습니다.', { exact: true })).toBeVisible();
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(appDownloadUrl);
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(installPageUrl);
   await expect(installDialog).toContainText('일회용 초대 링크는 필요하지 않습니다.');
+  await expect(installDialog).toContainText('이름과 연락처가 일치하면 배송 업무가 자동으로 연결됩니다.');
   expectOnlyFixtureCalls(api);
 });
 
@@ -1745,30 +1745,17 @@ test('settings opens the protected web guide with outline, paging, search, and f
   expectOnlyFixtureCalls(api);
 });
 
-test('settings opens the protected driver app guide and checklist', async ({ page }) => {
+test('settings links the current driver install guide instead of the stale protected PDF', async ({ page }) => {
   const api = await installApiFixtures(page, adminFixtures({
     'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings()),
   }));
-  await installGuideFixture(page);
 
   await page.goto('/settings');
-  await page.getByRole('button', { name: '앱 가이드 및 체크리스트', exact: true }).click();
-
-  const dialog = page.getByRole('dialog', { name: 'CLEVER Driver 앱 가이드 및 체크리스트' });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByText('설치 및 현장 교육 가이드 Rev. 1.1', { exact: true })).toBeVisible();
-  const pageInput = dialog.getByLabel('현재 페이지');
-  await expect(pageInput).toHaveValue('1');
-  await pageInput.fill('99');
-  await pageInput.press('Enter');
-  await expect(pageInput).toHaveValue('1');
-  await pageInput.fill('not-a-page');
-  await dialog.getByRole('heading', { name: 'CLEVER Driver 앱 가이드 및 체크리스트' }).click();
-  await expect(pageInput).toHaveValue('1');
-  await expect(dialog.getByRole('link', { name: '새 창' })).toHaveAttribute('href', '/api/dsv/guides/driver');
-  await expect(dialog.getByRole('link', { name: '다운로드' })).toHaveAttribute('href', '/api/dsv/guides/driver?download=1');
-  await dialog.getByRole('button', { name: '가이드 닫기' }).click();
-  await expect(dialog).toHaveCount(0);
+  const installGuide = page.getByRole('link', { name: '앱 설치 안내', exact: true });
+  await expect(installGuide).toHaveAttribute('href', '/driver-app');
+  await expect(installGuide).toHaveAttribute('target', '_blank');
+  await expect(page.getByRole('button', { name: '앱 가이드 및 체크리스트', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'CLEVER Driver 앱 가이드 및 체크리스트' })).toHaveCount(0);
   expectOnlyFixtureCalls(api);
 });
 

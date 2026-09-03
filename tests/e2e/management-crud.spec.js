@@ -154,7 +154,7 @@ test('resources keep create and delete on lists and edit on details', async ({ p
   await expect(driverList.getByRole('button', { name: '앱 설치 안내', exact: true })).toBeVisible();
   await driverList.getByRole('button', { name: '앱 설치 안내', exact: true }).click();
   const installDialog = page.getByRole('dialog', { name: '배송원 앱 안내' });
-  await expect(installDialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true })).toBeVisible();
+  await expect(installDialog.getByLabel('배송원 앱 설치 링크 QR 코드', { exact: true })).toHaveCount(0);
   await expect(installDialog.getByLabel('배송원 앱 설치 링크', { exact: true })).toHaveValue(
     'https://dsv.cleversystem.ai/driver-app',
   );
@@ -163,6 +163,7 @@ test('resources keep create and delete on lists and edit on details', async ({ p
     'https://dsv.cleversystem.ai/driver-app',
   );
   await expect(installDialog).toContainText('일회용 초대 링크는 필요하지 않습니다.');
+  await expect(installDialog).toContainText('이름과 연락처가 일치하면 배송 업무가 자동으로 연결됩니다.');
   await installDialog.getByRole('button', { name: '닫기', exact: true }).click();
   await expect(driverList.getByRole('button', { name: '배송원 등록', exact: true })).toBeVisible();
   await expect(driverList.getByRole('button', { name: '배송원 삭제', exact: true })).toBeDisabled();
