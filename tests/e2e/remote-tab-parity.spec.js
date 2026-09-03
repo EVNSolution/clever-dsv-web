@@ -1428,6 +1428,9 @@ test('management keeps a successful create when the post-write list refresh fail
 test('management copies one HTTPS driver install and signup page', async ({ page, context }) => {
   const api = await installApiFixtures(page, adminFixtures(managementListFixtures()));
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'share', { configurable: true, value: undefined });
+  });
 
   await page.goto('/master-data');
   const driverList = page.getByLabel('배송원 리스트');
@@ -1442,6 +1445,61 @@ test('management copies one HTTPS driver install and signup page', async ({ page
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(installPageUrl);
   await expect(installDialog).toContainText('일회용 초대 링크는 필요하지 않습니다.');
   await expect(installDialog).toContainText('이름과 연락처가 일치하면 배송 업무가 자동으로 연결됩니다.');
+  expectOnlyFixtureCalls(api);
+});
+
+test('management uses the operating system share sheet when available', async ({ page }) => {
+  const api = await installApiFixtures(page, adminFixtures(managementListFixtures()));
+  await page.addInitScript(() => {
+    const originalMatchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query) => query === '(pointer: coarse)'
+      ? { matches: true, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent() { return true; } }
+      : originalMatchMedia(query);
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (payload) => {
+        window.__driverInstallShare = payload;
+      },
+    });
+  });
+
+  await page.goto('/master-data');
+  await page.getByLabel('배송원 리스트').getByRole('button', { name: '앱 설치 안내', exact: true }).click();
+  const installDialog = page.getByRole('dialog', { name: '배송원 앱 안내' });
+  await installDialog.getByRole('button', { name: '설치 링크 공유', exact: true }).click();
+
+  await expect(installDialog.getByText('설치 안내를 전달했습니다.', { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__driverInstallShare)).toEqual({
+    text: 'CLEVER Driver 설치 안내입니다.',
+    title: 'CLEVER Driver 설치 안내',
+    url: 'https://dsv.cleversystem.ai/driver-app',
+  });
+  expectOnlyFixtureCalls(api);
+});
+
+test('management copies the install link when operating system sharing fails', async ({ page, context }) => {
+  const api = await installApiFixtures(page, adminFixtures(managementListFixtures()));
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.addInitScript(() => {
+    const originalMatchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query) => query === '(pointer: coarse)'
+      ? { matches: true, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent() { return true; } }
+      : originalMatchMedia(query);
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async () => {
+        throw new DOMException('Share cancelled', 'AbortError');
+      },
+    });
+  });
+
+  await page.goto('/master-data');
+  await page.getByLabel('배송원 리스트').getByRole('button', { name: '앱 설치 안내', exact: true }).click();
+  const installDialog = page.getByRole('dialog', { name: '배송원 앱 안내' });
+  await installDialog.getByRole('button', { name: '설치 링크 공유', exact: true }).click();
+
+  await expect(installDialog.getByText('설치 링크를 복사했습니다.', { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('https://dsv.cleversystem.ai/driver-app');
   expectOnlyFixtureCalls(api);
 });
 

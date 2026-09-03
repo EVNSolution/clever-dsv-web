@@ -98,6 +98,8 @@ test('driver management owns a link-only install dialog without invite QR remnan
   expect(readSrc('pages/ResourcesPage.tsx')).toContain('DriverAppInstallDialog');
   expect(readSrc('pages/ResourcesPage.tsx')).not.toContain('DriverInviteDialog');
   expect(readSrc('components/DriverAppInstallDialog.tsx')).not.toMatch(/QrCode|driver-invite|<svg/u);
+  expect(readSrc('components/DriverAppInstallDialog.tsx')).toContain("typeof navigator.share === 'function' && window.matchMedia('(pointer: coarse)').matches");
+  expect(readSrc('components/DriverAppInstallDialog.tsx')).toContain('await copyInstallLink()');
   expect(readSrc('styles/features/management.css')).not.toContain('driver-invite-qr');
   expect(readSrc('styles/responsive/admin.css')).not.toContain('driver-invite-qr');
 });
