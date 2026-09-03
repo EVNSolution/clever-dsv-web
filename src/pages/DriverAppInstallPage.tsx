@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { ExternalLink, ShieldCheck, Smartphone } from 'lucide-react';
+import { Download, ExternalLink, ShieldCheck, Smartphone } from 'lucide-react';
 
 import { DRIVER_ANDROID_PLAY_URL } from '../config/driver-app';
 
@@ -36,6 +36,17 @@ export function DriverAppInstallPage(): ReactElement {
           <li><span>3</span><p><strong>회원가입</strong>앱에서 이름, 휴대전화 번호, 로그인 아이디와 비밀번호를 입력합니다.</p></li>
           <li><span>4</span><p><strong>배송 업무 연결</strong>DSV에 등록된 활성 배송원의 이름과 휴대전화 번호가 모두 일치하면 배송 업무가 자동으로 연결됩니다. 일치 정보가 없으면 연결 대기 상태로 가입됩니다.</p></li>
         </ol>
+
+        <section className="driver-app-platform driver-app-guide" aria-labelledby="driver-guide-title">
+          <div>
+            <span className="driver-app-platform-label">PDF 가이드</span>
+            <h2 id="driver-guide-title">설치 및 현장 교육 가이드</h2>
+            <p>설치, 회원가입, 권한 설정과 배송 업무 절차를 확인할 수 있습니다.</p>
+          </div>
+          <a className="driver-app-store-link" href="/api/dsv/public/guides/driver?download=1">
+            <Download aria-hidden="true" /> PDF 가이드 다운로드
+          </a>
+        </section>
 
         <section className="driver-app-ios" aria-labelledby="driver-ios-title">
           <span className="driver-app-platform-label">iPhone</span>

@@ -163,7 +163,7 @@ export function SettingsPage({ description, principalId, principalScopes, title 
         </div>
       )} />
       {operatorGuideOpen ? <Suspense fallback={null}><UserGuideDialog
-        description="관제 운영자 가이드 2026. 8. 11. · 배송원 설치는 앱 설치 안내를 기준으로 확인하세요."
+        description="관제 운영자 가이드 Rev. 1.2 · 배송원 설치 및 교육 가이드는 앱 설치 안내에서 확인하세요."
         onClose={() => setOperatorGuideOpen(false)}
         title="CLEVER DSV 사용자 가이드"
         url="/api/dsv/guides/operator"

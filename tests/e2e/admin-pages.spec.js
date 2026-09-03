@@ -11,6 +11,10 @@ test('public driver app page shows current store routes without legacy install p
     'https://play.google.com/apps/internaltest/4700236589179130460',
   );
   await expect(page.getByRole('link', { name: 'Google Play에서 설치', exact: true })).toHaveAttribute('target', '_blank');
+  await expect(page.getByRole('link', { name: 'PDF 가이드 다운로드', exact: true })).toHaveAttribute(
+    'href',
+    '/api/dsv/public/guides/driver?download=1',
+  );
   await expect(page.getByText('아이폰용 CLEVER Driver는 전용 App Store 설치 링크 승인을 기다리고 있습니다.')).toBeVisible();
   await expect(page.getByText(/App Store Connect|build 11|최신 정식 APK|이 출처의 앱 설치|TestFlight/)).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);

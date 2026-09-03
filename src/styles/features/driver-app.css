@@ -14,6 +14,7 @@
 .driver-app-platform-label { color:var(--color-primary); font-size:11px; font-weight:950; text-transform:uppercase; }
 .driver-app-platform h2,.driver-app-ios h2 { margin:5px 0 0; font-size:17px; font-weight:950; letter-spacing:-.03em; }
 .driver-app-platform p,.driver-app-ios p { margin:7px 0 0; color:var(--color-muted); font-size:12px; line-height:1.55; }
+.driver-app-guide { margin-top:16px; }
 .driver-app-store-link { min-height:48px; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; gap:8px; border-radius:13px; padding:0 18px; background:var(--color-primary); color:var(--color-white); font-size:13px; font-weight:900; text-decoration:none; }
 .driver-app-store-link svg { width:17px; height:17px; }
 .driver-app-steps { margin:28px; padding:0; display:grid; gap:12px; list-style:none; }
