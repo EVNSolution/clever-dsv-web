@@ -2467,16 +2467,33 @@ test('dispatch registers a structured condition candidate using its raw value as
 
 test('dispatch registers missing drivers and vehicles from the upload review', async ({ page }) => {
   let driverBody;
+  let assignmentBody;
   let vehicleBody;
   let driverRegistered = false;
+  let vehicleAssigned = false;
   let vehicleRegistered = false;
-  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures(managementListFixtures({
     'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+    'GET /api/dsv/v1/drivers?limit=100': () => v1Envelope({
+      items: driverRegistered ? [{ displayName: 'Canonical Driver', driverId: 'driver-upload-g006', status: 'ACTIVE' }] : [],
+      page: { hasMore: false },
+    }, 'g006-upload-drivers'),
+    'GET /api/dsv/v1/vehicles?limit=100': () => v1Envelope({
+      items: vehicleRegistered ? [{
+        displayName: '99테 9001',
+        driverAssignments: vehicleAssigned ? [{ assignmentId: 'assignment-upload-g006', driverId: 'driver-upload-g006' }] : [],
+        status: 'ACTIVE',
+        vehicleId: 'vehicle-upload-g006',
+        vehiclePlate: '99테 9001',
+      }] : [],
+      page: { hasMore: false },
+    }, 'g006-upload-vehicles'),
     'POST /api/dsv/dispatch-imports/preview': ({ request }) => {
       const input = request.postDataJSON();
       const issues = [
         ...(driverRegistered ? [] : [{ code: 'DRIVER_NOT_FOUND', field: 'driverName', message: '등록된 배송원을 찾을 수 없습니다.', severity: 'error' }]),
         ...(vehicleRegistered ? [] : [{ code: 'VEHICLE_NOT_FOUND', field: 'vehiclePlate', message: '등록된 차량 번호를 찾을 수 없습니다.', severity: 'error' }]),
+        ...(driverRegistered && !vehicleAssigned ? [{ code: 'DRIVER_VEHICLE_MISSING', field: 'vehiclePlate', message: '배정된 차량이 없습니다.', severity: 'error' }] : []),
       ];
       return legacyEnvelope({
         canCommit: issues.length === 0,
@@ -2488,7 +2505,7 @@ test('dispatch registers missing drivers and vehicles from the upload review', a
           driverId: driverRegistered ? 'driver-upload-g006' : null,
           issues,
           status: issues.length === 0 ? 'READY' : 'NEEDS_REVIEW',
-          vehicleId: vehicleRegistered ? 'vehicle-upload-g006' : null,
+          vehicleId: vehicleAssigned ? 'vehicle-upload-g006' : null,
         })),
         summary: issues.length === 0
           ? { errorRows: 0, readyRows: input.rows.length, reviewRows: 0, totalRows: input.rows.length }
@@ -2505,7 +2522,12 @@ test('dispatch registers missing drivers and vehicles from the upload review', a
       vehicleRegistered = true;
       return legacyEnvelope({ vehicle: { id: 'vehicle-upload-g006' } });
     },
-  })));
+    'POST /api/dsv/vehicles/vehicle-upload-g006/drivers': ({ request }) => {
+      assignmentBody = request.postDataJSON();
+      vehicleAssigned = true;
+      return legacyEnvelope({ assignment: { driverId: 'driver-upload-g006', id: 'assignment-upload-g006', kind: '기본 배정', vehicleId: 'vehicle-upload-g006' } });
+    },
+  }))));
 
   await page.goto('/dispatch');
   await page.getByRole('button', { name: '주문 업로드', exact: true }).click();
@@ -2517,22 +2539,33 @@ test('dispatch registers missing drivers and vehicles from the upload review', a
 
   await expect(page.locator('.dispatch-upload-sheet tbody tr:nth-child(2) td:nth-of-type(1)')).toHaveClass(/is-error/u);
   await expect(page.locator('.dispatch-upload-sheet tbody tr:nth-child(2) td:nth-of-type(2)')).toHaveClass(/is-error/u);
-  await page.locator('.driver-candidate').getByRole('button', { name: '배송원 등록', exact: true }).click();
-  await expect(page.locator('.driver-candidate')).toHaveCount(0);
+  await page.locator('.dispatch-upload-issues summary').click();
+  await page.getByRole('button', { name: 'Canonical Driver 배송원 등록', exact: true }).click();
+  let dialog = page.getByRole('dialog', { name: '배송원 등록' });
+  await dialog.getByLabel('연락처').fill('010-9999-9001');
+  await dialog.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
   await page.locator('.vehicle-candidate').getByRole('button', { name: '차량 등록', exact: true }).click();
+  await page.getByRole('button', { name: 'Canonical Driver 차량 배정', exact: true }).click();
+  dialog = page.getByRole('dialog', { name: '차량 배정' });
+  await dialog.getByLabel('배정할 차량', { exact: true }).selectOption('vehicle-upload-g006');
+  await dialog.getByRole('button', { name: '배정', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
 
   await expect(page.getByRole('button', { name: '업로드 확정', exact: true })).toBeEnabled();
   expect(driverBody).toEqual({
-    age: 18,
+    age: 0,
     career: '미제공',
     gender: '미제공',
     name: 'Canonical Driver',
+    phone: '010-9999-9001',
     score: '미제공',
     traits: [],
     zone: '미제공',
   });
   expect(vehicleBody).toEqual({ note: '', plate: '99테 9001', type: '미지정' });
-  expect(api.calls.filter((call) => call.key === 'POST /api/dsv/dispatch-imports/preview')).toHaveLength(3);
+  expect(assignmentBody).toEqual({ driverId: 'driver-upload-g006' });
+  expect(api.calls.filter((call) => call.key === 'POST /api/dsv/dispatch-imports/preview')).toHaveLength(4);
   expectOnlyFixtureCalls(api);
 });
 

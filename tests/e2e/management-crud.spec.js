@@ -276,15 +276,26 @@ test('dispatch condition inspection keeps source casing and registers explicit c
   await expect(page.getByRole('button', { name: '업로드 확정', exact: true })).toBeDisabled();
   await expect(page.locator('.dispatch-upload-issues')).toContainText('등록된 배송원을 찾을 수 없습니다.');
   await expect(page.locator('.dispatch-upload-issues')).toContainText('등록된 차량 번호를 찾을 수 없습니다.');
+  await page.locator('.dispatch-upload-issues summary').click();
   for (const name of ['김도윤', '이서연', '박민재']) {
-    const candidate = page.locator('.driver-candidate').filter({ hasText: name });
-    await candidate.getByRole('button', { name: '배송원 등록', exact: true }).click();
-    await expect(candidate).toHaveCount(0);
+    await page.getByRole('button', { name: `${name} 배송원 등록`, exact: true }).first().click();
+    const dialog = page.getByRole('dialog', { name: '배송원 등록' });
+    await expect(dialog.getByLabel('이름')).toHaveValue(name);
+    await dialog.getByRole('button', { name: '저장', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
   }
   for (const plate of ['21사 6101', '12바 2302', '13사 3403']) {
     const candidate = page.locator('.vehicle-candidate').filter({ hasText: plate });
     await candidate.getByRole('button', { name: '차량 등록', exact: true }).click();
     await expect(candidate).toHaveCount(0);
+  }
+  for (const [name, plate] of [['김도윤', '21사 6101'], ['이서연', '12바 2302'], ['박민재', '13사 3403']]) {
+    await page.getByRole('button', { name: `${name} 차량 배정`, exact: true }).first().click();
+    const dialog = page.getByRole('dialog', { name: '차량 배정' });
+    await expect(dialog.getByLabel('배송원')).toHaveValue(name);
+    await dialog.getByLabel('배정할 차량', { exact: true }).selectOption({ label: plate });
+    await dialog.getByRole('button', { name: '배정', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
   }
   await expect(page.getByRole('button', { name: '업로드 확정', exact: true })).toBeEnabled();
 
