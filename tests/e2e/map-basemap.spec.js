@@ -48,13 +48,14 @@ test('control map renders the configured departure marker without synthetic rout
       center: map.getCenter().toArray(),
       syntheticLayers: style.layers.filter((layer) => layer.id.startsWith('demo-')).map((layer) => layer.id),
       syntheticSources: Object.keys(style.sources).filter((sourceId) => sourceId.startsWith('demo-')),
-      vehicleLabelFont: map.getLayoutProperty('operational-vehicle-labels', 'text-font'),
     };
   });
 
   expect(mapState.syntheticLayers).toEqual([]);
   expect(mapState.syntheticSources).toEqual([]);
-  expect(mapState.vehicleLabelFont).toEqual(['Noto Sans Regular']);
+  await expect.poll(() => page.evaluate(() => (
+    window.dsvMap.getLayoutProperty('operational-vehicle-labels', 'text-font')
+  ))).toEqual(['Noto Sans Regular']);
   expect(osrmRequests).toEqual([]);
   expect(requestedUrls.some((url) => url.endsWith('/map/profile.json'))).toBe(true);
   expect(requestedUrls.some((url) => url.endsWith('/map/styles/dsv-korea-v1.json'))).toBe(true);
