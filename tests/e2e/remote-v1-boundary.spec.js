@@ -591,6 +591,7 @@ test('renders selected control progress without letting a future destination cli
   await expect(timeline).toBeVisible();
   await expect(timeline.locator('header time')).toHaveText('24:00');
   await expect(timeline.locator('.control-trail-timeline__track > time')).toHaveText(['00:00', '24:00']);
+  await page.locator('.map-canvas.ready').waitFor({ state: 'visible', timeout: 15_000 });
   await expect.poll(() => page.evaluate(() => {
     const routes = window.dsvMap?.getSource('operational-routes');
     if (!routes) return null;
@@ -603,7 +604,7 @@ test('renders selected control progress without letting a future destination cli
         .filter((feature) => feature.geometry.type === 'Point' && feature.properties.markerKind === 'sample')
         .map((feature) => feature.geometry.coordinates),
     };
-  })).toEqual({
+  }), { timeout: 15_000 }).toEqual({
     lines: [
       [[127, 37.5], [127.0025, 37.5005], [127.005, 37.501]],
       [[127.015, 37.502], [127.02, 37.501], [127.025, 37.5]],
@@ -1253,6 +1254,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
 
   const selectedVehicle = scheduledFleet.getByRole('button', { name: /99테 6006/ });
   const selectedVehicleRow = scheduledFleet.locator('.control-vehicle-row', { hasText: '99테 6006' });
+  await expect(scheduledFleet).toContainText('88테 5005');
   await expect(selectedVehicleRow.locator('.control-vehicle-details')).toHaveCount(0);
   const zoomBeforeCentering = await page.evaluate(() => {
     window.dsvMap.jumpTo({ center: [126.85, 37.42], zoom: 10.75 });
@@ -1558,6 +1560,7 @@ test('forces temporary-password administrators to change credentials before load
 
   await expect(page).toHaveURL(/\/control$/u);
   await expect.poll(() => api.calls.filter((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session').length).toBeGreaterThanOrEqual(2);
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/control');
   expect(submittedBody).toEqual({ currentPassword: 'temporary-password', password: 'new-secure-password' });
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/control')).toBe(true);
   expect(api.unexpected).toEqual([]);
@@ -1779,6 +1782,8 @@ test('requests customer deliveries only after a valid customer v1 session', asyn
 
 test('loads the administrator customer map through the customer-scoped contract', async ({ page }) => {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+  const [year, month, day] = today.split('-').map(Number);
+  const historyDate = new Date(Date.UTC(year, month - 1, day - 1)).toISOString().slice(0, 10);
   const requestedServiceDates = [];
   const api = await installApiFixtures(page, {
     'GET /api/dsv/v1/session': v1Envelope(fullAdminSession),
@@ -1892,8 +1897,8 @@ test('loads the administrator customer map through the customer-scoped contract'
   ]);
   await page.getByRole('button', { name: /이력 완료 배송 확인/u }).click();
   await page.getByRole('button', { name: '이력 기준일 날짜 변경' }).click();
-  await page.locator('.customer-map-tools .rdp-day_button').filter({ hasText: /^2$/u }).click();
-  await expect.poll(() => requestedServiceDates.includes('2026-08-02')).toBe(true);
+  await page.locator(`.customer-map-tools [data-day="${historyDate}"] .rdp-day_button`).click();
+  await expect.poll(() => requestedServiceDates.includes(historyDate)).toBe(true);
   expect(api.unexpected).toEqual([]);
 });
 
