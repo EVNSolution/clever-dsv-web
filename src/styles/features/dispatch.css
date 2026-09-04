@@ -172,6 +172,11 @@
 .dispatch-upload-issue-location svg { width:13px; height:13px; stroke-width:2.25; }
 .dispatch-upload-issue-content { min-width:0; display:grid; gap:6px; align-self:center; }
 .dispatch-upload-issue-message { min-width:0; line-height:1.35; }
+.dispatch-upload-issue-action {
+  width:max-content; min-height:30px; border:0; border-radius:7px; padding:0 10px;
+  background:var(--color-black); color:var(--color-white); font:800 11px/1 var(--font-sans); cursor:pointer;
+}
+.dispatch-upload-issue-action:disabled { opacity:.3; cursor:default; }
 .dispatch-address-details {
   min-width:0; display:grid; grid-template-columns:minmax(0, 1fr) minmax(160px, .45fr); gap:1px;
   margin:0; overflow:hidden; border:1px solid rgba(163,52,34,.14); border-radius:8px; background:rgba(163,52,34,.14);
@@ -220,6 +225,18 @@
 .condition-candidate input { min-height:34px; border:1px solid var(--color-border); border-radius:9px; padding:0 9px; color:var(--color-ink); font:700 12px/1 var(--font-sans); }
 .condition-candidate button { min-height:34px; border:0; border-radius:9px; padding:0 12px; background:var(--color-black); color:var(--color-white); font:800 12px/1 var(--font-sans); cursor:pointer; }
 .condition-candidate button:disabled { opacity:.3; cursor:default; }
+
+.dispatch-resource-dialog { width:min(520px, calc(100vw - 32px)); }
+.dispatch-resource-dialog > form { display:grid; }
+.dispatch-resource-dialog-body { padding:24px; display:grid; gap:14px; }
+.dispatch-resource-dialog-body label { min-width:0; display:grid; gap:7px; color:var(--color-muted); font-size:11px; font-weight:850; }
+.dispatch-resource-dialog-body input,
+.dispatch-resource-dialog-body select {
+  width:100%; min-height:40px; box-sizing:border-box; border:1px solid var(--color-control-border); border-radius:10px;
+  padding:0 11px; background:var(--color-white); color:var(--color-ink); font:700 12px/1.2 var(--font-sans);
+}
+.dispatch-resource-dialog-body input[readonly] { background:var(--color-row-hover); }
+.dispatch-resource-dialog-body p { margin:0; padding:10px 11px; border-radius:9px; background:var(--color-risk-soft); color:var(--color-risk); font-size:11px; font-weight:800; }
 
 .dispatch-assignment {
   flex:1 1 auto; min-height:0; overflow:hidden; display:grid; grid-template-rows:auto minmax(0, 1fr); gap:6px;

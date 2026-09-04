@@ -306,16 +306,18 @@ export async function registerTransportCondition(input: { code: string; descript
   persistMockTransportCondition(input);
 }
 
-export async function registerDispatchDriver(name: string): Promise<void> {
-  const normalizedName = name.trim();
+export async function registerDispatchDriver(input: { name: string; phone?: string }): Promise<void> {
+  const normalizedName = input.name.trim();
+  const phone = input.phone?.trim() ?? '';
   if (normalizedName === '') throw new Error('배송원 이름을 입력하세요.');
   if (apiConfig.mode === 'remote') {
     await requestLegacyJson<{ driver: unknown }>('drivers', {
       json: {
-        age: 18,
+        age: 0,
         career: '미제공',
         gender: '미제공',
         name: normalizedName,
+        ...(phone === '' ? {} : { phone }),
         score: '미제공',
         traits: [],
         zone: '미제공',
@@ -329,11 +331,12 @@ export async function registerDispatchDriver(name: string): Promise<void> {
   saveManagementData({
     ...management,
     drivers: [...management.drivers, {
-      age: 18,
+      age: 0,
       career: '미제공',
       gender: '미제공',
       id: managementId('driver'),
       name: normalizedName,
+      ...(phone === '' ? {} : { phone }),
       score: '미제공',
       traits: [],
       zone: '미제공',
@@ -426,9 +429,12 @@ function previewLocally(input: DispatchImportInput): DispatchImportPreview {
     const vehicles = hasDriverName && hasVehiclePlate
       ? management.vehicles.filter((vehicle) => vehicle.plate === row.vehiclePlate)
       : [];
-    const assignedVehicleId = drivers.length === 1 && !hasVehiclePlate
+    const driverVehicleId = drivers.length === 1
       ? management.assignments.find((assignment) => assignment.driverId === drivers[0]?.id)?.vehicleId ?? null
-      : vehicles.length === 1 ? vehicles[0]?.id ?? null : null;
+      : null;
+    const assignedVehicleId = hasVehiclePlate
+      ? vehicles.length === 1 ? vehicles[0]?.id ?? null : null
+      : driverVehicleId;
     for (const [field, value] of [
       ['destinationName', row.destinationName],
       ['conditionCode', row.conditionCode], ['address', row.address], ['customerCode', row.customerCode],
@@ -447,6 +453,10 @@ function previewLocally(input: DispatchImportInput): DispatchImportPreview {
     if (hasDriverName && drivers.length === 0) issues.push(errorIssue('DRIVER_NOT_FOUND', 'driverName', '등록된 배송원을 찾을 수 없습니다.'));
     if (drivers.length > 1) issues.push(errorIssue('DRIVER_AMBIGUOUS', 'driverName', '같은 이름의 배송원이 둘 이상입니다.'));
     if (hasDriverName && hasVehiclePlate && vehicles.length === 0) issues.push(errorIssue('VEHICLE_NOT_FOUND', 'vehiclePlate', '등록된 차량 번호를 찾을 수 없습니다.'));
+    if (drivers.length === 1 && driverVehicleId === null) issues.push(errorIssue('DRIVER_VEHICLE_MISSING', 'vehiclePlate', '배정된 차량이 없습니다.'));
+    if (driverVehicleId !== null && vehicles.length === 1 && vehicles[0]?.id !== driverVehicleId) {
+      issues.push(errorIssue('DRIVER_VEHICLE_MISMATCH', 'vehiclePlate', '파일의 차량이 배송원에게 배정된 차량과 다릅니다.'));
+    }
     if (duplicateOrders.has(row.sellerOrderKey)) issues.push(errorIssue('SELLER_ORDER_DUPLICATED', 'sellerOrderKey', '파일 안에서 SellerOrderKey가 중복됩니다.'));
     if (driverConflicts.has(row.driverName)) issues.push(errorIssue('DRIVER_VEHICLE_CONFLICT', 'vehiclePlate', '한 배송원에게 여러 차량이 지정되었습니다.'));
     if (vehicleConflicts.has(row.vehiclePlate)) issues.push(errorIssue('VEHICLE_DRIVER_CONFLICT', 'driverName', '한 차량에 여러 배송원이 지정되었습니다.'));

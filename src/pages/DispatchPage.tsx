@@ -4,6 +4,7 @@ import { ArrowUpRight, ChevronDown, LoaderCircle } from 'lucide-react';
 import { ApiError } from '../api/client';
 import { apiConfig } from '../api/config';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
+import { DispatchDriverRegistrationDialog, DispatchVehicleAssignmentDialog } from '../components/DispatchResourceDialogs';
 import {
   cancelDispatchChangeRequest,
   clearDispatchTimeConstraint,
@@ -42,7 +43,7 @@ import type {
 } from '../services/dispatch-imports';
 import type { ManagementData } from '../demo/management';
 import type { DepartureLocation } from '../components/DepartureMarker';
-import { loadDispatchReferenceSnapshot } from '../services/management';
+import { loadDispatchReferenceSnapshot, persistManagementChange } from '../services/management';
 import { defaultAdminSettings, loadAdminSettings, loadRemoteOperationalSettings, saveAdminSettings, saveRemoteOperationalSettings } from '../services/settings';
 import type { AdminSettings } from '../services/settings';
 
@@ -64,6 +65,13 @@ type UploadIssueEntry = {
   columnIndex: number | null;
   issue: DispatchImportIssue;
   rowNumber: number;
+};
+
+type UploadVehicleAssignmentTarget = {
+  driverId: string;
+  driverName: string;
+  resources: ManagementData;
+  vehiclePlate: string;
 };
 
 const DispatchMapCanvas = lazy(async () => {
@@ -97,6 +105,8 @@ export function DispatchPage({ title, description }: { title: string; descriptio
   const [uploadDragging, setUploadDragging] = useState(false);
   const [uploadCellFocusTarget, setUploadCellFocusTarget] = useState<SheetCellFocusTarget | null>(null);
   const [conditionCandidates, setConditionCandidates] = useState<ConditionCandidate[]>([]);
+  const [driverRegistrationName, setDriverRegistrationName] = useState<string | null>(null);
+  const [vehicleAssignmentTarget, setVehicleAssignmentTarget] = useState<UploadVehicleAssignmentTarget | null>(null);
   const [remoteDispatch, setRemoteDispatch] = useState<DispatchListView | null>(null);
   const [remoteReferences, setRemoteReferences] = useState<ManagementData | null>(null);
   const [remoteStatus, setRemoteStatus] = useState<'error' | 'loading' | 'ready'>(() => apiConfig.mode === 'remote' ? 'loading' : 'ready');
@@ -331,6 +341,8 @@ export function DispatchPage({ title, description }: { title: string; descriptio
     setUploadActivity('idle');
     setUploadBusy(false);
     setConditionCandidates([]);
+    setDriverRegistrationName(null);
+    setVehicleAssignmentTarget(null);
   };
   const updateConditionCandidate = (code: string, field: 'description' | 'name', value: string) => {
     setConditionCandidates((current) => current.map((candidate) => candidate.code === code ? { ...candidate, [field]: value } : candidate));
@@ -352,12 +364,54 @@ export function DispatchPage({ title, description }: { title: string; descriptio
       setUploadBusy(false);
     }
   };
-  const registerDriver = async (name: string) => {
+  const registerDriver = async (phone: string) => {
+    if (driverRegistrationName === null) return;
     setUploadBusy(true);
     setUploadError('');
     try {
-      await registerDispatchDriver(name);
+      await registerDispatchDriver({ name: driverRegistrationName, phone });
       await refreshUploadPreview();
+      setDriverRegistrationName(null);
+    } catch (error) {
+      setUploadError(errorMessage(error));
+    } finally {
+      setUploadBusy(false);
+    }
+  };
+  const openVehicleAssignment = async (row: DispatchImportPreview['rows'][number]) => {
+    if (row.driverId === null) return;
+    setUploadBusy(true);
+    setUploadError('');
+    try {
+      setVehicleAssignmentTarget({
+        driverId: row.driverId,
+        driverName: row.driverName,
+        resources: await loadDispatchReferenceSnapshot(),
+        vehiclePlate: row.vehiclePlate,
+      });
+    } catch (error) {
+      setUploadError(errorMessage(error));
+    } finally {
+      setUploadBusy(false);
+    }
+  };
+  const assignVehicle = async (vehicleId: string) => {
+    if (vehicleAssignmentTarget === null) return;
+    setUploadBusy(true);
+    setUploadError('');
+    try {
+      const resources = vehicleAssignmentTarget.resources;
+      await persistManagementChange(resources, {
+        ...resources,
+        assignments: [...resources.assignments, {
+          driverId: vehicleAssignmentTarget.driverId,
+          id: crypto.randomUUID(),
+          kind: '기본 배정',
+          vehicleId,
+        }],
+      });
+      await refreshUploadPreview();
+      setVehicleAssignmentTarget(null);
     } catch (error) {
       setUploadError(errorMessage(error));
     } finally {
@@ -406,7 +460,6 @@ export function DispatchPage({ title, description }: { title: string; descriptio
     entry.columnIndex === null || entry.issue.severity !== 'error' ? [] : [`${entry.rowNumber - 1}:${entry.columnIndex}`]));
   const uploadWarningCells = new Set(uploadIssueEntries.flatMap((entry) =>
     entry.columnIndex === null || entry.issue.severity !== 'review' ? [] : [`${entry.rowNumber - 1}:${entry.columnIndex}`]));
-  const driverCandidates = uploadResourceCandidates(uploadPreview, ['DRIVER_MISSING', 'DRIVER_NOT_FOUND'], 'driverName');
   const vehicleCandidates = uploadResourceCandidates(uploadPreview, ['VEHICLE_MISSING', 'VEHICLE_NOT_FOUND'], 'vehiclePlate');
 
   return (
@@ -504,6 +557,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
                   {uploadIssueEntries.map((entry) => {
                     const addressDetails = uploadAddressDetails(uploadPreview, entry);
                     const suggestions = uploadAddressSuggestions(uploadPreview, entry);
+                    const row = uploadPreview?.rows.find((candidate) => candidate.rowNumber === entry.rowNumber);
                     return (
                       <div className={`dispatch-upload-issue-row is-${entry.issue.severity}`} key={`${entry.rowNumber}:${entry.issue.code}:${entry.issue.field}`}>
                         <button
@@ -544,6 +598,12 @@ export function DispatchPage({ title, description }: { title: string; descriptio
                               ))}
                             </div>
                           ) : null}
+                          {row && (entry.issue.code === 'DRIVER_MISSING' || entry.issue.code === 'DRIVER_NOT_FOUND') ? (
+                            <button aria-label={`${row.driverName} 배송원 등록`} className="dispatch-upload-issue-action" type="button" disabled={uploadBusy} onClick={() => { setUploadError(''); setDriverRegistrationName(row.driverName.trim()); }}>배송원 등록</button>
+                          ) : null}
+                          {row?.driverId && entry.issue.code === 'DRIVER_VEHICLE_MISSING' ? (
+                            <button aria-label={`${row.driverName} 차량 배정`} className="dispatch-upload-issue-action" type="button" disabled={uploadBusy} onClick={() => void openVehicleAssignment(row)}>차량 배정</button>
+                          ) : null}
                         </div>
                       </div>
                     );
@@ -552,12 +612,6 @@ export function DispatchPage({ title, description }: { title: string; descriptio
               </details>
             ) : null}
             {uploadPreview && !conditionCandidates.length && uploadPreview.summary.errorRows === 0 && uploadPreview.summary.reviewRows === 0 ? <p className="condition-upload-empty" role="status">필수 검사와 주소 정본 확인을 통과했습니다.</p> : null}
-            {driverCandidates.map((name) => (
-              <div className="upload-resource-candidate driver-candidate" key={name}>
-                <span><small>배송원</small><strong>{name}</strong></span>
-                <button type="button" disabled={uploadBusy} onClick={() => void registerDriver(name)}>배송원 등록</button>
-              </div>
-            ))}
             {vehicleCandidates.map((plate) => (
               <div className="upload-resource-candidate vehicle-candidate" key={plate}>
                 <span><small>차량 번호</small><strong>{plate}</strong></span>
@@ -568,6 +622,20 @@ export function DispatchPage({ title, description }: { title: string; descriptio
           </div>
         </section>
       </div>
+      {driverRegistrationName !== null ? (
+        <DispatchDriverRegistrationDialog busy={uploadBusy} error={uploadError} name={driverRegistrationName} onClose={() => setDriverRegistrationName(null)} onSubmit={(phone) => void registerDriver(phone)} />
+      ) : null}
+      {vehicleAssignmentTarget !== null ? (
+        <DispatchVehicleAssignmentDialog
+          busy={uploadBusy}
+          driverName={vehicleAssignmentTarget.driverName}
+          error={uploadError}
+          expectedVehiclePlate={vehicleAssignmentTarget.vehiclePlate}
+          onClose={() => setVehicleAssignmentTarget(null)}
+          onSubmit={(vehicleId) => void assignVehicle(vehicleId)}
+          vehicles={availableVehiclesForAssignment(vehicleAssignmentTarget)}
+        />
+      ) : null}
       {apiConfig.mode === 'remote' ? (
         <RemoteDispatchBoard
           departureDraft={departureDraft}
@@ -2175,6 +2243,8 @@ function errorMessage(error: unknown): string {
 
 function uploadIssueMessage(issue: DispatchImportIssue): string {
   if (issue.code === 'DRIVER_MISSING' || issue.code === 'DRIVER_NOT_FOUND') return '등록된 배송원을 찾을 수 없습니다.';
+  if (issue.code === 'DRIVER_VEHICLE_MISSING') return '배정된 차량이 없습니다.';
+  if (issue.code === 'DRIVER_VEHICLE_MISMATCH') return '파일의 차량이 배송원에게 배정된 차량과 다릅니다.';
   if (issue.code === 'VEHICLE_MISSING' || issue.code === 'VEHICLE_NOT_FOUND') return '등록된 차량 번호를 찾을 수 없습니다.';
   if (issue.code === 'CUSTOMER_MISSING') return '고객사를 찾을 수 없습니다.';
   if (issue.code === 'DESTINATION_MISSING') return '배송처를 찾을 수 없습니다.';
@@ -2281,6 +2351,14 @@ function uploadResourceCandidates(
     .filter((row) => row.issues.some((issue) => issueCodes.includes(issue.code)))
     .map((row) => row[field].trim())
     .filter(Boolean))];
+}
+
+function availableVehiclesForAssignment(target: UploadVehicleAssignmentTarget): Array<{ id: string; plate: string }> {
+  const assignedVehicleIds = new Set(target.resources.assignments.map((assignment) => assignment.vehicleId));
+  return target.resources.vehicles
+    .filter((vehicle) => !assignedVehicleIds.has(vehicle.id))
+    .filter((vehicle) => target.vehiclePlate === '' || vehicle.plate === target.vehiclePlate)
+    .map((vehicle) => ({ id: vehicle.id, plate: vehicle.plate }));
 }
 
 function dispatchDestinationName(row: DispatchListItem, references: ManagementData | null): string {
