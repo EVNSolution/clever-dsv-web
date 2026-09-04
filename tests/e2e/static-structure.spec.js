@@ -307,6 +307,8 @@ test('public DSV admin account setup and credentials keep top-level account cont
   expect(auth).toContain("'admin/auth/complete'");
   expect(auth).toContain("'auth/credentials'");
   expect(accounts).toContain('DSV 관제 운영 계정');
+  expect(accounts).toContain('고객 계정 발급과 상태 관리는 관리의 고객사 상세에서 수행합니다.');
+  expect(accounts).not.toContain('별도 작업으로 연결합니다.');
   expect(accounts).not.toContain('비밀번호 재발급');
   expect(accounts).not.toContain('임시 로그인 정보');
   expect(accountService).toContain("'admin-accounts/invitations'");
@@ -437,6 +439,8 @@ test('documentation names and boundaries', () => {
   expect(backendApi).toMatch(/v1 errors use the strict v1 floor[\s\S]*"error"\s*:\s*\{[\s\S]*"code"[\s\S]*"message"[\s\S]*"requestId"/i);
   expect(backendApi).toMatch(/bounded legacy[^\n]*[\s\S]*legacy[^\n]*\{[^\n]*"data"[^\n]*"error"[^\n]*\}[^\n]*envelope/i);
   expect(backendApi).toMatch(/## v1 reads[\s\S]*## Bounded legacy commands/i);
+  expect(backendApi).toContain('/api/dsv/public/guides/driver');
+  expect(backendApi).toMatch(/public, max-age=300, must-revalidate/);
 });
 
 test('session check remains visually silent', () => {

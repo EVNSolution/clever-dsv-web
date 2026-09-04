@@ -173,7 +173,7 @@ export function AdminAccountsPanel({
           <li>고객이 본인 아이디와 비밀번호를 설정합니다.</li>
           <li>계정은 해당 고객사의 배송만 조회합니다.</li>
         </ol>
-        <small>고객 계정 발급 기능은 인증 계약을 확정한 뒤 별도 작업으로 연결합니다.</small>
+        <small>고객 계정 발급과 상태 관리는 관리의 고객사 상세에서 수행합니다.</small>
       </section>
     </div>
   );
