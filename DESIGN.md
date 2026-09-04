@@ -3,7 +3,7 @@
 ## Source of truth
 
 - Status: Active
-- Last refreshed: 2026-08-24
+- Last refreshed: 2026-09-01
 - Primary product surfaces: 관제, 배차, 이력, 관리, 설정, 고객 배송조회
 - Evidence reviewed: 현재 React 컴포넌트, `src/styles` 구현, 자동화된 Playwright 계약, 운영 화면과 사용자 피드백
 - 과거 HTML 데모는 시각적 역사 자료일 뿐 현재 디자인 정본이 아니다. 현재 화면과 이 문서가 충돌하면 구현을 확인하고 문서를 함께 갱신한다.
@@ -51,7 +51,7 @@
 ## Components
 
 - Existing components to reuse: `AdminShell`, `AdminPageHeader`, `AdminSectionHeader`, 기존 버튼과 상태 pill
-- New/changed components: 768px 이하 비관제 페이지의 공용 고정 헤더는 기존 `AdminShell` 내비게이션을 변형해 사용한다.
+- New/changed components: 768px 이하 비관제 페이지의 공용 고정 헤더는 기존 `AdminShell` 내비게이션을 변형해 사용한다. 배차 행 작업 메뉴는 진행 전 배차에 `배차 전체 취소`를 제공한다.
 - Variants and states: 데스크톱 사이드 메뉴, 모바일 접힌 고정 헤더, 모바일 전체 화면 확장 메뉴, 관제 지도 오버레이
 - Token/component ownership: 토큰은 `src/styles/foundation/tokens.css`, 공통 셸은 `src/styles/components`, 반응형 보정은 `src/styles/responsive`가 소유한다.
 
@@ -77,6 +77,10 @@
 - Error: remote 오류를 mock 데이터로 감추지 않는다.
 - Success: 완료 상태와 후속 행동을 텍스트로 명시한다.
 - Disabled: 비활성 이유를 상태와 문맥으로 이해할 수 있게 한다.
+- 배송 완료: 확정된 종료 상태다. 완료 주문을 주문 후보로 되돌리지 않는다.
+- 주문 취소: 주문 자체의 종료 상태다. 배차 전체 취소와 구분하며 취소 주문을 주문 후보로 되돌리지 않는다.
+- 배차 전체 취소: 진행 전 배차에서만 실행하며 확인 문구에 후보로 돌아갈 전체 주문 수를 표시한다. 실행 시 같은 배차의 모든 주문을 기존 배정 해제로 처리한다.
+- 배차 취소 중 새 주문: 검색 조건 없는 최신 목록으로 전체 배차를 확인하고, 배정 해제 후 같은 배차의 잔여 주문을 다시 조회한다. 새 주문이 붙었으면 최대 세 번까지 수렴 처리하며, 상태가 진행 중·완료·취소로 바뀌거나 잔여 주문이 계속 생기면 성공으로 표시하지 않는다.
 - Offline/slow network: 기존 화면을 갑자기 대체하지 않고 실패 또는 지연 상태를 명시한다.
 
 ## Content voice

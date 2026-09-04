@@ -1344,9 +1344,51 @@ function DispatchWorkspace({
     }
   }
 
-  async function submitUnassignment(orders: DispatchListItem[]): Promise<void> {
-    if (orders.length === 1) await unassignDispatchOrder(orders[0]);
-    else await unassignDispatchOrders(orders);
+  async function submitUnassignment(
+    orders: DispatchListItem[],
+    reason = '관리자 배정 해제',
+  ): Promise<void> {
+    if (orders.length === 1) await unassignDispatchOrder(orders[0], reason);
+    else await unassignDispatchOrders(orders, reason);
+  }
+
+  async function cancelReadyRoute(order: DispatchListItem): Promise<void> {
+    if (readOnly || mutationBusy || order.operationStatus !== 'READY' || order.routePlanId === null) return;
+    const routePlanId = order.routePlanId;
+    setMutationBusy(true);
+    setMutationError('');
+    try {
+      const current = await loadDispatchList(serviceDate);
+      const routeOrders = readyRouteOrders(current.rows, routePlanId);
+      if (routeOrders.length > MAX_DISPATCH_ASSIGNMENT_COUNT) {
+        throw new Error(`배차 전체 취소는 한 번에 최대 ${MAX_DISPATCH_ASSIGNMENT_COUNT}건까지 가능합니다.`);
+      }
+      if (!window.confirm(`이 배차의 주문 ${routeOrders.length}건을 모두 주문 후보로 되돌립니다.`)) return;
+
+      let pendingOrders = routeOrders;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          await submitUnassignment(pendingOrders, '관리자 배차 전체 취소');
+        } catch (caught) {
+          if (!isAssignmentVersionConflict(caught)) throw caught;
+        }
+        const refreshed = await loadDispatchList(serviceDate);
+        pendingOrders = readyRouteOrders(refreshed.rows, routePlanId, true);
+        if (pendingOrders.length === 0) {
+          clearSelection();
+          onAssignmentChanged?.();
+          return;
+        }
+        if (pendingOrders.length > MAX_DISPATCH_ASSIGNMENT_COUNT) {
+          throw new Error(`배차 전체 취소는 한 번에 최대 ${MAX_DISPATCH_ASSIGNMENT_COUNT}건까지 가능합니다.`);
+        }
+      }
+      throw new Error('취소 처리 중 새 주문이 계속 추가되었습니다. 목록을 확인한 뒤 다시 시도하세요.');
+    } catch (caught) {
+      setMutationError(errorMessage(caught));
+    } finally {
+      setMutationBusy(false);
+    }
   }
 
   async function deleteSelected(): Promise<void> {
@@ -1735,6 +1777,7 @@ function DispatchWorkspace({
                               missingStop={actionOrderMissingStop}
                               onCustomerMemoSave={(memo) => void saveCustomerMemo(row, memo)}
                               onDriverMemoSave={(memo) => void saveDriverMemo(row, memo)}
+                              onCancelReadyRoute={() => void cancelReadyRoute(row)}
                               onCancelChangeRequest={() => void cancelPendingChange(row)}
                               onClearTimeConstraint={() => void clearSelectedTimeConstraint()}
                               onClose={() => setOpenActionOrderId(null)}
@@ -1898,6 +1941,7 @@ function DispatchRowActionMenu({
   missingStop,
   onClearTimeConstraint,
   onCancelChangeRequest,
+  onCancelReadyRoute,
   onClose,
   onConfirmTimeConstraint,
   onConstraintEndChange,
@@ -1917,6 +1961,7 @@ function DispatchRowActionMenu({
   missingStop: boolean;
   onClearTimeConstraint: () => void;
   onCancelChangeRequest: () => void;
+  onCancelReadyRoute: () => void;
   onClose: () => void;
   onConfirmTimeConstraint: () => void;
   onConstraintEndChange: (value: string) => void;
@@ -1982,6 +2027,17 @@ function DispatchRowActionMenu({
         <button type="submit" disabled={timeLocked || busy || missingStop}>확정</button>
         <button type="button" disabled={timeLocked || busy || missingStop || !canClearTimeConstraint} onClick={onClearTimeConstraint}>해제</button>
       </form>
+      {order.operationStatus === 'READY' ? (
+        <button
+          className="dispatch-row-menu-remove"
+          role="menuitem"
+          type="button"
+          disabled={busy}
+          onClick={onCancelReadyRoute}
+        >
+          배차 전체 취소
+        </button>
+      ) : null}
       <button
         className="dispatch-row-menu-remove"
         role="menuitem"
@@ -2011,6 +2067,18 @@ function isAssignmentVersionConflict(error: unknown): boolean {
   if (!(error instanceof ApiError) || error.status !== 409 || !isRecord(error.body)) return false;
   const detail = error.body.error;
   return isRecord(detail) && detail.code === 'SELLER_ORDER_ASSIGNMENT_CHANGED';
+}
+
+function readyRouteOrders(
+  rows: DispatchListItem[],
+  routePlanId: string,
+  allowEmpty = false,
+): DispatchListItem[] {
+  const routeOrders = rows.filter((row) => row.routePlanId === routePlanId);
+  if ((!allowEmpty && routeOrders.length === 0) || routeOrders.some((row) => row.operationStatus !== 'READY')) {
+    throw new Error('배차 상태가 변경되었습니다. 목록을 새로고침한 뒤 다시 시도하세요.');
+  }
+  return routeOrders;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
