@@ -38,6 +38,7 @@ export async function updateVehicleMarkers(
         'text-allow-overlap': true,
         'text-anchor': 'bottom',
         'text-field': ['get', 'label'],
+        'text-font': ['Noto Sans Regular'],
         'text-ignore-placement': true,
         'text-justify': 'center',
         'text-offset': [0, -1.08],
