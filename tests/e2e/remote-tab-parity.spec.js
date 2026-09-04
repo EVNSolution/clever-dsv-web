@@ -740,6 +740,159 @@ test('dispatch unassigns 53 selected orders with one atomic batch request', asyn
   expectOnlyFixtureCalls(api);
 });
 
+test('dispatch cancels one ready route by returning every route order to candidates', async ({ page }) => {
+  let dispatchReads = 0;
+  const unassignmentPayloads = [];
+  const routeRows = [1, 2].map((index) => ({
+    assignmentStatus: 'ASSIGNED',
+    customerId: 'customer-g006',
+    destinationAddress: `Seoul Ready Route ${index}`,
+    destinationDisplayName: `Ready Route Destination ${index}`,
+    destinationId: `destination-g006-ready-route-${index}`,
+    driverId: 'driver-g006',
+    etaStatus: 'PENDING',
+    latitude: 37.5 + index * 0.001,
+    longitude: 127 + index * 0.001,
+    routePlanId: 'route-plan-g006-ready-cancel',
+    routeVersionId: 'route-version-g006-ready-cancel',
+    sellerOrderId: `seller-order-g006-ready-cancel-${index}`,
+    sellerOrderKey: `SELLER-G006-READY-CANCEL-${index}`,
+    vehicleId: 'vehicle-g006',
+  }));
+  const otherRoute = {
+    ...routeRows[0],
+    destinationDisplayName: 'Other Route Destination',
+    destinationId: 'destination-g006-other-route',
+    routePlanId: 'route-plan-g006-other',
+    routeVersionId: 'route-version-g006-other',
+    sellerOrderId: 'seller-order-g006-other',
+    sellerOrderKey: 'SELLER-G006-OTHER',
+  };
+  const newRouteOrder = {
+    ...routeRows[0],
+    destinationDisplayName: 'New Route Destination',
+    destinationId: 'destination-g006-new-route-order',
+    sellerOrderId: 'seller-order-g006-new-route-order',
+    sellerOrderKey: 'SELLER-G006-NEW-ROUTE-ORDER',
+  };
+  const terminalRows = [
+    { label: 'Completed Route Destination', status: 'COMPLETED' },
+    { label: 'Cancelled Route Destination', status: 'CANCELLED' },
+  ].map(({ label, status }) => ({
+    ...otherRoute,
+    destinationDisplayName: label,
+    destinationId: `destination-g006-${status.toLowerCase()}`,
+    operationStatus: status,
+    routePlanId: `route-plan-g006-${status.toLowerCase()}`,
+    sellerOrderId: `seller-order-g006-${status.toLowerCase()}`,
+    sellerOrderKey: `SELLER-G006-${status}`,
+  }));
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': () => {
+      dispatchReads += 1;
+      const unassignedRows = routeRows.map((row) => ({
+        ...row,
+        assignmentStatus: 'UNASSIGNED',
+        driverId: undefined,
+        etaStatus: 'NOT_REQUIRED',
+        routePlanId: undefined,
+        routeVersionId: undefined,
+        vehicleId: undefined,
+      }));
+      return v1Envelope({
+        items: dispatchReads === 1
+          ? [routeRows[0], otherRoute, ...terminalRows]
+          : dispatchReads === 2
+            ? [...routeRows, otherRoute, ...terminalRows]
+            : dispatchReads === 3
+              ? [...unassignedRows, newRouteOrder, otherRoute, ...terminalRows]
+              : [
+                  ...unassignedRows,
+                  { ...newRouteOrder, assignmentStatus: 'UNASSIGNED', driverId: undefined, etaStatus: 'NOT_REQUIRED', routePlanId: undefined, routeVersionId: undefined, vehicleId: undefined },
+                  otherRoute,
+                  ...terminalRows,
+                ],
+        page: { hasMore: false },
+      }, `g006-dispatch-ready-route-cancel-${dispatchReads}`);
+    },
+    'POST /api/dsv/v1/seller-order-assignments/unassign': async ({ request }) => {
+      const unassignmentPayload = await request.postDataJSON();
+      unassignmentPayloads.push(unassignmentPayload);
+      return legacyEnvelope({
+        assignmentResults: unassignmentPayload.items.map((item) => ({
+          assignmentStatus: 'UNASSIGNED',
+          auditEventId: `audit-${item.sellerOrderId}`,
+          commandId: item.commandId,
+          etaStatus: 'NOT_REQUIRED',
+          newRouteVersionId: 'route-version-g006-ready-cancelled',
+          previousRouteVersionId: 'route-version-g006-ready-cancel',
+          receiptId: `receipt-${item.sellerOrderId}`,
+          routePlanId: null,
+          sellerOrderId: item.sellerOrderId,
+        })),
+        routePlanId: null,
+      });
+    },
+    'POST /api/dsv/v1/seller-orders/seller-order-g006-new-route-order/assignment/unassign': async ({ request }) => {
+      const payload = await request.postDataJSON();
+      unassignmentPayloads.push({
+        items: [{
+          commandId: payload.commandId,
+          expectedVersion: payload.expectedVersion,
+          sellerOrderId: newRouteOrder.sellerOrderId,
+        }],
+        reason: payload.reason,
+      });
+      return legacyEnvelope({
+        assignmentResult: {
+          assignmentStatus: 'UNASSIGNED',
+          auditEventId: 'audit-new-route-order',
+          commandId: payload.commandId,
+          etaStatus: 'NOT_REQUIRED',
+          newRouteVersionId: 'route-version-g006-new-route-unassigned',
+          previousRouteVersionId: newRouteOrder.routeVersionId,
+          receiptId: 'receipt-new-route-order',
+          routePlanId: null,
+          sellerOrderId: newRouteOrder.sellerOrderId,
+        },
+      });
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  for (const { destinationDisplayName } of terminalRows) {
+    await page.getByRole('button', { name: `${destinationDisplayName} 작업` }).click();
+    await expect(page.getByRole('menuitem', { name: '배차 전체 취소' })).toHaveCount(0);
+    await page.getByRole('button', { name: '작업 메뉴 닫기' }).click();
+  }
+  await page.getByRole('button', { name: 'Ready Route Destination 1 작업' }).click();
+  page.once('dialog', (dialog) => {
+    expect(dialog.message()).toContain('주문 2건');
+    expect(dialog.message()).toContain('주문 후보');
+    void dialog.accept();
+  });
+  await page.getByRole('menuitem', { name: '배차 전체 취소' }).click();
+
+  await expect.poll(() => dispatchReads).toBe(5);
+  expect(unassignmentPayloads[0]).toMatchObject({
+    items: routeRows.map((row) => ({
+      expectedVersion: row.routeVersionId,
+      sellerOrderId: row.sellerOrderId,
+    })),
+    reason: '관리자 배차 전체 취소',
+  });
+  expect(unassignmentPayloads[1]).toMatchObject({
+    items: [{
+      expectedVersion: newRouteOrder.routeVersionId,
+      sellerOrderId: newRouteOrder.sellerOrderId,
+    }],
+    reason: '관리자 배차 전체 취소',
+  });
+  expect(unassignmentPayloads.map(({ items }) => items.length)).toEqual([2, 1]);
+  expectOnlyFixtureCalls(api);
+});
+
 test('dispatch permanently deletes selected orders with one confirmed batch request', async ({ page }) => {
   let dispatchReads = 0;
   let deletionCalls = 0;

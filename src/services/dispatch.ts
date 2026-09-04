@@ -257,14 +257,17 @@ export async function reassignDispatchOrders(input: {
   return batchAssignmentResult(data);
 }
 
-export async function unassignDispatchOrder(order: DispatchListItem): Promise<DispatchAssignmentResult> {
+export async function unassignDispatchOrder(
+  order: DispatchListItem,
+  reason = '관리자 배정 해제',
+): Promise<DispatchAssignmentResult> {
   const data = await requestV1AssignmentCommandJson<unknown>(
     `seller-orders/${encodeURIComponent(order.sellerOrderId)}/assignment/unassign`,
     {
       json: {
         commandId: crypto.randomUUID(),
         expectedVersion: order.routeVersionId ?? 'UNASSIGNED',
-        reason: '관리자 배정 해제',
+        reason,
       },
       method: 'POST',
     },
@@ -272,7 +275,10 @@ export async function unassignDispatchOrder(order: DispatchListItem): Promise<Di
   return assignmentResult(data);
 }
 
-export async function unassignDispatchOrders(orders: DispatchListItem[]): Promise<DispatchBatchAssignmentResult> {
+export async function unassignDispatchOrders(
+  orders: DispatchListItem[],
+  reason = '관리자 배정 해제',
+): Promise<DispatchBatchAssignmentResult> {
   if (orders.length === 0) throw new Error('배정을 해제할 배송을 선택하세요.');
   if (orders.length > MAX_DISPATCH_ASSIGNMENT_COUNT) {
     throw new Error(`배정 해제는 한 번에 최대 ${MAX_DISPATCH_ASSIGNMENT_COUNT}건까지 가능합니다.`);
@@ -284,7 +290,7 @@ export async function unassignDispatchOrders(orders: DispatchListItem[]): Promis
         expectedVersion: order.routeVersionId ?? 'UNASSIGNED',
         sellerOrderId: order.sellerOrderId,
       })),
-      reason: '관리자 배정 해제',
+      reason,
     },
     method: 'POST',
   });
