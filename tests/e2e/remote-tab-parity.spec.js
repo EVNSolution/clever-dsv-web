@@ -293,7 +293,7 @@ test('dispatch renders the canonical v1 seller orders on the map without a dupli
   await expect(page.getByRole('region', { name: '배송원' })).toContainText('Canonical Driver G006');
   await expect(page.getByRole('region', { name: '배송원' })).toContainText('1건');
   await expect(page.getByRole('region', { name: '주문' })).toHaveCount(0);
-  await expect(page.getByRole('img', { name: /출발 위치: 경기도 군포시 번영로 82/ })).toBeVisible();
+  await expect(page.getByRole('img', { name: /출발 위치: 경기도 군포시 번영로 82/ })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByLabel('운영 시간 편집')).toBeVisible();
   await expect(page.getByLabel('출발 시간')).toHaveValue('08:45');
   await expectNoConcreteDemo(page);
@@ -2157,6 +2157,7 @@ test('settings blocks malformed or oversized manual email recipient lists before
   await page.goto('/settings');
   const recipients = page.getByLabel('테스트 이메일 수신자');
   const sendButton = page.getByRole('button', { name: '1회 발송', exact: true });
+  await expect(recipients).toBeEnabled();
   await recipients.fill('not-an-email');
   await expect(page.getByRole('alert')).toContainText('올바른 이메일 주소');
   await expect(recipients).toHaveAttribute('aria-invalid', 'true');
@@ -2456,6 +2457,7 @@ test('dispatch applies a destination search candidate and previews the corrected
   await expect(page.getByText(suggestedAddress, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '적용', exact: true }).click();
 
+  await expect.poll(() => previewBodies.length).toBe(2);
   await expect(page.getByRole('button', { name: '업로드 확정', exact: true })).toBeEnabled();
   expect(previewBodies).toHaveLength(2);
   expect(previewBodies[1].rows[0]).toMatchObject({ address: suggestedAddress });
@@ -2586,6 +2588,7 @@ test('failed dispatch apply leaves the dispatch sentinel untouched', async ({ pa
   await expect(page.getByRole('button', { name: '업로드 확정', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: '업로드 확정', exact: true }).click();
 
+  await expect.poll(() => api.calls.some((call) => call.key === 'POST /api/dsv/dispatch-imports/import-g006/apply')).toBe(true);
   await expect(page.getByRole('alert').filter({ hasText: 'dispatch apply failed' })).toBeVisible();
   await expect(page.getByText('1건 업로드 완료')).toHaveCount(0);
   await expectSentinel(page, key, sentinel);

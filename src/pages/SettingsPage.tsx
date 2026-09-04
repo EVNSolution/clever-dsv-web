@@ -382,7 +382,7 @@ function ManualEmailPanel({
       <p className="settings-email-description">배차와 연결되지 않은 수동 발송입니다. 버튼을 누른 경우에만 한 번 요청하며 자동 재시도하지 않습니다.</p>
       <div className="settings-email-grid">
         <label><span>발신자</span><input aria-label="테스트 이메일 발신자" type="email" maxLength={320} value={senderEmail} onChange={(event) => { onSenderEmailChange(event.target.value); setConfirmed(false); }} placeholder="Brevo에서 인증한 이메일" /></label>
-        <label><span>수신자</span><input aria-label="테스트 이메일 수신자" aria-invalid={recipientError !== null} type="text" value={recipients} onChange={(event) => { setRecipients(event.target.value); setConfirmed(false); }} placeholder="쉼표로 구분, 최대 10명" /></label>
+        <label><span>수신자</span><input aria-label="테스트 이메일 수신자" aria-invalid={recipientError !== null} disabled={state === 'loading' || state === 'sending'} type="text" value={recipients} onChange={(event) => { setRecipients(event.target.value); setConfirmed(false); }} placeholder="쉼표로 구분, 최대 10명" /></label>
         <label className="settings-email-wide"><span>제목</span><input aria-label="테스트 이메일 제목" type="text" maxLength={200} value={subject} onChange={(event) => { onSubjectChange(event.target.value); setConfirmed(false); }} /></label>
         <label className="settings-email-wide"><span>본문</span><textarea aria-label="테스트 이메일 본문" maxLength={10000} rows={8} value={textContent} onChange={(event) => { onTextContentChange(event.target.value); setConfirmed(false); }} /></label>
       </div>
