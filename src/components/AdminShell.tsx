@@ -128,16 +128,6 @@ export function AdminShell({
       : vehicleGpsTrailMapRoutes(controlVehicleTrail, controlTrailOpen ? controlTrailCursorMs : undefined),
     [controlTrailCursorMs, controlTrailOpen, controlVehicleTrail],
   );
-  const controlEstimatedArrivalByOrderId = useMemo(
-    () => configuredControlEtas(
-      controlRouteRequests,
-      controlRouteResults,
-      controlServiceDate,
-      controlSettings?.plannedDepartureTime,
-      controlSettings?.dwellMinutes,
-    ),
-    [controlRouteRequests, controlRouteResults, controlServiceDate, controlSettings],
-  );
   const controlVehiclePoints = useMemo(() => {
     const liveVehicles = isTodayInSeoul(controlServiceDate)
       ? controlVehicleMapPoints(controlOrders, departureLocation, vehicleColors, controlVehicleVisibility, controlManagement)
@@ -434,7 +424,6 @@ export function AdminShell({
               ? <ControlPreviewPanels />
               : (
                 <ControlPage
-                  estimatedArrivalByOrderId={controlEstimatedArrivalByOrderId}
                   onManagementChange={setControlManagement}
                   onOrdersChange={handleControlOrdersChange}
                   onDestinationSelect={(destinationId) => {
@@ -668,40 +657,6 @@ function isTodayInSeoul(serviceDate?: string): boolean {
     year: 'numeric',
   }).format(new Date());
   return serviceDate === today;
-}
-
-function configuredControlEtas(
-  requests: ControlRouteRequest[],
-  results: ReadonlyMap<string, ControlRouteResult>,
-  serviceDate?: string,
-  departureTime?: string,
-  dwellMinutes?: number,
-): ReadonlyMap<string, string> {
-  if (
-    serviceDate === undefined
-    || departureTime === undefined
-    || !/^\d{4}-\d{2}-\d{2}$/u.test(serviceDate)
-    || !/^(?:[01]\d|2[0-3]):[0-5]\d$/u.test(departureTime)
-  ) return new Map();
-  const startAt = new Date(`${serviceDate}T${departureTime}:00+09:00`);
-  if (Number.isNaN(startAt.getTime())) return new Map();
-  const stopMinutes = typeof dwellMinutes === 'number' && Number.isFinite(dwellMinutes) && dwellMinutes >= 0
-    ? dwellMinutes
-    : 0;
-  const estimates = new Map<string, string>();
-  for (const request of requests) {
-    const durations = results.get(request.id)?.legDurationsSeconds ?? [];
-    let cursorMs = startAt.getTime();
-    for (const [index, stop] of request.stops.entries()) {
-      const durationSeconds = durations[index];
-      if (durationSeconds === undefined || durationSeconds === null) break;
-      cursorMs += durationSeconds * 1000;
-      const estimatedArrivalAt = new Date(cursorMs).toISOString();
-      for (const orderId of stop.orderIds) estimates.set(orderId, estimatedArrivalAt);
-      cursorMs += stopMinutes * 60_000;
-    }
-  }
-  return estimates;
 }
 
 function groupAssignedControlDestinations(
