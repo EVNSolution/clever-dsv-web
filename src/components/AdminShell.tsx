@@ -348,7 +348,7 @@ export function AdminShell({
           <h1 className="sidebar-brand-title">CLEVER DSV</h1>
         </button>
         <span className="mobile-header-title" aria-hidden="true">{activeTab.label}</span>
-        {adminTabs.map((tab) => (
+        {adminTabs.filter((tab) => tab.path !== '/inquiries' || principalScopes.includes('dsv:accounts:read')).map((tab) => (
           <a
             key={tab.path}
             className={`main-tab${tab.path === activePath ? ' active' : ''}`}
