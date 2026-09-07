@@ -238,6 +238,7 @@ export function App(): ReactElement {
   if (path === accountPasswordPath) return <SessionState label="비밀번호 변경 준비 중" />;
   return (
     <AdminShell
+      key={`${principal?.id}:${principal?.shopId}`}
       activePath={path}
       principalId={principal?.id ?? null}
       principalScopes={principal?.scopes ?? []}
@@ -271,6 +272,7 @@ const requiredScopesByPath: Record<AppPath, string[]> = {
     'dsv:conditions:read',
   ],
   '/settings': ['dsv:settings:read'],
+  '/inquiries': ['dsv:accounts:read'],
   [adminCustomerDeliveryPath]: ['dsv:customers:read', 'dsv:dispatches:read'],
   [customerDeliveryPath]: ['dsv:customer-deliveries:read'],
   '/login': [],

@@ -265,7 +265,7 @@ test('single-concept labels remain', () => {
     readSrc('pages/MasterDataPage.tsx'),
   ].join('\n');
   const labels = [...readSrc('app-routes.ts').matchAll(/label: '([^']+)'/g)].map((match) => match[1]);
-  expect(labels).toEqual(['관제', '배차', '이력', '관리', '설정']);
+  expect(labels).toEqual(['관제', '배차', '이력', '관리', '설정', '문의']);
   expect(source).not.toMatch(/배송원·차량|고객·배송망|운영\/알림/);
 });
 

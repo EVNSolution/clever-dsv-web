@@ -7,6 +7,7 @@ const DispatchPage = lazy(() => import('./DispatchPage').then((module) => ({ def
 const MasterDataPage = lazy(() => import('./MasterDataPage').then((module) => ({ default: module.MasterDataPage })));
 const RecordsPage = lazy(() => import('./RecordsPage').then((module) => ({ default: module.RecordsPage })));
 const SettingsPage = lazy(() => import('./SettingsPage').then((module) => ({ default: module.SettingsPage })));
+const DriverInquiriesPage = lazy(() => import('./DriverInquiriesPage').then((module) => ({ default: module.DriverInquiriesPage })));
 
 export function AdminContent({ activePath, title, description, principalId, principalScopes }: { activePath: AdminPath; title: string; description: string; principalId: string | null; principalScopes: readonly string[] }): ReactElement {
   return (
@@ -29,6 +30,8 @@ function classNameForPath(activePath: AdminPath): string {
       return 'records-page';
     case '/settings':
       return 'settings-page';
+    case '/inquiries':
+      return 'inquiries-page';
     default:
       return 'settings-page';
   }
@@ -44,6 +47,10 @@ function contentForPath(activePath: AdminPath, title: string, description: strin
       return <RecordsPage />;
     case '/settings':
       return <SettingsPage title={title} description={description} principalId={principalId} principalScopes={principalScopes} />;
+    case '/inquiries':
+      return principalScopes.includes('dsv:accounts:read')
+        ? <DriverInquiriesPage />
+        : <p role="alert">이 계정에는 현재 화면의 조회 권한이 없습니다.</p>;
     default:
       return <SettingsPage title={title} description={description} principalId={principalId} principalScopes={principalScopes} />;
   }
