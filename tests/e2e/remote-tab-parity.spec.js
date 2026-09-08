@@ -86,6 +86,7 @@ async function installApiFixtures(page, fixtures) {
     'GET /api/dsv/v1/operational-notifications': v1Envelope({ items: [] }, 'g006-parity-empty-notifications'),
     'GET /api/dsv/manual-email': legacyEnvelope({ apiConfigured: false, configured: false, defaultRecipients: [], defaultSubject: operationSettings().manualEmailSubject, defaultTextContent: operationSettings().manualEmailBody, senderEmail: null, senderName: 'CLEVER DSV' }),
     'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings()),
+    'POST /api/dsv/v1/diagnostics/dispatch-load': v1Envelope({ accepted: true }, 'g007-dispatch-diagnostic'),
     ...fixtures,
   };
   const calls = [];
@@ -94,7 +95,18 @@ async function installApiFixtures(page, fixtures) {
     const request = route.request();
     const url = new URL(request.url());
     const key = `${request.method()} ${url.pathname}${url.search}`;
-    const call = { key, method: request.method(), path: url.pathname, search: url.search };
+    const headers = request.headers();
+    const call = {
+      key,
+      method: request.method(),
+      path: url.pathname,
+      search: url.search,
+      dsvDispatchHeaders: {
+        attemptId: headers['x-dsv-attempt-id'],
+        callerSurface: headers['x-caller-surface'],
+        loadId: headers['x-dsv-load-id'],
+      },
+    };
     calls.push(call);
     const pathKey = `${request.method()} ${url.pathname}`;
     if (!Object.hasOwn(resolvedFixtures, key) && !Object.hasOwn(resolvedFixtures, pathKey)) {
@@ -107,7 +119,8 @@ async function installApiFixtures(page, fixtures) {
       return;
     }
     const fixture = resolvedFixtures[key] ?? resolvedFixtures[pathKey];
-    const resolved = typeof fixture === 'function' ? await fixture({ request, url, call }) : fixture;
+    const resolved = typeof fixture === 'function' ? await fixture({ request, route, url, call }) : fixture;
+    if (resolved === undefined) return;
     await route.fulfill({
       contentType: 'application/json',
       status: resolved.status ?? 200,
@@ -1249,8 +1262,131 @@ test('dispatch keeps past service dates read-only in the same workspace', async 
   expectOnlyFixtureCalls(api);
 });
 
+test('dispatch replaces aborted date loads, starts new search loads, and scopes diagnostic headers', async ({ page }) => {
+  const diagnostics = [];
+  const dispatchItem = (suffix) => ({
+    assignmentStatus: 'UNASSIGNED',
+    customerId: 'customer-g006',
+    destinationDisplayName: `Canonical ${suffix} Destination`,
+    destinationId: `destination-g006-${suffix.toLowerCase()}`,
+    etaStatus: 'NOT_REQUIRED',
+    sellerOrderId: `seller-order-g006-${suffix.toLowerCase()}`,
+    sellerOrderKey: `SELLER-G006-${suffix.toUpperCase()}`,
+  });
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': async ({ route, url }) => {
+      const serviceDate = url.searchParams.get('serviceDate');
+      const destinationName = url.searchParams.get('destinationName');
+      if (serviceDate !== '2020-01-01') {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        await route.fulfill({
+          body: JSON.stringify(v1Envelope({ items: [dispatchItem('Stale')], page: { hasMore: false } }, 'g007-stale-dispatch')),
+          contentType: 'application/json',
+        }).catch(() => undefined);
+        return undefined;
+      }
+      return v1Envelope({
+        items: [dispatchItem(destinationName === 'Needle' ? 'Search' : 'Past')],
+        page: { hasMore: false },
+      }, destinationName === 'Needle' ? 'g007-search-dispatch' : 'g007-past-dispatch');
+    },
+    'POST /api/dsv/v1/diagnostics/dispatch-load': async ({ request }) => {
+      diagnostics.push(await request.postDataJSON());
+      return v1Envelope({ accepted: true }, `g007-load-lifecycle-${diagnostics.length}`);
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await expect.poll(() => api.calls.filter((call) => call.path === '/api/dsv/v1/dispatches').length).toBe(1);
+  await page.getByLabel('배차일 선택').fill('2020-01-01');
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await expect(page.locator('.dispatch-order-table')).toContainText('SELLER-G006-PAST');
+  await expect(page.locator('.dispatch-order-table')).not.toContainText('SELLER-G006-STALE');
+
+  await page.getByLabel('배송처 검색').fill('Needle');
+  await page.getByRole('button', { name: '검색', exact: true }).click();
+  await expect(page.locator('.dispatch-order-table')).toContainText('SELLER-G006-SEARCH');
+  await page.waitForTimeout(650);
+  await expect(page.locator('.dispatch-order-table')).not.toContainText('SELLER-G006-STALE');
+  await expect.poll(() => diagnostics.length).toBe(3);
+
+  expect(diagnostics).toEqual(expect.arrayContaining([
+    expect.objectContaining({ attemptKind: 'initial', outcome: 'aborted' }),
+    expect.objectContaining({ attemptKind: 'initial', outcome: 'success', serviceDate: '2020-01-01' }),
+  ]));
+  expect(new Set(diagnostics.map((diagnostic) => diagnostic.loadId)).size).toBe(3);
+  expect(new Set(diagnostics.map((diagnostic) => diagnostic.attemptId)).size).toBe(3);
+  expect(api.calls.some((call) => call.search.includes('serviceDate=2020-01-01') && call.search.includes('destinationName=Needle'))).toBe(true);
+
+  const instrumentedPaths = new Set([
+    '/api/dsv/v1/customers',
+    '/api/dsv/v1/destinations',
+    '/api/dsv/v1/dispatches',
+    '/api/dsv/v1/drivers',
+    '/api/dsv/v1/vehicles',
+  ]);
+  for (const call of api.calls) {
+    if (call.method === 'GET' && instrumentedPaths.has(call.path)) {
+      expect(call.dsvDispatchHeaders).toMatchObject({ callerSurface: 'dsv-dispatch' });
+      expect(call.dsvDispatchHeaders.loadId).toEqual(expect.any(String));
+      expect(call.dsvDispatchHeaders.attemptId).toEqual(expect.any(String));
+      continue;
+    }
+    expect(call.dsvDispatchHeaders).toEqual({ attemptId: undefined, callerSurface: undefined, loadId: undefined });
+  }
+  expectOnlyFixtureCalls(api);
+});
+
+test('dispatch keeps a response-body AbortError as one aborted attempt without a duplicate failure', async ({ page }) => {
+  await page.addInitScript(() => {
+    const nativeFetch = window.fetch.bind(window);
+    window.__dispatchBodyStreamReads = 0;
+    window.fetch = (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (method === 'GET' && url.pathname === '/api/dsv/v1/dispatches' && url.searchParams.get('serviceDate') !== '2020-01-01') {
+        window.__dispatchBodyStreamReads += 1;
+        const signal = init?.signal;
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"data":'));
+            const abort = () => controller.error(new DOMException('stale dispatch load', 'AbortError'));
+            if (signal?.aborted) abort();
+            else signal?.addEventListener('abort', abort, { once: true });
+          },
+        });
+        return Promise.resolve(new Response(stream, {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        }));
+      }
+      return nativeFetch(input, init);
+    };
+  });
+  const diagnostics = [];
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+    'POST /api/dsv/v1/diagnostics/dispatch-load': async ({ request }) => {
+      diagnostics.push(await request.postDataJSON());
+      return v1Envelope({ accepted: true }, `g007-body-abort-${diagnostics.length}`);
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await expect.poll(() => page.evaluate(() => window.__dispatchBodyStreamReads)).toBe(1);
+  await page.getByLabel('배차일 선택').fill('2020-01-01');
+  await expect(page.getByText('표시할 배송지가 없습니다.')).toBeVisible();
+  await expect.poll(() => diagnostics.length).toBe(2);
+  expect(diagnostics.filter((diagnostic) => diagnostic.outcome === 'aborted')).toHaveLength(1);
+  expect(diagnostics.filter((diagnostic) => diagnostic.outcome === 'success')).toHaveLength(1);
+  expect(diagnostics.filter((diagnostic) => diagnostic.outcome === 'failure')).toHaveLength(0);
+  expect(new Set(diagnostics.map((diagnostic) => diagnostic.attemptId)).size).toBe(2);
+  expectOnlyFixtureCalls(api);
+});
+
 test('dispatch retries after a destination parser failure without hiding the first error', async ({ page }) => {
   let destinationReads = 0;
+  const diagnostics = [];
   const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
     'GET /api/dsv/v1/destinations?limit=100': () => {
       destinationReads += 1;
@@ -1260,15 +1396,278 @@ test('dispatch retries after a destination parser failure without hiding the fir
       }, `g006-dispatch-destination-retry-${destinationReads}`);
     },
     'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+    'GET /api/dsv/v1/drivers?limit=100': v1Envelope({
+      items: [],
+      page: { hasMore: true, nextCursor: 'drivers-page-2' },
+    }, 'g006-dispatch-drivers-page-1'),
+    'GET /api/dsv/v1/drivers?limit=100&cursor=drivers-page-2': v1Envelope({
+      items: [],
+      page: { hasMore: false },
+    }, 'g006-dispatch-drivers-page-2'),
+    'POST /api/dsv/v1/diagnostics/dispatch-load': async ({ request }) => {
+      diagnostics.push(await request.postDataJSON());
+      return v1Envelope({ accepted: true }, `g007-dispatch-diagnostic-${diagnostics.length}`);
+    },
   })));
 
   await page.goto('/dispatch');
   await expect(page.getByRole('alert')).toContainText('API v1 관리 목록 형식이 올바르지 않습니다.');
+  await expect.poll(() => diagnostics.length).toBe(1);
   await page.getByRole('button', { name: '다시 시도', exact: true }).click();
 
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page.getByText('표시할 배송지가 없습니다.')).toBeVisible();
+  await expect.poll(() => diagnostics.length).toBe(2);
   expect(destinationReads).toBe(2);
+  expect(diagnostics[0]).toMatchObject({
+    apiVersion: 'dsv.v1',
+    attemptKind: 'initial',
+    contentType: 'application/json',
+    errorCode: 'LIST_PARSER_INVALID',
+    failedResource: 'destinations',
+    failureStage: 'parser',
+    httpStatus: 200,
+    outcome: 'failure',
+    responseRequestId: 'g006-dispatch-destination-retry-1',
+    source: 'browser',
+  });
+  expect(diagnostics[1]).toMatchObject({
+    attemptKind: 'retry',
+    loadId: diagnostics[0].loadId,
+    outcome: 'success',
+    source: 'browser',
+  });
+  expect(diagnostics[1].attemptId).not.toBe(diagnostics[0].attemptId);
+  for (const diagnostic of diagnostics) {
+    expect(diagnostic.attemptId).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(diagnostic.loadId).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(diagnostic.durationMs).toEqual(expect.any(Number));
+  }
+  for (const call of api.calls.filter((candidate) => candidate.method === 'GET' && [
+    '/api/dsv/v1/customers',
+    '/api/dsv/v1/destinations',
+    '/api/dsv/v1/dispatches',
+    '/api/dsv/v1/drivers',
+    '/api/dsv/v1/vehicles',
+  ].includes(candidate.path))) {
+    expect(call.dsvDispatchHeaders.callerSurface).toBe('dsv-dispatch');
+    expect(diagnostics.map((diagnostic) => diagnostic.attemptId)).toContain(call.dsvDispatchHeaders.attemptId);
+    expect(call.dsvDispatchHeaders.loadId).toBe(diagnostics[0].loadId);
+  }
+  expect(api.calls.filter((call) => call.path === '/api/dsv/v1/drivers')).toHaveLength(4);
+  expectOnlyFixtureCalls(api);
+});
+
+test('dispatch diagnostics never alter successful reads, retries, or authentication state', async ({ browser }) => {
+  const scenarios = [
+    { label: '401', fixture: v1Error(401, 'diagnostic unauthenticated') },
+    { label: '403', fixture: v1Error(403, 'diagnostic forbidden') },
+    { label: '500', fixture: v1Error(500, 'diagnostic failed') },
+    {
+      label: 'network',
+      fixture: async ({ route }) => {
+        await route.abort('failed');
+      },
+    },
+    {
+      label: 'timeout',
+      fixture: async ({ route }) => {
+        await new Promise((resolve) => setTimeout(resolve, 1_700));
+        await route.abort('timedout').catch(() => undefined);
+      },
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const page = await browser.newPage();
+    const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+      'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+      'POST /api/dsv/v1/diagnostics/dispatch-load': scenario.fixture,
+    })));
+
+    await page.goto('/dispatch');
+    await expect(page.getByText('표시할 배송지가 없습니다.'), scenario.label).toBeVisible();
+    await expect(page.getByRole('button', { name: '다시 시도', exact: true }), scenario.label).toHaveCount(0);
+    await expect.poll(
+      () => api.calls.filter((call) => call.path === '/api/dsv/v1/diagnostics/dispatch-load').length,
+      { message: scenario.label },
+    ).toBe(1);
+    if (scenario.label === 'timeout') await page.waitForTimeout(1_700);
+    expect(api.calls.filter((call) => call.key === 'GET /api/dsv/v1/session'), scenario.label).toHaveLength(1);
+    expect(api.calls.filter((call) => call.path === '/api/dsv/v1/diagnostics/dispatch-load'), scenario.label).toHaveLength(1);
+    await expect(page, scenario.label).toHaveURL(/\/dispatch$/u);
+    expectOnlyFixtureCalls(api);
+    await page.close();
+  }
+});
+
+test('dispatch diagnostic preparation failures remain fully fire-and-forget', async ({ page }) => {
+  const diagnostics = [];
+  let dispatchReads = 0;
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': () => {
+      dispatchReads += 1;
+      return dispatchPageFixture();
+    },
+    'POST /api/dsv/v1/diagnostics/dispatch-load': async ({ request }) => {
+      diagnostics.push(await request.postDataJSON());
+      return v1Envelope({ accepted: true }, `g007-preparation-${diagnostics.length}`);
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await expect(page.getByText('표시할 배송지가 없습니다.')).toBeVisible();
+  await expect.poll(() => diagnostics.length).toBe(1);
+  await page.evaluate(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    let rejectDiagnosticTimer = true;
+    window.setTimeout = (handler, timeout, ...args) => {
+      if (rejectDiagnosticTimer && timeout === 1_500) {
+        rejectDiagnosticTimer = false;
+        throw new Error('diagnostic timer preparation failed');
+      }
+      return nativeSetTimeout(handler, timeout, ...args);
+    };
+  });
+
+  await page.getByLabel('배송처 검색').fill('Needle');
+  await page.getByRole('button', { name: '검색', exact: true }).click();
+  await expect.poll(() => dispatchReads).toBe(2);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect.poll(() => api.calls.some((call) => call.search.includes('destinationName=Needle'))).toBe(true);
+  await page.waitForTimeout(100);
+  expect(diagnostics).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
+  expect(api.calls.filter((call) => call.key === 'GET /api/dsv/v1/session')).toHaveLength(1);
+  await expect(page).toHaveURL(/\/dispatch$/u);
+  expectOnlyFixtureCalls(api);
+});
+
+test('dispatch diagnostics classify the actual read failure boundary', async ({ browser }) => {
+  const scenarios = [
+    {
+      expected: { errorCode: 'NETWORK_ERROR', failureStage: 'transport' },
+      fixture: async ({ route }) => {
+        await route.abort('failed');
+      },
+      label: 'transport',
+    },
+    {
+      expected: {
+        apiVersion: 'missing',
+        contentType: 'application/json',
+        errorCode: 'HTTP_ERROR',
+        failureStage: 'http',
+        httpStatus: 503,
+        responseRequestId: 'g006-parity-error-503',
+      },
+      fixture: v1Error(503, 'dispatch unavailable'),
+      label: 'http',
+    },
+    {
+      expected: { contentType: 'text/html', errorCode: 'CONTENT_TYPE_ERROR', failureStage: 'content_type', httpStatus: 200 },
+      fixture: async ({ route }) => {
+        await route.fulfill({ body: '<html>not json</html>', contentType: 'text/html' });
+      },
+      label: 'content type',
+    },
+    {
+      expected: { contentType: 'application/json', errorCode: 'JSON_PARSE_ERROR', failureStage: 'json', httpStatus: 200 },
+      fixture: async ({ route }) => {
+        await route.fulfill({ body: '{', contentType: 'application/json' });
+      },
+      label: 'json',
+    },
+    {
+      expected: {
+        apiVersion: 'invalid',
+        contentType: 'application/json',
+        errorCode: 'V1_ENVELOPE_INVALID',
+        failureStage: 'envelope',
+        httpStatus: 200,
+        responseRequestId: 'g007-invalid-envelope',
+      },
+      fixture: { data: { items: [], page: { hasMore: false } }, meta: { apiVersion: 'legacy' }, requestId: 'g007-invalid-envelope' },
+      label: 'envelope',
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const diagnostics = [];
+    const page = await browser.newPage();
+    const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+      'GET /api/dsv/v1/dispatches': scenario.fixture,
+      'POST /api/dsv/v1/diagnostics/dispatch-load': async ({ request }) => {
+        diagnostics.push(await request.postDataJSON());
+        return v1Envelope({ accepted: true }, `g007-${scenario.label}-diagnostic`);
+      },
+    })));
+
+    await page.goto('/dispatch');
+    await expect(page.getByRole('alert'), scenario.label).toContainText('배차 정보를 불러오지 못했습니다.');
+    if (scenario.label === 'json') {
+      await expect(page.getByRole('alert')).toContainText('API가 올바른 JSON을 반환하지 않았습니다.');
+    }
+    await expect.poll(() => diagnostics.length, { message: scenario.label }).toBe(1);
+    expect(diagnostics[0]).toMatchObject({
+      attemptKind: 'initial',
+      failedResource: 'dispatches',
+      outcome: 'failure',
+      ...scenario.expected,
+    });
+    expect(api.calls.filter((call) => call.path === '/api/dsv/v1/diagnostics/dispatch-load'), scenario.label).toHaveLength(1);
+    expectOnlyFixtureCalls(api);
+    await page.close();
+  }
+});
+
+test('dispatch classifies a response-body stream failure as transport after HTTP 200 headers', async ({ page }) => {
+  await page.addInitScript(() => {
+    const nativeFetch = window.fetch.bind(window);
+    let failed = false;
+    window.fetch = (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (!failed && method === 'GET' && url.pathname === '/api/dsv/v1/dispatches') {
+        failed = true;
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"data":'));
+            controller.error(new TypeError('response stream interrupted'));
+          },
+        });
+        return Promise.resolve(new Response(stream, {
+          headers: { 'Content-Type': 'application/json', 'X-Request-Id': 'g007-stream-failure' },
+          status: 200,
+        }));
+      }
+      return nativeFetch(input, init);
+    };
+  });
+  const diagnostics = [];
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+    'POST /api/dsv/v1/diagnostics/dispatch-load': async ({ request }) => {
+      diagnostics.push(await request.postDataJSON());
+      return v1Envelope({ accepted: true }, 'g007-stream-failure-diagnostic');
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await expect(page.getByRole('alert')).toContainText('배차 정보를 불러오지 못했습니다.');
+  await expect.poll(() => diagnostics.length).toBe(1);
+  expect(diagnostics[0]).toMatchObject({
+    attemptKind: 'initial',
+    contentType: 'application/json',
+    errorCode: 'NETWORK_ERROR',
+    failedResource: 'dispatches',
+    failureStage: 'transport',
+    httpStatus: 200,
+    outcome: 'failure',
+    responseRequestId: 'g007-stream-failure',
+  });
   expectOnlyFixtureCalls(api);
 });
 
