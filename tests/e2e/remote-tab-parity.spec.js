@@ -1460,9 +1460,9 @@ test('dispatch retries after a destination parser failure without hiding the fir
 
 test('dispatch diagnostics never alter successful reads, retries, or authentication state', async ({ browser }) => {
   const scenarios = [
-    { label: '401', fixture: v1Error(401, 'diagnostic unauthenticated') },
+    { label: '401', exerciseRetry: true, fixture: v1Error(401, 'diagnostic unauthenticated') },
     { label: '403', fixture: v1Error(403, 'diagnostic forbidden') },
-    { label: '500', fixture: v1Error(500, 'diagnostic failed') },
+    { label: '500', exerciseRetry: true, fixture: v1Error(500, 'diagnostic failed') },
     {
       label: 'network',
       fixture: async ({ route }) => {
@@ -1471,6 +1471,7 @@ test('dispatch diagnostics never alter successful reads, retries, or authenticat
     },
     {
       label: 'timeout',
+      exerciseRetry: true,
       fixture: async ({ route }) => {
         await new Promise((resolve) => setTimeout(resolve, 1_700));
         await route.abort('timedout').catch(() => undefined);
@@ -1480,22 +1481,68 @@ test('dispatch diagnostics never alter successful reads, retries, or authenticat
 
   for (const scenario of scenarios) {
     const page = await browser.newPage();
-    const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    let destinationReads = 0;
+    const diagnostics = [];
+    const fixtures = {
       'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
-      'POST /api/dsv/v1/diagnostics/dispatch-load': scenario.fixture,
-    })));
+      'POST /api/dsv/v1/diagnostics/dispatch-load': async (args) => {
+        diagnostics.push(await args.request.postDataJSON());
+        if (diagnostics.length > 1) {
+          return v1Envelope({ accepted: true }, `g007-diagnostic-retry-${scenario.label}`);
+        }
+        return typeof scenario.fixture === 'function' ? scenario.fixture(args) : scenario.fixture;
+      },
+    };
+    if (scenario.exerciseRetry) {
+      fixtures['GET /api/dsv/v1/destinations?limit=100'] = () => {
+        destinationReads += 1;
+        return v1Envelope({
+          items: [currentDestinationFixture(destinationReads === 1 ? { unsupportedField: true } : {})],
+          page: { hasMore: false },
+        }, `g006-diagnostic-retry-${scenario.label}-${destinationReads}`);
+      };
+    }
+    const api = await installApiFixtures(page, adminFixtures(dispatchFixtures(fixtures)));
+    const firstDiagnosticSettled = scenario.exerciseRetry
+      ? scenario.label === 'timeout'
+        ? page.waitForEvent('requestfailed', {
+            predicate: (request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/dsv/v1/diagnostics/dispatch-load',
+          })
+        : page.waitForResponse((response) => response.request().method() === 'POST'
+          && new URL(response.url()).pathname === '/api/dsv/v1/diagnostics/dispatch-load')
+      : null;
 
     await page.goto('/dispatch');
-    await expect(page.getByText('표시할 배송지가 없습니다.'), scenario.label).toBeVisible();
-    await expect(page.getByRole('button', { name: '다시 시도', exact: true }), scenario.label).toHaveCount(0);
-    await expect.poll(
-      () => api.calls.filter((call) => call.path === '/api/dsv/v1/diagnostics/dispatch-load').length,
-      { message: scenario.label },
-    ).toBe(1);
-    if (scenario.label === 'timeout') await page.waitForTimeout(1_700);
+    if (scenario.exerciseRetry) {
+      await expect(page.getByRole('alert'), scenario.label).toContainText('API v1 관리 목록 형식이 올바르지 않습니다.');
+    } else {
+      await expect(page.getByText('표시할 배송지가 없습니다.'), scenario.label).toBeVisible();
+      await expect(page.getByRole('button', { name: '다시 시도', exact: true }), scenario.label).toHaveCount(0);
+    }
+    await expect.poll(() => diagnostics.length, { message: scenario.label }).toBe(1);
+    if (firstDiagnosticSettled !== null) await firstDiagnosticSettled;
     expect(api.calls.filter((call) => call.key === 'GET /api/dsv/v1/session'), scenario.label).toHaveLength(1);
     expect(api.calls.filter((call) => call.path === '/api/dsv/v1/diagnostics/dispatch-load'), scenario.label).toHaveLength(1);
     await expect(page, scenario.label).toHaveURL(/\/dispatch$/u);
+
+    if (scenario.exerciseRetry) {
+      await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+      await expect(page.getByRole('alert'), scenario.label).toHaveCount(0);
+      await expect(page.getByText('표시할 배송지가 없습니다.'), scenario.label).toBeVisible();
+      await expect.poll(() => diagnostics.length, { message: scenario.label }).toBe(2);
+      if (scenario.label === 'timeout') await page.waitForTimeout(1_700);
+      expect(destinationReads, scenario.label).toBe(2);
+      expect(diagnostics[0], scenario.label).toMatchObject({ attemptKind: 'initial', outcome: 'failure' });
+      expect(diagnostics[1], scenario.label).toMatchObject({
+        attemptKind: 'retry',
+        loadId: diagnostics[0].loadId,
+        outcome: 'success',
+      });
+      expect(diagnostics[1].attemptId, scenario.label).not.toBe(diagnostics[0].attemptId);
+      expect(api.calls.filter((call) => call.path === '/api/dsv/v1/diagnostics/dispatch-load'), scenario.label).toHaveLength(2);
+      expect(api.calls.filter((call) => call.key === 'GET /api/dsv/v1/session'), scenario.label).toHaveLength(1);
+    }
+
     expectOnlyFixtureCalls(api);
     await page.close();
   }
