@@ -2,9 +2,9 @@
 
 | 항목 | 값 |
 | --- | --- |
-| Runbook version | `1.2.0` |
+| Runbook version | `1.3.0` |
 | 상태 | Active |
-| 최종 검증일 | 2026-08-18 |
+| 최종 검증일 | 2026-09-08 |
 | 대상 | `clever-route-server`, `clever-dsv-web` |
 | 운영 웹 | `https://dsv.cleversystem.ai` |
 | 운영 API | `https://clever-route-api.cleversystem.ai` |
@@ -272,6 +272,43 @@ curl -fsSI https://dsv.cleversystem.ai/ | grep -Ei \
 - 팝업에서 PDF.js의 `Setting up fake worker` 경고가 나오면 먼저 실제 `pdf.worker-*.mjs` 응답의 `Content-Type`을 확인한다.
 - 인증된 PDF URL이 새 창에서는 열리지만 팝업만 실패하고 워커가 `application/octet-stream`으로 응답하면 nginx MIME 설정 문제다.
 - 이 문제를 해결하기 위해 `X-Content-Type-Options: nosniff`를 제거하거나 PDF API를 공개하지 않는다. `ops/nginx/dsv-web.conf`와 운영 설정의 SHA-256을 맞춘다.
+
+### 배차 화면 로드 진단
+
+`POST /api/dsv/v1/diagnostics/dispatch-load`는 인증된 DSV 관리자 세션, `dsv:dispatches:read` scope, CSRF 헤더가 필요한 best-effort 진단 전송이다. 배포된 서버 SHA `84282517`의 [OpenAPI 계약](https://github.com/EVNSolution/clever-route-server/blob/8428251704c2dbdab2bb5ab8b49d078381c13fc8/apps/delivery-api/docs/api/openapi.yaml#L324)이 정본이다. JSON 본문은 4,096 bytes 이하이며 필수 필드는 `loadId`, `attemptId`, `attemptKind`, `outcome`, `serviceDate`, `durationMs`, `source`다. 실패일 때만 `failedResource`, `failureStage`, `errorCode`가 필수이고 `httpStatus`, `contentType`, `apiVersion`, `responseRequestId`를 추가할 수 있다. 원문 응답, 오류 메시지, 고객 정보, 주소, 검색어, 쿠키, 토큰은 전송하거나 기록하지 않는다. 클라이언트는 1.5초 뒤 전송을 중단하므로 일부 terminal이 서버에 도달하지 않을 수 있다. 진단 POST 자체의 401, 403, 5xx, network error, timeout은 조회·재시도·로그인 상태를 바꾸지 않는다.
+
+운영 오류 팝업을 조사할 때는 오류를 확인한 시각과 화면의 `serviceDate`로 실패 terminal을 찾고, 그 `loadId`로 최초 시도와 재시도 및 5개 GET을 연결한다. CloudWatch Logs Insights의 log group은 `/clever/route-ops/delivery-api`다. `@timestamp`는 UTC이므로 KST 확인 시각에서 9시간을 뺀 범위를 선택한다.
+
+```sql
+fields @timestamp, @logStream, loadId, attemptId, attemptKind, outcome,
+       failedResource, failureStage, errorCode, httpStatus, responseRequestId, durationMs
+| filter event = "dsv_dispatch_load_attempt"
+| filter serviceDate = "2026-09-07" and outcome = "failure"
+| sort @timestamp desc
+| limit 20
+```
+
+선택한 실패 terminal의 `loadId`를 아래 쿼리에 넣는다. `initial`과 `retry`는 같은 `loadId`를 쓰고 서로 다른 `attemptId`를 써야 한다. 각 attempt의 `dsv_api_surface_request`에는 `customers`, `destinations`, `dispatches`, `drivers`, `vehicles` GET이 같은 `loadId`와 해당 `attemptId`로 연결되어야 한다. 페이지네이션이 있으면 한 resource의 GET이 여러 건일 수 있다.
+실패 terminal의 `responseRequestId`가 있으면 해당 실패 GET의 `dsv_api_surface_request.requestId`와도 일치해야 한다.
+
+```sql
+fields @timestamp, @logStream, event, loadId, attemptId, attemptKind, outcome,
+       failedResource, failureStage, errorCode, httpStatus, responseRequestId,
+       method, path, statusCode, requestId, durationMs
+| filter loadId = "<load-id>"
+| sort @timestamp asc
+| limit 100
+```
+
+2026-09-08 운영 검증에서는 `source=browser`인 당일·과거 success terminal과 각각의 5개 GET 연결을 확인했다. 실제 운영 응답을 변조한 parser failure 재현은 수행하지 않았고, parser failure 후 진단 POST 401/500/timeout이어도 `다시 시도`가 같은 `loadId`와 새 `attemptId`로 성공하는 경로는 로컬 fixture E2E로 분리 검증했다. 운영 log group의 retention은 아래처럼 정확한 이름으로 조회하며, 2026-09-08 확인값은 90일이다. 값이 이미 90일이면 변경하지 않는다.
+
+```bash
+aws logs describe-log-groups \
+  --region ap-northeast-2 \
+  --log-group-name-prefix /clever/route-ops/delivery-api \
+  --query 'logGroups[?logGroupName==`/clever/route-ops/delivery-api`].{name:logGroupName,retentionInDays:retentionInDays}' \
+  --output json
+```
 
 ## 중단과 복구
 
