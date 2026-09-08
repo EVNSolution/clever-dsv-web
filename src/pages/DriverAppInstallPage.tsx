@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
-import { Download, ShieldCheck, Smartphone } from 'lucide-react';
+import { Download, ExternalLink, ShieldCheck, Smartphone } from 'lucide-react';
 
-import { DRIVER_ANDROID_DOWNLOAD_URL } from '../config/driver-app';
+import { DRIVER_ANDROID_PLAY_URL } from '../config/driver-app';
 
 export function DriverAppInstallPage(): ReactElement {
   return (
@@ -22,17 +22,17 @@ export function DriverAppInstallPage(): ReactElement {
         <section className="driver-app-platform" aria-labelledby="driver-android-title">
           <div>
             <span className="driver-app-platform-label">Android</span>
-            <h2 id="driver-android-title">Android 설치 파일</h2>
-            <p>아래 버튼에서 최신 정식 APK를 직접 내려받습니다.</p>
+            <h2 id="driver-android-title">Google Play</h2>
+            <p>Google Play에서 최신 정식 버전을 설치하거나 업데이트합니다.</p>
           </div>
-          <a className="driver-app-store-link" href={DRIVER_ANDROID_DOWNLOAD_URL}>
-            <Download aria-hidden="true" /> Android 설치 파일 받기
+          <a className="driver-app-store-link" href={DRIVER_ANDROID_PLAY_URL} rel="noopener noreferrer" target="_blank">
+            <ExternalLink aria-hidden="true" /> Google Play에서 설치 및 업데이트
           </a>
         </section>
 
         <ol className="driver-app-steps" aria-label="설치 순서">
-          <li><span>1</span><p><strong>설치 파일 받기</strong>위 Android 버튼을 누릅니다.</p></li>
-          <li><span>2</span><p><strong>설치 허용</strong>휴대전화가 묻는 경우 이 출처의 앱 설치를 허용합니다.</p></li>
+          <li><span>1</span><p><strong>Google Play 열기</strong>위 Android 버튼을 누릅니다.</p></li>
+          <li><span>2</span><p><strong>설치 또는 업데이트</strong>Google Play에서 앱을 설치하거나 최신 버전으로 업데이트합니다.</p></li>
           <li><span>3</span><p><strong>회원가입</strong>앱에서 이름, 휴대전화 번호, 로그인 아이디와 비밀번호를 입력합니다.</p></li>
           <li><span>4</span><p><strong>배송 업무 연결</strong>DSV에 등록된 활성 배송원의 이름과 휴대전화 번호가 모두 일치하면 배송 업무가 자동으로 연결됩니다. 일치 정보가 없으면 연결 대기 상태로 가입됩니다.</p></li>
         </ol>

@@ -1,21 +1,22 @@
 import { test, expect } from '@playwright/test';
 
-test('public driver app page downloads the canonical Android APK without changing iPhone guidance', async ({ page }) => {
+test('public driver app page opens the production Google Play listing without changing iPhone guidance', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/driver-app');
 
   await expect(page.getByRole('heading', { name: 'CLEVER Driver 설치', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Android 설치 파일', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Android 설치 파일 받기', exact: true })).toHaveAttribute(
+  await expect(page.getByRole('heading', { name: 'Google Play', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Google Play에서 설치 및 업데이트', exact: true })).toHaveAttribute(
     'href',
-    'https://drive.usercontent.google.com/download?id=1XRXAqREGtJJRMUsRnKgRAhFsiikE4V1y&export=download&confirm=t',
+    'https://play.google.com/store/apps/details?id=com.evnsolution.clever.driver',
   );
+  await expect(page.getByRole('link', { name: 'Google Play에서 설치 및 업데이트', exact: true })).toHaveAttribute('target', '_blank');
   await expect(page.getByRole('link', { name: 'PDF 가이드 다운로드', exact: true })).toHaveAttribute(
     'href',
     '/api/dsv/public/guides/driver?download=1',
   );
   await expect(page.getByText('아이폰용 CLEVER Driver는 전용 App Store 설치 링크 승인을 기다리고 있습니다.')).toBeVisible();
-  await expect(page.getByText(/Google Play|App Store Connect|build 11|TestFlight/)).toHaveCount(0);
+  await expect(page.getByText(/App Store Connect|build 11|TestFlight/)).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
 
