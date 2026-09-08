@@ -211,6 +211,26 @@ function dispatchPageFixture() {
   return v1Envelope({ items: [], page: { hasMore: false } }, 'g006-dispatch-empty');
 }
 
+function currentDestinationFixture(overrides = {}) {
+  return {
+    address: 'Seoul Canonical Address 6006',
+    destinationId: 'destination-g006',
+    displayName: 'Canonical Destination G006',
+    lunchEntryStatus: 'AVAILABLE',
+    lunchEntryStatusUpdatedAt: '2026-09-07T00:00:00.000Z',
+    lunchTimeRange: '12:00~13:00',
+    lunchTimeRangeUpdatedAt: '2026-09-07T00:00:00.000Z',
+    memo: 'rear entrance',
+    memoUpdatedAt: '2026-09-07T00:00:00.000Z',
+    openTime: '08:30',
+    openTimeUpdatedAt: '2026-09-07T00:00:00.000Z',
+    postalCode: '04050',
+    requiredArrivalTime: '10:30',
+    requiredArrivalTimeUpdatedAt: '2026-09-07T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
 function dispatchFixtures(fixtures = {}) {
   return {
     'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings({ loadingStartTime: '07:15', plannedDepartureTime: '08:45' })),
@@ -1068,6 +1088,8 @@ test('dispatch keeps the last valid service date when the date input is cleared'
   await dateInput.fill('');
 
   await expect(dateInput).toHaveValue(initialDate);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByText('표시할 배송지가 없습니다.')).toBeVisible();
   expect(api.calls.filter((call) => call.path === '/api/dsv/v1/dispatches')).toHaveLength(1);
   expect(api.calls.some((call) => call.key.endsWith('serviceDate='))).toBe(false);
   expectOnlyFixtureCalls(api);
@@ -1192,6 +1214,10 @@ test('dispatch selects multiple destinations with a map polygon', async ({ page 
 
 test('dispatch keeps past service dates read-only in the same workspace', async ({ page }) => {
   const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/destinations?limit=100': v1Envelope({
+      items: [currentDestinationFixture()],
+      page: { hasMore: false },
+    }, 'g006-dispatch-current-destination-contract'),
     'GET /api/dsv/v1/dispatches': v1Envelope({
       items: [{
         assignmentStatus: 'ASSIGNED',
@@ -1216,9 +1242,55 @@ test('dispatch keeps past service dates read-only in the same workspace', async 
   await expect(page.getByText('지난 배차는 조회만 가능합니다.')).toBeVisible();
   await expect(page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배정 해제' })).toBeDisabled();
   await expect(page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배송 삭제' })).toBeDisabled();
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await expect(page.locator('.dispatch-order-table')).toContainText('SELLER-G006-PAST');
+  await expect(page.getByRole('alert')).toHaveCount(0);
   await expect.poll(() => api.calls.some((call) => call.key.includes('serviceDate=2020-01-01'))).toBe(true);
   expectOnlyFixtureCalls(api);
 });
+
+test('dispatch retries after a destination parser failure without hiding the first error', async ({ page }) => {
+  let destinationReads = 0;
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/destinations?limit=100': () => {
+      destinationReads += 1;
+      return v1Envelope({
+        items: [currentDestinationFixture(destinationReads === 1 ? { unsupportedField: true } : {})],
+        page: { hasMore: false },
+      }, `g006-dispatch-destination-retry-${destinationReads}`);
+    },
+    'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+  })));
+
+  await page.goto('/dispatch');
+  await expect(page.getByRole('alert')).toContainText('API v1 관리 목록 형식이 올바르지 않습니다.');
+  await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByText('표시할 배송지가 없습니다.')).toBeVisible();
+  expect(destinationReads).toBe(2);
+  expectOnlyFixtureCalls(api);
+});
+
+for (const invalidDestination of [
+  { label: 'wrong field types', overrides: { memo: 42 } },
+  { label: 'invalid timestamps', overrides: { memoUpdatedAt: 'not-a-date' } },
+]) {
+  test(`dispatch rejects destination ${invalidDestination.label}`, async ({ page }) => {
+    const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+      'GET /api/dsv/v1/destinations?limit=100': v1Envelope({
+        items: [currentDestinationFixture(invalidDestination.overrides)],
+        page: { hasMore: false },
+      }, `g006-dispatch-destination-${invalidDestination.label.replaceAll(' ', '-')}`),
+      'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+    })));
+
+    await page.goto('/dispatch');
+
+    await expect(page.getByRole('alert')).toContainText('API v1 관리 목록 형식이 올바르지 않습니다.');
+    expectOnlyFixtureCalls(api);
+  });
+}
 
 test('dispatch read failure is visible and leaves the dispatch sentinel untouched', async ({ page }) => {
   const key = 'clever.dispatch.last-import';
