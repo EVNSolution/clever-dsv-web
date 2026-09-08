@@ -2174,17 +2174,17 @@ test('management copies the install link when operating system sharing fails', a
   expectOnlyFixtureCalls(api);
 });
 
-test('customer detail manages customer accounts without exposing passwords', async ({ page }) => {
+test('customer detail manages customer accounts without exposing passwords', async ({ page, context }) => {
   let inviteBody;
   let statusBody;
   const invitedAccount = {
-    displayName: '초대 담당자',
-    email: 'customer@example.com',
+    displayName: null,
+    email: null,
     id: 'customer-account-invited',
     invitedAt: '2026-08-03T08:00:00.000Z',
     inviteExpiresAt: '2026-08-10T08:00:00.000Z',
     lastAuthenticatedAt: null,
-    loginId: 'direct-login',
+    loginId: null,
     status: 'INVITED',
   };
   const activeAccount = {
@@ -2202,15 +2202,16 @@ test('customer detail manages customer accounts without exposing passwords', asy
     'GET /api/dsv/customers/customer-g006/accounts': legacyEnvelope({ accounts: [activeAccount] }),
     'POST /api/dsv/customers/customer-g006/accounts/invitations': ({ request }) => {
       inviteBody = request.postDataJSON();
-      return { ...legacyEnvelope({ account: invitedAccount }), status: 201 };
+      return { ...legacyEnvelope({ account: invitedAccount, invitation: { expiresAt: '2026-08-10T08:00:00.000Z', setupUrl: 'https://dsv.cleversystem.ai/customer/account/setup#token=signup-token' } }), status: 201 };
     },
-    'POST /api/dsv/customer-accounts/customer-account-invited/reinvite': legacyEnvelope({ account: { ...invitedAccount, inviteExpiresAt: '2026-08-11T08:00:00.000Z' } }),
+    'POST /api/dsv/customer-accounts/customer-account-invited/reinvite': legacyEnvelope({ account: { ...invitedAccount, inviteExpiresAt: '2026-08-11T08:00:00.000Z' }, invitation: { expiresAt: '2026-08-11T08:00:00.000Z', setupUrl: 'https://dsv.cleversystem.ai/customer/account/setup#token=reissued-token' } }),
     'POST /api/dsv/customer-accounts/customer-account-active/password-reset': legacyEnvelope({ account: activeAccount }),
     'PATCH /api/dsv/customer-accounts/customer-account-active/status': ({ request }) => {
       statusBody = request.postDataJSON();
       return legacyEnvelope({ account: { ...activeAccount, status: 'DISABLED' } });
     },
   }));
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 
   await page.goto('/master-data');
   await page.getByRole('button', { name: '고객사', exact: true }).click();
@@ -2224,23 +2225,23 @@ test('customer detail manages customer accounts without exposing passwords', asy
 
   await panel.getByRole('button', { name: '계정 발급', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '고객 계정 발급' });
-  await dialog.getByLabel('수신자 이메일').fill('customer@example.com');
-  await dialog.getByLabel('표시 이름').fill('초대 담당자');
-  await dialog.getByLabel('직접 지정').check();
-  await dialog.getByLabel('직접 로그인 아이디').fill('direct-login');
-  await expect(dialog.getByLabel('발급 이메일 미리보기')).toContainText('48시간 동안 한 번만 사용할 수 있습니다.');
-  await expect(dialog.getByLabel('발급 이메일 미리보기')).toContainText('direct-login');
-  await expect(dialog.getByLabel('발급 이메일 미리보기')).toContainText('/customer/login');
-  await expect(dialog.getByLabel('발급 이메일 미리보기')).toContainText('고객이 설정 화면에서 직접 만듭니다.');
+  await expect(dialog).not.toContainText('수신자 이메일');
+  await expect(dialog).not.toContainText('로그인 아이디 방식');
   await expect(dialog).not.toContainText('임시 비밀번호');
-  await dialog.getByRole('button', { name: '발급 이메일 보내기', exact: true }).click();
-  await expect(panel.getByRole('status').filter({ hasText: '초대 이메일 발송을 요청했습니다.' })).toBeVisible();
-  await expect(panel.getByText('초대 담당자')).toBeVisible();
-  await expect(panel.getByText('direct-login')).toBeVisible();
-  expect(inviteBody).toEqual({ email: 'customer@example.com', displayName: '초대 담당자', loginId: 'direct-login' });
+  await dialog.getByRole('button', { name: '임시 링크 생성', exact: true }).click();
+  await expect(dialog.getByLabel('임시 초대 링크')).toContainText('만료 시각');
+  await expect(dialog.getByLabel('고객 가입 링크')).toHaveValue('https://dsv.cleversystem.ai/customer/account/setup#token=signup-token');
+  await expect(dialog).not.toContainText('임시 비밀번호');
+  await dialog.getByRole('button', { name: '초대 링크 복사', exact: true }).click();
+  await expect(dialog.getByRole('status').filter({ hasText: '초대 링크를 복사했습니다.' })).toBeVisible();
+  await dialog.getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(panel.getByRole('status').filter({ hasText: '임시 초대 링크를 생성했습니다.' })).toBeVisible();
+  expect(inviteBody).toEqual({});
 
-  await panel.getByRole('row').filter({ hasText: '초대 담당자' }).getByRole('button', { name: '재초대', exact: true }).click();
-  await expect(panel.getByRole('status').filter({ hasText: '재초대 이메일 발송을 요청했습니다.' })).toBeVisible();
+  await panel.getByRole('row').filter({ hasText: '고객 계정' }).getByRole('button', { name: '재초대', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '고객 계정 발급' }).getByLabel('고객 가입 링크')).toHaveValue('https://dsv.cleversystem.ai/customer/account/setup#token=reissued-token');
+  await page.getByRole('dialog', { name: '고객 계정 발급' }).getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(panel.getByRole('status').filter({ hasText: '새 임시 초대 링크를 생성했습니다.' })).toBeVisible();
 
   await panel.getByRole('row').filter({ hasText: '기존 담당자' }).getByRole('button', { name: '재설정', exact: true }).click();
   await expect(panel.getByRole('status').filter({ hasText: '비밀번호 재설정 이메일 발송을 요청했습니다.' })).toBeVisible();
@@ -2251,16 +2252,74 @@ test('customer detail manages customer accounts without exposing passwords', asy
   expectOnlyFixtureCalls(api);
 });
 
-test('customer signup uses reserved login ID and returned session', async ({ page }) => {
+test('customer switch isolates a delayed invitation response from the newly selected customer', async ({ page }) => {
+  let releaseInvitation;
+  let markInvitationStarted;
+  const invitationStarted = new Promise((resolve) => { markInvitationStarted = resolve; });
+  const api = await installApiFixtures(page, adminFixtures(managementListFixtures({
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({
+      items: [
+        { customerId: 'customer-a', displayName: 'Customer A', externalCustomerCode: 'A', orderCount: 1, status: 'ACTIVE' },
+        { customerId: 'customer-b', displayName: 'Customer B', externalCustomerCode: 'B', orderCount: 1, status: 'ACTIVE' },
+      ],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/customers/customer-a/accounts': legacyEnvelope({ accounts: [] }),
+    'GET /api/dsv/customers/customer-b/accounts': legacyEnvelope({ accounts: [] }),
+    'POST /api/dsv/customers/customer-a/accounts/invitations': async () => {
+      markInvitationStarted();
+      await new Promise((resolve) => { releaseInvitation = resolve; });
+      return legacyEnvelope({
+        account: {
+          displayName: null,
+          email: null,
+          id: 'delayed-account-a',
+          invitedAt: '2026-09-08T00:00:00.000Z',
+          inviteExpiresAt: '2026-09-10T00:00:00.000Z',
+          lastAuthenticatedAt: null,
+          loginId: null,
+          status: 'INVITED',
+        },
+        invitation: {
+          expiresAt: '2026-09-10T00:00:00.000Z',
+          setupUrl: 'https://dsv.cleversystem.ai/customer/account/setup#token=delayed-a',
+        },
+      });
+    },
+  })));
+
+  await page.goto('/master-data');
+  await page.getByRole('button', { name: '고객사', exact: true }).click();
+  await page.getByRole('row').filter({ hasText: 'Customer A' }).click();
+  const panelA = page.getByLabel('고객 계정 관리');
+  await panelA.getByRole('button', { name: '계정 발급', exact: true }).click();
+  const invitationResponse = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().includes('/customers/customer-a/accounts/invitations'));
+  await page.getByRole('dialog', { name: '고객 계정 발급' }).getByRole('button', { name: '임시 링크 생성', exact: true }).click();
+  await invitationStarted;
+  await page.getByRole('button', { name: '고객 계정 발급 닫기' }).click();
+  await page.getByRole('row').filter({ hasText: 'Customer B' }).click();
+  const panelB = page.getByLabel('고객 계정 관리');
+  await expect(panelB).toContainText('등록된 고객 계정이 없습니다.');
+
+  releaseInvitation();
+  await invitationResponse;
+
+  await expect(page.getByRole('dialog', { name: '고객 계정 발급' })).toHaveCount(0);
+  await expect(panelB).not.toContainText('delayed-account-a');
+  await expect(panelB).not.toContainText('임시 초대 링크를 생성했습니다.');
+  expectOnlyFixtureCalls(api);
+});
+
+test('customer signup collects name and login ID and uses the returned session', async ({ page }) => {
   let completeBody;
   const serviceDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
   const api = await installApiFixtures(page, {
     'POST /api/dsv/customer/auth/invitations/validate': legacyEnvelope({
       customerName: 'Canonical Customer G006',
-      displayName: '초대 담당자',
-      email: 'customer@example.com',
+      displayName: null,
+      email: null,
       expiresAt: '2026-08-10T08:00:00.000Z',
-      loginId: 'reserved-login',
+      loginId: null,
       purpose: 'SIGNUP',
     }),
     'POST /api/dsv/customer/auth/complete': ({ request }) => {
@@ -2279,15 +2338,66 @@ test('customer signup uses reserved login ID and returned session', async ({ pag
   });
 
   await page.goto('/customer/account/setup#token=signup-token');
-  await expect(page.getByLabel('Login ID')).toHaveValue('reserved-login');
-  await expect(page.getByLabel('Login ID')).toHaveAttribute('readonly', '');
+  await page.getByLabel('Name').fill('신규 담당자');
+  await page.getByLabel('Login ID').fill('new-customer');
+  await expect(page.getByLabel('Login ID')).not.toHaveAttribute('readonly', '');
   await page.getByLabel('Password', { exact: true }).fill('StrongPassw0rd!');
   await page.getByLabel('Confirm password').fill('StrongPassw0rd!');
   await page.getByRole('button', { name: '계정 설정 완료', exact: true }).click();
 
   await expect(page).toHaveURL(/\/customer\/delivery-inquiry$/u);
-  expect(completeBody).toEqual({ password: 'StrongPassw0rd!', shopDomain: 'dsv-demo.local', token: 'signup-token' });
+  expect(completeBody).toEqual({ displayName: '신규 담당자', loginId: 'new-customer', password: 'StrongPassw0rd!', shopDomain: 'dsv-demo.local', token: 'signup-token' });
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem('clever.auth.csrf'))).toBe('customer-csrf-token');
+  expectOnlyFixtureCalls(api);
+});
+
+test('customer password reset keeps the existing login ID read only', async ({ page }) => {
+  let completeBody;
+  const serviceDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+  const api = await installApiFixtures(page, {
+    'POST /api/dsv/customer/auth/invitations/validate': legacyEnvelope({
+      customerName: 'Canonical Customer G006',
+      displayName: '기존 담당자',
+      email: 'active@example.com',
+      expiresAt: '2026-08-10T08:00:00.000Z',
+      loginId: 'active@example.com',
+      purpose: 'PASSWORD_RESET',
+    }),
+    'POST /api/dsv/customer/auth/complete': ({ request }) => {
+      completeBody = request.postDataJSON();
+      return legacyEnvelope({ accessToken: 'customer-access-token', csrfToken: 'customer-csrf-token' });
+    },
+    'GET /api/dsv/v1/session': v1Envelope({
+      csrfToken: 'customer-csrf-token',
+      principalType: 'CUSTOMER_USER',
+      shopId: 'shop-g006-parity',
+      actorId: 'customer-account-g006',
+      displayName: '기존 담당자',
+      scopes: ['dsv:customer-deliveries:read'],
+    }),
+    [`GET /api/dsv/v1/customer/deliveries?limit=100&serviceDate=${serviceDate}`]: v1Envelope({ items: [], page: { hasMore: false }, routes: [] }),
+  });
+
+  await page.goto('/customer/account/setup#token=reset-token');
+  await expect(page.getByLabel('Name')).toHaveCount(0);
+  await expect(page.getByLabel('Login ID')).toHaveValue('active@example.com');
+  await expect(page.getByLabel('Login ID')).toHaveAttribute('readonly', '');
+  await page.getByLabel('Password', { exact: true }).fill('ChangedPassw0rd!');
+  await page.getByLabel('Confirm password').fill('ChangedPassw0rd!');
+  await page.getByRole('button', { name: '계정 설정 완료', exact: true }).click();
+
+  expect(completeBody).toEqual({ password: 'ChangedPassw0rd!', shopDomain: 'dsv-demo.local', token: 'reset-token' });
+  expectOnlyFixtureCalls(api);
+});
+
+test('expired customer invitation blocks signup with an explicit alert', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'POST /api/dsv/customer/auth/invitations/validate': legacyError(410, '허용 시간이 초과된 링크입니다. 담당자에게 새 초대 링크를 요청해 주세요.'),
+  });
+  await page.goto('/customer/account/setup#token=expired-token');
+
+  await expect(page.getByRole('alert')).toHaveText('허용 시간이 초과된 링크입니다. 담당자에게 새 초대 링크를 요청해 주세요.');
+  await expect(page.getByLabel('Customer account setup')).toHaveCount(0);
   expectOnlyFixtureCalls(api);
 });
 

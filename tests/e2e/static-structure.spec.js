@@ -282,6 +282,10 @@ test('public customer account pages keep invitation and login contract explicit'
   expect(setup).toContain('window.history.replaceState');
   expect(setup).toContain('validateCustomerInvitation');
   expect(setup).toContain('completeCustomerInvitation');
+  expect(setup).toContain("state.validation.purpose === 'SIGNUP'");
+  expect(setup).toContain('name="displayName"');
+  expect(setup).toContain('name="loginId"');
+  expect(setup).toContain('허용 시간이 초과된 링크입니다. 담당자에게 새 초대 링크를 요청해 주세요.');
   expect(setup).not.toContain('URLSearchParams(window.location.search)');
   expect(login).toContain('loginCustomerAccount');
   expect(app).toContain('logoutCustomerAccount');
@@ -290,6 +294,7 @@ test('public customer account pages keep invitation and login contract explicit'
   expect(service).toContain("'customer/auth/complete'");
   expect(service).toContain("'customer/auth/login'");
   expect(service).toContain("'session/logout'");
+  expect(service).toContain('setupUrl');
   expect(readSrc('api/client.ts')).toContain('!isPublicAuthPath(target.path)');
 });
 

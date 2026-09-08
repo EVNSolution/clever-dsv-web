@@ -4,7 +4,6 @@ import { apiConfig } from '../api/config';
 
 export type CustomerAccountStatus = 'INVITED' | 'ACTIVE' | 'DISABLED' | 'EXPIRED';
 export type CustomerAccountInvitePurpose = 'SIGNUP' | 'PASSWORD_RESET';
-export type CustomerAccountLoginIdMode = 'AUTOMATIC' | 'DIRECT';
 
 export type CustomerAccount = {
   displayName: string | null;
@@ -26,6 +25,14 @@ export type CustomerInvitationValidation = {
   purpose: CustomerAccountInvitePurpose;
 };
 
+export type CustomerAccountInvitationIssue = {
+  account: CustomerAccount;
+  invitation: {
+    expiresAt: string;
+    setupUrl: string;
+  };
+};
+
 type SessionTokens = { accessToken?: string; csrfToken?: string };
 
 export async function loadCustomerAccounts(customerId: string): Promise<CustomerAccount[]> {
@@ -36,21 +43,17 @@ export async function loadCustomerAccounts(customerId: string): Promise<Customer
   return accounts.map(parseCustomerAccount);
 }
 
-export async function inviteCustomerAccount(customerId: string, input: { displayName: string; email: string; loginId?: string; loginIdMode: CustomerAccountLoginIdMode }): Promise<CustomerAccount> {
+export async function inviteCustomerAccount(customerId: string): Promise<CustomerAccountInvitationIssue> {
   const response = await requestLegacyJson<unknown>(`customers/${encodeURIComponent(customerId)}/accounts/invitations`, {
     method: 'POST',
-    json: {
-      email: input.email,
-      ...(input.displayName ? { displayName: input.displayName } : {}),
-      ...(input.loginIdMode === 'AUTOMATIC' ? { generateLoginId: true } : { loginId: input.loginId }),
-    },
+    json: {},
   });
-  return parseCustomerAccount(objectField(response, 'account'));
+  return parseInvitationIssue(response);
 }
 
-export async function reinviteCustomerAccount(accountId: string): Promise<CustomerAccount> {
+export async function reinviteCustomerAccount(accountId: string): Promise<CustomerAccountInvitationIssue> {
   const response = await requestLegacyJson<unknown>(`customer-accounts/${encodeURIComponent(accountId)}/reinvite`, { method: 'POST' });
-  return parseCustomerAccount(objectField(response, 'account'));
+  return parseInvitationIssue(response);
 }
 
 export async function sendCustomerAccountPasswordReset(accountId: string): Promise<CustomerAccount> {
@@ -71,7 +74,7 @@ export async function validateCustomerInvitation(token: string): Promise<Custome
   return parseInvitationValidation(response);
 }
 
-export async function completeCustomerInvitation(input: { password: string; token: string }): Promise<void> {
+export async function completeCustomerInvitation(input: { displayName?: string; loginId?: string; password: string; token: string }): Promise<void> {
   clearTransportSession();
   try {
     const session = await requestLegacyJson<SessionTokens>('customer/auth/complete', {
@@ -80,6 +83,8 @@ export async function completeCustomerInvitation(input: { password: string; toke
         token: input.token,
         shopDomain: apiConfig.shopDomain,
         password: input.password,
+        ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
+        ...(input.loginId !== undefined ? { loginId: input.loginId } : {}),
       },
     });
     storeTransportSession(session);
@@ -87,6 +92,19 @@ export async function completeCustomerInvitation(input: { password: string; toke
     clearTransportSession();
     throw error;
   }
+}
+
+function parseInvitationIssue(value: unknown): CustomerAccountInvitationIssue {
+  if (!isObject(value)) throw new Error('고객 계정 초대 응답 형식이 올바르지 않습니다.');
+  const invitation = value.invitation;
+  if (!isObject(invitation)) throw new Error('고객 계정 초대 응답 형식이 올바르지 않습니다.');
+  return {
+    account: parseCustomerAccount(value.account),
+    invitation: {
+      expiresAt: requiredString(invitation.expiresAt),
+      setupUrl: requiredString(invitation.setupUrl),
+    },
+  };
 }
 
 export async function loginCustomerAccount(input: { id: string; password: string }): Promise<void> {

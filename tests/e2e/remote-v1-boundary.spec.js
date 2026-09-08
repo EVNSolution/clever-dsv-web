@@ -1903,6 +1903,45 @@ test('loads the administrator customer map through the customer-scoped contract'
   expect(api.unexpected).toEqual([]);
 });
 
+test('shows an explicit empty customer vehicle state from the scoped delivery API', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(customerSession),
+    'GET /api/dsv/v1/customer/deliveries': v1Envelope({
+      emptyReason: 'NO_DELIVERIES',
+      items: [],
+      page: { hasMore: false },
+      routes: [],
+    }),
+  });
+
+  await page.goto('/customer/delivery-inquiry');
+
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries');
+  await expect(page.getByLabel('차량 목록')).toContainText('0대');
+  await expect(page.getByLabel('차량 목록')).toContainText('배정 차량 없음');
+  await expect(page.getByLabel('배송지 리스트')).toContainText('NO_DELIVERIES');
+  expect(api.unexpected).toEqual([]);
+});
+
+test('blocks the customer vehicle screen when the delivery contract is malformed', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(customerSession),
+    'GET /api/dsv/v1/customer/deliveries': v1Envelope({
+      items: [],
+      page: { hasMore: false },
+      routes: [],
+      vehicles: [],
+    }),
+  });
+
+  await page.goto('/customer/delivery-inquiry');
+
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries');
+  await expect(page.getByRole('alert')).toContainText('고객 배송 조회 응답 형식이 올바르지 않습니다.');
+  await expect(page.getByLabel('차량 목록')).toHaveCount(0);
+  expect(api.unexpected).toEqual([]);
+});
+
 test('grows the customer vehicle list through three rows and scrolls additional vehicles', async ({ page }) => {
   const api = await installApiFixtures(page, {
     'GET /api/dsv/v1/session': v1Envelope(customerSession),
