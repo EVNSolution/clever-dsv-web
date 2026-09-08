@@ -69,6 +69,17 @@ type V1DestinationListItem = {
   address?: string;
   destinationId: string;
   displayName: string;
+  lunchEntryStatus?: string;
+  lunchEntryStatusUpdatedAt?: string;
+  lunchTimeRange?: string;
+  lunchTimeRangeUpdatedAt?: string;
+  memo?: string;
+  memoUpdatedAt?: string;
+  openTime?: string;
+  openTimeUpdatedAt?: string;
+  postalCode?: string;
+  requiredArrivalTime?: string;
+  requiredArrivalTimeUpdatedAt?: string;
 };
 
 type V1ConditionListItem = {
@@ -450,10 +461,36 @@ function isV1CustomerListItem(value: unknown): value is V1CustomerListItem {
 }
 
 function isV1DestinationListItem(value: unknown): value is V1DestinationListItem {
-  return hasOnlyKeys(value, ['address', 'destinationId', 'displayName'])
+  return hasOnlyKeys(value, [
+    'address',
+    'destinationId',
+    'displayName',
+    'lunchEntryStatus',
+    'lunchEntryStatusUpdatedAt',
+    'lunchTimeRange',
+    'lunchTimeRangeUpdatedAt',
+    'memo',
+    'memoUpdatedAt',
+    'openTime',
+    'openTimeUpdatedAt',
+    'postalCode',
+    'requiredArrivalTime',
+    'requiredArrivalTimeUpdatedAt',
+  ])
     && isNonEmptyString(value.destinationId)
     && isNonEmptyString(value.displayName)
-    && isOptionalString(value.address);
+    && isOptionalString(value.address)
+    && isOptionalString(value.lunchEntryStatus)
+    && isOptionalDateTimeString(value.lunchEntryStatusUpdatedAt)
+    && isOptionalString(value.lunchTimeRange)
+    && isOptionalDateTimeString(value.lunchTimeRangeUpdatedAt)
+    && isOptionalString(value.memo)
+    && isOptionalDateTimeString(value.memoUpdatedAt)
+    && isOptionalString(value.openTime)
+    && isOptionalDateTimeString(value.openTimeUpdatedAt)
+    && isOptionalString(value.postalCode)
+    && isOptionalString(value.requiredArrivalTime)
+    && isOptionalDateTimeString(value.requiredArrivalTimeUpdatedAt);
 }
 
 function isV1ConditionListItem(value: unknown): value is V1ConditionListItem {
@@ -482,6 +519,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
+}
+
+function isOptionalDateTimeString(value: unknown): value is string | undefined {
+  return value === undefined || (typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Date.parse(value)));
 }
 
 function isOptionalStringArray(value: unknown): value is string[] | undefined {
