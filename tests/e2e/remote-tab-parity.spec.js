@@ -62,9 +62,9 @@ function operationSettings(overrides = {}) {
     forwardDelayAlerts: true,
     gpsSilenceSeconds: 30,
     loadingStartTime: '07:30',
-    manualEmailBody: '안녕하세요.\n\nCLEVER DSV 고객사 배송조회 페이지와 임시 계정 정보를 안내드립니다.\n\n배송조회 페이지:\n임시 아이디:\n임시 비밀번호:\n\n최초 로그인 후 아이디와 비밀번호를 변경해 주세요.',
+    manualEmailBody: '안녕하세요.\n\nCLEVER DSV 고객사 배송조회 계정 설정을 위한 초대 링크를 안내드립니다.\n\n계정 설정 링크:\n링크 만료 시간:\n\n위 링크에서 이름, 아이디, 비밀번호를 직접 등록해 주세요.\n링크가 만료된 경우 담당자에게 새 초대 링크를 요청해 주세요.',
     manualEmailSenderEmail: null,
-    manualEmailSubject: '[CLEVER DSV] 고객사 배송조회 계정 안내',
+    manualEmailSubject: '[CLEVER DSV] 고객사 배송조회 계정 설정 안내',
     plannedDepartureTime: '08:30',
     recordMissingProof: true,
     showTemperatureAlerts: true,
@@ -2552,6 +2552,10 @@ test('settings renders the complete backend defaults', async ({ page }) => {
   await expect(page.getByLabel('도착 후 대기시간')).toHaveValue('5');
   await expect(page.getByRole('checkbox', { name: '배송원에게 전달' })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: '기록 페이지에 표시' })).toBeChecked();
+  await expect(page.getByLabel('테스트 이메일 제목')).toHaveValue('[CLEVER DSV] 고객사 배송조회 계정 설정 안내');
+  await expect(page.getByLabel('테스트 이메일 본문')).toContainText('계정 설정 링크:');
+  await expect(page.getByLabel('테스트 이메일 본문')).not.toContainText('임시 아이디');
+  await expect(page.getByLabel('테스트 이메일 본문')).not.toContainText('임시 비밀번호');
   await expect(page.getByRole('tab', { name: '계정' })).toHaveCount(0);
   expectOnlyFixtureCalls(api);
 });
