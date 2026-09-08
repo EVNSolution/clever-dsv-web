@@ -226,7 +226,7 @@ test('manual router, local state, layered plain CSS, and lazy map loading remain
   expect(routes).toContain("export const driverAppPath = '/driver-app'");
 });
 
-test('public driver app page uses the canonical Android APK and direct signup', () => {
+test('public driver app page uses the production Google Play link and direct signup', () => {
   const app = readSrc('App.tsx');
   const config = readSrc('config/driver-app.ts');
   const page = readSrc('pages/DriverAppInstallPage.tsx');
@@ -235,24 +235,23 @@ test('public driver app page uses the canonical Android APK and direct signup', 
 
   expect(app).toContain('path === driverAppPath');
   expect(config).toContain("DRIVER_APP_INSTALL_PAGE_URL = 'https://dsv.cleversystem.ai/driver-app'");
-  expect(config).toContain('DRIVER_ANDROID_DOWNLOAD_URL');
-  expect(config).toContain('drive.usercontent.google.com/download?id=1XRXAqREGtJJRMUsRnKgRAhFsiikE4V1y');
-  expect(config).not.toMatch(/play\.google\.com/i);
-  expect(page).toContain('Android 설치 파일');
-  expect(page).toContain('Android 설치 파일 받기');
+  expect(config).toContain('DRIVER_ANDROID_PLAY_URL');
+  expect(config).toContain('https://play.google.com/store/apps/details?id=com.evnsolution.clever.driver');
+  expect(config).not.toMatch(/drive\.usercontent\.google\.com/i);
+  expect(page).toContain('Google Play');
+  expect(page).toContain('Google Play에서 설치 및 업데이트');
   expect(page).toContain('/api/dsv/public/guides/driver?download=1');
   expect(page).toContain('PDF 가이드 다운로드');
-  expect(page).toContain('최신 정식 APK');
+  expect(page).toContain('최신 정식 버전');
   expect(page).toContain('전용 App Store 설치 링크 승인을 기다리고 있습니다.');
   expect(page).toContain('이름과 휴대전화 번호가 모두 일치');
   expect(page).toContain('회원가입');
-  expect(page).not.toMatch(/Google Play|App Store Connect|build 11|TestFlight/u);
+  expect(page).not.toMatch(/App Store Connect|build 11|TestFlight/u);
   expect(settings).toContain('href={driverAppPath}');
   expect(settings).not.toContain("setActiveGuide('driver')");
   expect(settings).not.toContain('/api/dsv/guides/driver');
   expect(onboarding).toContain('`/driver-app`');
-  expect(onboarding).toContain('`clever-driver-app/docs/android-drive-release.md`');
-  expect(onboarding).not.toContain('`clever-driver-app/docs/google-play-release.md`');
+  expect(onboarding).toContain('https://play.google.com/store/apps/details?id=com.evnsolution.clever.driver');
   expect(onboarding).toContain('PDF 가이드 다운로드');
   expect(onboarding).toContain('일회용 초대 링크나 QR 코드를 생성하지 않는다.');
 });
