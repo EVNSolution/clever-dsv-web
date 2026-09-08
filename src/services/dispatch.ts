@@ -1,9 +1,11 @@
 import {
+  markDsvDispatchParserFailure,
   requestV1AssignmentCommandJson,
   requestV1DispatchOperationCommandJson,
   requestV1ReadJson,
   requestV1TimeConstraintCommandJson,
 } from '../api/client';
+import type { DsvDispatchAttempt, DsvDispatchReadContext } from '../api/client';
 
 export type DispatchAssignmentStatus = 'ASSIGNED' | 'UNASSIGNED';
 export type DispatchEtaStatus = 'FAILED' | 'NOT_REQUIRED' | 'PENDING' | 'READY' | 'STALE';
@@ -180,8 +182,12 @@ export async function loadDispatchList(
   serviceDate: string,
   search: Partial<DispatchSearch> = {},
   signal?: AbortSignal,
+  attempt?: DsvDispatchAttempt,
 ): Promise<DispatchListView> {
   const rows: DispatchListItem[] = [];
+  const dispatchRead: DsvDispatchReadContext | undefined = attempt === undefined
+    ? undefined
+    : { attempt, resource: 'dispatches' };
   let cursor: string | undefined;
   do {
     const query = new URLSearchParams({ limit: '100', serviceDate });
@@ -190,11 +196,16 @@ export async function loadDispatchList(
     if (destinationName) query.set('destinationName', destinationName);
     if (orderNumber) query.set('orderNumber', orderNumber);
     if (cursor !== undefined) query.set('cursor', cursor);
-    const data = await requestV1ReadJson<unknown>(`dispatches?${query.toString()}`, { signal });
-    const response = dispatchResponse(data);
-    rows.push(...response.items.map(toDispatchListItem));
-    cursor = response.page?.hasMore === true ? response.page.nextCursor : undefined;
-    if (response.page?.hasMore === true && cursor === undefined) throw new Error('배차 목록 페이지 정보가 올바르지 않습니다.');
+    const data = await requestV1ReadJson<unknown>(`dispatches?${query.toString()}`, { dsvDispatchRead: dispatchRead, signal });
+    try {
+      const response = dispatchResponse(data);
+      rows.push(...response.items.map(toDispatchListItem));
+      cursor = response.page?.hasMore === true ? response.page.nextCursor : undefined;
+      if (response.page?.hasMore === true && cursor === undefined) throw new Error('배차 목록 페이지 정보가 올바르지 않습니다.');
+    } catch (error) {
+      if (dispatchRead === undefined) throw error;
+      throw markDsvDispatchParserFailure(error, dispatchRead);
+    }
   } while (cursor !== undefined);
   return {
     rows,

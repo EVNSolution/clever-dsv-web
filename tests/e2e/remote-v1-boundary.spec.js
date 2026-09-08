@@ -154,6 +154,7 @@ async function installApiFixtures(page, fixtures) {
     'GET /api/dsv/v1/drivers?limit=100': emptyV1List(),
     'GET /api/dsv/v1/operational-notifications': v1Envelope({ items: [] }, 'g006-empty-notifications'),
     'GET /api/dsv/settings/operations': { data: operationalSettings, error: null },
+    'POST /api/dsv/v1/diagnostics/dispatch-load': v1Envelope({ accepted: true }, 'g007-dispatch-diagnostic'),
     ...fixtures,
   };
   const calls = [];
