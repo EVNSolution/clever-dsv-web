@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('public driver app page opens the production Google Play listing without changing iPhone guidance', async ({ page }) => {
+test('public driver app page opens the production Google Play and App Store listings', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/driver-app');
 
@@ -11,11 +11,17 @@ test('public driver app page opens the production Google Play listing without ch
     'https://play.google.com/store/apps/details?id=com.evnsolution.clever.driver',
   );
   await expect(page.getByRole('link', { name: 'Google Play에서 설치 및 업데이트', exact: true })).toHaveAttribute('target', '_blank');
+  await expect(page.getByRole('heading', { name: 'App Store', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'App Store에서 설치 및 업데이트', exact: true })).toHaveAttribute(
+    'href',
+    'https://apps.apple.com/kr/app/clever-driver/id6806955523',
+  );
+  await expect(page.getByRole('link', { name: 'App Store에서 설치 및 업데이트', exact: true })).toHaveAttribute('target', '_blank');
   await expect(page.getByRole('link', { name: 'PDF 가이드 다운로드', exact: true })).toHaveAttribute(
     'href',
     '/api/dsv/public/guides/driver?download=1',
   );
-  await expect(page.getByText('아이폰용 CLEVER Driver는 전용 App Store 설치 링크 승인을 기다리고 있습니다.')).toBeVisible();
+  await expect(page.getByText('검색 결과 대신 아래 전용 링크에서 설치하거나 업데이트합니다.')).toBeVisible();
   await expect(page.getByText(/App Store Connect|build 11|TestFlight/)).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });

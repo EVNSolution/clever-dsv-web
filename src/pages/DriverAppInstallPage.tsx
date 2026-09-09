@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Download, ExternalLink, ShieldCheck, Smartphone } from 'lucide-react';
 
-import { DRIVER_ANDROID_PLAY_URL } from '../config/driver-app';
+import { DRIVER_ANDROID_PLAY_URL, DRIVER_IOS_APP_STORE_URL } from '../config/driver-app';
 
 export function DriverAppInstallPage(): ReactElement {
   return (
@@ -48,10 +48,15 @@ export function DriverAppInstallPage(): ReactElement {
           </a>
         </section>
 
-        <section className="driver-app-ios" aria-labelledby="driver-ios-title">
-          <span className="driver-app-platform-label">iPhone</span>
-          <h2 id="driver-ios-title">아이폰 버전</h2>
-          <p>아이폰용 CLEVER Driver는 전용 App Store 설치 링크 승인을 기다리고 있습니다. 승인 전에는 이 페이지에서 설치 링크를 제공하지 않습니다.</p>
+        <section className="driver-app-platform driver-app-ios" aria-labelledby="driver-ios-title">
+          <div>
+            <span className="driver-app-platform-label">iPhone</span>
+            <h2 id="driver-ios-title">App Store</h2>
+            <p>검색 결과 대신 아래 전용 링크에서 설치하거나 업데이트합니다.</p>
+          </div>
+          <a className="driver-app-store-link" href={DRIVER_IOS_APP_STORE_URL} rel="noopener noreferrer" target="_blank">
+            <ExternalLink aria-hidden="true" /> App Store에서 설치 및 업데이트
+          </a>
         </section>
 
         <footer className="driver-app-trust">
