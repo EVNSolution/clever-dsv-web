@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('public driver app page opens the production Google Play and App Store listings', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto('/driver-app');
 
   await expect(page.getByRole('heading', { name: 'CLEVER Driver 설치', exact: true })).toBeVisible();
@@ -21,9 +21,25 @@ test('public driver app page opens the production Google Play and App Store list
     'href',
     '/api/dsv/public/guides/driver?download=1',
   );
-  await expect(page.getByText('검색 결과 대신 아래 전용 링크에서 설치하거나 업데이트합니다.')).toBeVisible();
+  await expect(page.getByText('검색 결과 대신 전용 링크에서 설치하거나 업데이트합니다.')).toBeVisible();
   await expect(page.getByText(/App Store Connect|build 11|TestFlight/)).toHaveCount(0);
+
+  const androidCard = page.locator('[aria-labelledby="driver-android-title"]');
+  const iosCard = page.locator('[aria-labelledby="driver-ios-title"]');
+  const androidDesktopBox = await androidCard.boundingBox();
+  const iosDesktopBox = await iosCard.boundingBox();
+  expect(androidDesktopBox).not.toBeNull();
+  expect(iosDesktopBox).not.toBeNull();
+  expect(Math.abs(androidDesktopBox.y - iosDesktopBox.y)).toBeLessThan(2);
+  expect(androidDesktopBox.x).toBeLessThan(iosDesktopBox.x);
+
+  await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  const androidMobileBox = await androidCard.boundingBox();
+  const iosMobileBox = await iosCard.boundingBox();
+  expect(androidMobileBox).not.toBeNull();
+  expect(iosMobileBox).not.toBeNull();
+  expect(iosMobileBox.y).toBeGreaterThan(androidMobileBox.y);
 });
 
 test('all admin tabs and native controls use bundled Pretendard', async ({ page }) => {

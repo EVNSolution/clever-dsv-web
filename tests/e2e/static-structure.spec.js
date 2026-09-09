@@ -246,7 +246,7 @@ test('public driver app page uses the production store links and direct signup',
   expect(page).toContain('PDF 가이드 다운로드');
   expect(page).toContain('최신 정식 버전');
   expect(page).toContain('App Store에서 설치 및 업데이트');
-  expect(page).toContain('검색 결과 대신 아래 전용 링크');
+  expect(page).toContain('검색 결과 대신 전용 링크');
   expect(page).toContain('이름과 휴대전화 번호가 모두 일치');
   expect(page).toContain('회원가입');
   expect(page).not.toMatch(/App Store Connect|build 11|TestFlight/u);
