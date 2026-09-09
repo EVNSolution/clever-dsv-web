@@ -3,8 +3,8 @@
 ## Source of truth
 
 - Status: Active
-- Last refreshed: 2026-09-01
-- Primary product surfaces: 관제, 배차, 이력, 관리, 설정, 고객 배송조회
+- Last refreshed: 2026-09-09
+- Primary product surfaces: 관제, 배차, 이력, 관리, 설정, 고객 배송조회, 배송원 앱 설치
 - Evidence reviewed: 현재 React 컴포넌트, `src/styles` 구현, 자동화된 Playwright 계약, 운영 화면과 사용자 피드백
 - 과거 HTML 데모는 시각적 역사 자료일 뿐 현재 디자인 정본이 아니다. 현재 화면과 이 문서가 충돌하면 구현을 확인하고 문서를 함께 갱신한다.
 
@@ -34,6 +34,7 @@
 - 문의는 현재 사업장에 연결된 배송원의 목록 → 상세 조회만 제공한다. 작성자·접수일시는 서버 값을 사용하며 시간대는 한국시간으로 명시한다. 본문은 HTML이 아닌 일반 텍스트로 표시한다.
 - 문의의 좁은 화면은 선택 전 목록, 선택 후 상세와 `목록으로` 버튼을 표시한다. 로딩·빈 상태·오류·재시도를 구분하고 답변·첨부·편집·삭제 기능은 두지 않는다.
 - Content hierarchy: 페이지 제목 → 작업 섹션 → 표, 지도 또는 타임라인 → 선택 상세
+- 공개 배송원 앱 설치 화면은 제목 → 동등한 Android/iPhone 설치 선택 → 공통 설치 후 안내 → PDF 가이드 순서를 사용한다.
 - 메뉴와 제목에는 여러 업무 대상을 구분점이나 슬래시로 결합하지 않는다.
 
 ## Design principles
@@ -54,7 +55,7 @@
 ## Components
 
 - Existing components to reuse: `AdminShell`, `AdminPageHeader`, `AdminSectionHeader`, 기존 버튼과 상태 pill
-- New/changed components: 768px 이하 비관제 페이지의 공용 고정 헤더는 기존 `AdminShell` 내비게이션을 변형해 사용한다. 배차 행 작업 메뉴는 진행 전 배차에 `배차 전체 취소`를 제공한다.
+- New/changed components: 768px 이하 비관제 페이지의 공용 고정 헤더는 기존 `AdminShell` 내비게이션을 변형해 사용한다. 배차 행 작업 메뉴는 진행 전 배차에 `배차 전체 취소`를 제공한다. `/driver-app`은 동일한 플랫폼 카드 두 개를 설치 선택 영역으로 묶고 설명과 PDF 가이드를 그 아래에 둔다.
 - Variants and states: 데스크톱 사이드 메뉴, 모바일 접힌 고정 헤더, 모바일 전체 화면 확장 메뉴, 관제 지도 오버레이
 - Token/component ownership: 토큰은 `src/styles/foundation/tokens.css`, 공통 셸은 `src/styles/components`, 반응형 보정은 `src/styles/responsive`가 소유한다.
 
@@ -72,6 +73,7 @@
 - Layout adaptations: 중간 폭에서는 사이드 메뉴를 유지한다. 768px 이하 비관제 페이지는 72px 공용 고정 헤더에 `C` 메뉴 버튼과 현재 페이지명을 표시하고, 본문 페이지 제목은 시각적으로 반복하지 않는다.
 - Touch/hover differences: 모바일 메뉴는 전체 화면으로 확장되고 충분한 터치 영역을 제공한다. 관제 화면은 지도 오버레이와 접힌 보조 카드 구조를 유지한다.
 - 좁은 관리 화면은 선택 전 목록을, 선택 후 상세를 우선하되 각 영역의 최소 폭을 유지한다.
+- `/driver-app`의 스토어 카드는 640px 초과에서 Google Play를 왼쪽, App Store를 오른쪽에 같은 크기로 배치하고 640px 이하에서는 같은 순서로 세로 적층한다.
 
 ## Interaction states
 
