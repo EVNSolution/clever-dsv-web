@@ -81,7 +81,7 @@ export function AdminShell({
   const [credentialMessage, setCredentialMessage] = useState('');
   const [navigationExpanded, setNavigationExpanded] = useState(false);
   const [departureLocation, setDepartureLocation] = useState<DepartureLocation | null>(null);
-  const [controlSettings, setControlSettings] = useState<AdminSettings | null>(null);
+  const [, setControlSettings] = useState<AdminSettings | null>(null);
   const [controlManagement, setControlManagement] = useState<ManagementData>();
   const [controlOrders, setControlOrders] = useState<DispatchListItem[]>([]);
   const [controlServiceDate, setControlServiceDate] = useState<string>();
@@ -717,7 +717,6 @@ function controlVehicleMapPoints(
       || longitude < -180
       || longitude > 180
     ) return [];
-    const orderCount = orderCounts.get(vehicle.id) ?? 0;
     return [{
       color: controlVehicleDisplayColor(vehicle.id, vehicleColors),
       id: vehicle.id,

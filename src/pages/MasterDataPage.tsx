@@ -29,7 +29,7 @@ const scopes: Array<{ id: MasterScope; label: string }> = [
   { id: 'conditions', label: '운송조건' },
 ];
 
-export function MasterDataPage(): ReactElement {
+export function MasterDataPage({ principalScopes = [] }: { principalScopes?: readonly string[] }): ReactElement {
   const [scope, setScope] = useState<MasterScope>('resources');
   const [data, setData] = useState(() => apiConfig.mode === 'remote' ? emptyManagementData : loadManagementData());
   const [loadState, setLoadState] = useState<{ error: string | null; loading: boolean }>({ error: null, loading: apiConfig.mode === 'remote' });
@@ -87,7 +87,7 @@ export function MasterDataPage(): ReactElement {
   if (!shouldShowRemoteState) {
     switch (scope) {
       case 'resources':
-        content = <ResourcesPage data={data} onChange={updateData} />;
+        content = <ResourcesPage data={data} onChange={updateData} canResetPassword={apiConfig.mode === 'remote' && principalScopes.includes('dsv:accounts:write') && principalScopes.includes('dsv:resources:read')} />;
         break;
       case 'network':
         content = <NetworkMaster data={data} onChange={updateData} />;
