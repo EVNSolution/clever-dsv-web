@@ -626,7 +626,7 @@ function ControlPanels({
                   <b>{destination.orders.length}건</b>
                   <small>총 {controlDestinationBoxTotal(destination.orders)}박스</small>
                 </span>
-                <time>{formatControlEta(destination.orders)}</time>
+                <time className={controlDestinationCompletedAt(destination.orders) === null ? undefined : 'superseded'}>{formatControlEta(destination.orders)}</time>
                 <time className={controlDestinationCompletedAt(destination.orders) === null ? 'empty' : 'completed'}>{formatControlTime(controlDestinationCompletedAt(destination.orders))}</time>
                 {selectedDestinationId === destination.destinationId ? (
                   <div className="control-detail-card control-destination-details">

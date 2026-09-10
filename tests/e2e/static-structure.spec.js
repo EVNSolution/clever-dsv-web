@@ -170,6 +170,7 @@ test('control ETA renders only the server-persisted value', () => {
   expect(controlPage).toContain("etaStatus === 'FAILED'");
   expect(controlPage).toContain("etaStatus === 'STALE'");
   expect(controlPage).toContain("etaStatus === 'PENDING'");
+  expect(controlPage).toContain("className={controlDestinationCompletedAt(destination.orders) === null ? undefined : 'superseded'}");
 });
 
 test('service and page imports follow dependency rules', () => {

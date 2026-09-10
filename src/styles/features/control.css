@@ -346,6 +346,7 @@
 .control-destination-row b { display:block; overflow:hidden; color:var(--color-ink); font-size:12px; font-weight:850; white-space:nowrap; text-overflow:ellipsis; }
 .control-destination-summary { display:grid; grid-template-columns:minmax(0, 1fr) 16px; gap:4px; align-items:center; }
 .control-destination-row time { color:var(--color-ink); font-size:10px; font-weight:850; text-align:center; white-space:nowrap; }
+.control-destination-row time.superseded { color:var(--color-muted); text-decoration:line-through; }
 .control-destination-row time.completed { color:var(--color-success); }
 .control-destination-row time.empty { color:var(--color-muted); }
 .control-destination-order-count { display:grid; justify-items:center; gap:1px; white-space:nowrap; }

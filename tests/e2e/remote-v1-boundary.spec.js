@@ -559,7 +559,7 @@ test('renders selected control progress without letting a future destination cli
         destinationId: `destination-progress-${index + 1}`,
         driverId: 'driver-progress',
         ...(index === 3
-          ? { estimatedArrivalAt: '2026-08-05T04:12:00.000Z', etaStatus: 'READY' }
+          ? { actualCompletedAt: '2026-08-05T04:18:00.000Z', estimatedArrivalAt: '2026-08-05T04:12:00.000Z', etaStatus: 'READY' }
           : { etaStatus: 'PENDING' }),
         eventSummary: events[index],
         latitude: coordinate[1],
@@ -582,6 +582,7 @@ test('renders selected control progress without letting a future destination cli
   await expect(rows).toHaveCount(4);
   await expect(rows.nth(0).locator('time').first()).toHaveText('계산 중');
   await expect(rows.nth(3).locator('time').first()).toHaveText('13:12');
+  await expect(rows.nth(3).locator('time').first()).toHaveCSS('text-decoration-line', 'line-through');
   await expect(rows.nth(0)).not.toContainText('08:31');
   const expectedColors = [
     'rgb(142, 142, 147)',
