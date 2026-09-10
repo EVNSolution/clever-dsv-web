@@ -558,7 +558,9 @@ test('renders selected control progress without letting a future destination cli
         destinationDisplayName: `진행 배송지 ${index + 1}`,
         destinationId: `destination-progress-${index + 1}`,
         driverId: 'driver-progress',
-        etaStatus: 'PENDING',
+        ...(index === 3
+          ? { actualCompletedAt: '2026-08-05T04:18:00.000Z', estimatedArrivalAt: '2026-08-05T04:12:00.000Z', etaStatus: 'READY' }
+          : { etaStatus: 'PENDING' }),
         eventSummary: events[index],
         latitude: coordinate[1],
         longitude: coordinate[0],
@@ -578,6 +580,10 @@ test('renders selected control progress without letting a future destination cli
   await vehicleButton.click();
   const rows = page.locator('#destinationCard .control-destination-row');
   await expect(rows).toHaveCount(4);
+  await expect(rows.nth(0).locator('time').first()).toHaveText('계산 중');
+  await expect(rows.nth(3).locator('time').first()).toHaveText('13:12');
+  await expect(rows.nth(3).locator('time').first()).toHaveCSS('text-decoration-line', 'line-through');
+  await expect(rows.nth(0)).not.toContainText('08:31');
   const expectedColors = [
     'rgb(142, 142, 147)',
     'rgb(232, 117, 20)',

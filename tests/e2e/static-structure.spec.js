@@ -160,6 +160,19 @@ test('vehicle trail playback uses raw sample timestamps and a native timeline co
   expect(playback).not.toContain('Date.parse(session.startedAt)');
 });
 
+test('control ETA renders only the server-persisted value', () => {
+  const adminShell = readSrc('components/AdminShell.tsx');
+  const controlPage = readSrc('pages/ControlPage.tsx');
+  expect(adminShell).not.toContain('configuredControlEtas');
+  expect(adminShell).not.toContain('controlEstimatedArrivalByOrderId');
+  expect(controlPage).not.toContain('estimatedArrivalByOrderId');
+  expect(controlPage).toContain('.map((order) => order.estimatedArrivalAt)');
+  expect(controlPage).toContain("etaStatus === 'FAILED'");
+  expect(controlPage).toContain("etaStatus === 'STALE'");
+  expect(controlPage).toContain("etaStatus === 'PENDING'");
+  expect(controlPage).toContain("className={controlDestinationCompletedAt(destination.orders) === null ? undefined : 'superseded'}");
+});
+
 test('service and page imports follow dependency rules', () => {
   expect(exists('services/routing.ts')).toBe(false);
 

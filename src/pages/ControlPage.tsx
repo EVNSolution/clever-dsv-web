@@ -47,7 +47,6 @@ const temperatureConditionSignatureColors = new Map([
 ]);
 
 export function ControlPage({
-  estimatedArrivalByOrderId = new Map(),
   onOrdersChange,
   onManagementChange,
   onDestinationSelect,
@@ -71,7 +70,6 @@ export function ControlPage({
   vehicleVisibility = 'ALL',
   onVehicleVisibilityChange,
 }: {
-  estimatedArrivalByOrderId?: ReadonlyMap<string, string>;
   onManagementChange?: (management: ManagementData | undefined) => void;
   onOrdersChange?: (orders: DispatchListItem[], serviceDate?: string) => void;
   onDestinationSelect?: (destinationId: string) => void;
@@ -98,7 +96,6 @@ export function ControlPage({
   if (apiConfig.mode === 'remote') {
     return (
       <RemoteControlPage
-        estimatedArrivalByOrderId={estimatedArrivalByOrderId}
         onManagementChange={onManagementChange}
         onOrdersChange={onOrdersChange}
         onDestinationSelect={onDestinationSelect}
@@ -148,7 +145,6 @@ export function ControlPreviewPanels(): ReactElement {
 }
 
 function RemoteControlPage({
-  estimatedArrivalByOrderId,
   onOrdersChange,
   onManagementChange,
   onDestinationSelect,
@@ -172,7 +168,6 @@ function RemoteControlPage({
   vehicleVisibility,
   onVehicleVisibilityChange,
 }: {
-  estimatedArrivalByOrderId: ReadonlyMap<string, string>;
   onManagementChange?: (management: ManagementData | undefined) => void;
   onOrdersChange?: (orders: DispatchListItem[], serviceDate?: string) => void;
   onDestinationSelect?: (destinationId: string) => void;
@@ -265,7 +260,6 @@ function RemoteControlPage({
       error={panelError}
       loading={panelLoading}
       customerOrders={groupOrdersByCustomer(orders, management)}
-      estimatedArrivalByOrderId={estimatedArrivalByOrderId}
       orders={orders}
       ordersCount={orders.length}
       summary={summary}
@@ -316,7 +310,6 @@ function ControlPanels({
   conditions = [],
   drivers = [],
   error = '',
-  estimatedArrivalByOrderId = new Map(),
   loading,
   customerOrders,
   orders,
@@ -350,7 +343,6 @@ function ControlPanels({
   conditions?: ManagementData['conditions'];
   drivers?: ManagementData['drivers'];
   error?: string;
-  estimatedArrivalByOrderId?: ReadonlyMap<string, string>;
   loading: boolean;
   customerOrders: CustomerOrderGroup[];
   orders: DispatchListItem[];
@@ -634,7 +626,7 @@ function ControlPanels({
                   <b>{destination.orders.length}건</b>
                   <small>총 {controlDestinationBoxTotal(destination.orders)}박스</small>
                 </span>
-                <time>{formatControlTime(sharedControlEta(destination.orders, estimatedArrivalByOrderId))}</time>
+                <time className={controlDestinationCompletedAt(destination.orders) === null ? undefined : 'superseded'}>{formatControlEta(destination.orders)}</time>
                 <time className={controlDestinationCompletedAt(destination.orders) === null ? 'empty' : 'completed'}>{formatControlTime(controlDestinationCompletedAt(destination.orders))}</time>
                 {selectedDestinationId === destination.destinationId ? (
                   <div className="control-detail-card control-destination-details">
@@ -690,7 +682,7 @@ function ControlPanels({
                 </span>
                 <span className="control-customer-order-meta">
                   <span>{group.orders.length}건</span>
-                  <time>{customerFirstEta(group.orders, estimatedArrivalByOrderId)}</time>
+                  <time>{customerFirstEta(group.orders)}</time>
                 </span>
                 <ChevronRight aria-hidden="true" />
               </a>
@@ -1395,10 +1387,10 @@ function controlVehicleMotionText(vehicle: ManagementData['vehicles'][number]): 
   return '운행 미확인';
 }
 
-function customerFirstEta(orders: DispatchListItem[], configuredEtas: ReadonlyMap<string, string>): string {
+function customerFirstEta(orders: DispatchListItem[]): string {
   const first = [...orders].sort((left, right) => {
-    const leftEta = controlEtaTimestamp(left, configuredEtas);
-    const rightEta = controlEtaTimestamp(right, configuredEtas);
+    const leftEta = controlEtaTimestamp(left);
+    const rightEta = controlEtaTimestamp(right);
     if (leftEta !== rightEta) return leftEta - rightEta;
     const leftSequence = left.routeStopSequence ?? Number.MAX_SAFE_INTEGER;
     const rightSequence = right.routeStopSequence ?? Number.MAX_SAFE_INTEGER;
@@ -1406,12 +1398,12 @@ function customerFirstEta(orders: DispatchListItem[], configuredEtas: ReadonlyMa
     return left.sellerOrderKey.localeCompare(right.sellerOrderKey, 'ko');
   })[0];
   if (!first) return '-';
-  return formatControlTime(controlEta(first, configuredEtas));
+  return formatControlEta([first]);
 }
 
-function sharedControlEta(orders: DispatchListItem[], configuredEtas: ReadonlyMap<string, string>): string | null {
+function sharedControlEta(orders: DispatchListItem[]): string | null {
   return [...orders]
-    .map((order) => controlEta(order, configuredEtas))
+    .map((order) => order.estimatedArrivalAt)
     .filter((value): value is string => value !== null)
     .sort((left, right) => controlTimeValue(left) - controlTimeValue(right))[0] ?? null;
 }
@@ -1432,8 +1424,8 @@ function controlDestinationBoxTotal(orders: DispatchListItem[]): number {
   return orders.reduce((total, order) => total + (order.shippedBoxes ?? 0), 0);
 }
 
-function controlEtaTimestamp(order: DispatchListItem, configuredEtas: ReadonlyMap<string, string>): number {
-  const eta = controlEta(order, configuredEtas);
+function controlEtaTimestamp(order: DispatchListItem): number {
+  const eta = order.estimatedArrivalAt;
   if (!eta) return Number.MAX_SAFE_INTEGER;
   const timestamp = new Date(eta).getTime();
   return Number.isNaN(timestamp) ? Number.MAX_SAFE_INTEGER : timestamp;
@@ -1444,8 +1436,13 @@ function controlTimeValue(value: string): number {
   return Number.isNaN(timestamp) ? Number.MAX_SAFE_INTEGER : timestamp;
 }
 
-function controlEta(order: DispatchListItem, configuredEtas: ReadonlyMap<string, string>): string | null {
-  return order.estimatedArrivalAt ?? configuredEtas.get(order.sellerOrderId) ?? null;
+function formatControlEta(orders: DispatchListItem[]): string {
+  const eta = sharedControlEta(orders);
+  if (eta !== null) return formatControlTime(eta);
+  if (orders.some(({ etaStatus }) => etaStatus === 'FAILED')) return '계산 실패';
+  if (orders.some(({ etaStatus }) => etaStatus === 'STALE')) return '갱신 필요';
+  if (orders.some(({ etaStatus }) => etaStatus === 'PENDING')) return '계산 중';
+  return '-';
 }
 
 function formatControlTime(value: string | null): string {
