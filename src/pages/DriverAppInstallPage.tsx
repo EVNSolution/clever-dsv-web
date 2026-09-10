@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
-import { Download, ShieldCheck, Smartphone } from 'lucide-react';
+import { Download, ExternalLink, ShieldCheck, Smartphone } from 'lucide-react';
 
-import { DRIVER_ANDROID_DOWNLOAD_URL } from '../config/driver-app';
+import { DRIVER_ANDROID_PLAY_URL, DRIVER_IOS_APP_STORE_URL } from '../config/driver-app';
 
 export function DriverAppInstallPage(): ReactElement {
   return (
@@ -16,26 +16,44 @@ export function DriverAppInstallPage(): ReactElement {
           <span className="driver-app-hero-icon"><Smartphone aria-hidden="true" /></span>
           <p className="driver-app-eyebrow">공식 설치 페이지</p>
           <h1 id="driver-app-title">CLEVER Driver 설치</h1>
-          <p>운영체제별 배포 상태를 확인하고 앱을 설치한 뒤, 로그인 화면의 <strong>회원가입</strong>을 누르세요.</p>
+          <p>사용 중인 휴대전화에 맞는 스토어를 선택하세요.</p>
         </div>
 
-        <section className="driver-app-platform" aria-labelledby="driver-android-title">
-          <div>
-            <span className="driver-app-platform-label">Android</span>
-            <h2 id="driver-android-title">Android 설치 파일</h2>
-            <p>아래 버튼에서 최신 정식 APK를 직접 내려받습니다.</p>
-          </div>
-          <a className="driver-app-store-link" href={DRIVER_ANDROID_DOWNLOAD_URL}>
-            <Download aria-hidden="true" /> Android 설치 파일 받기
-          </a>
-        </section>
+        <div className="driver-app-store-grid" aria-label="운영체제별 설치">
+          <section className="driver-app-platform" aria-labelledby="driver-android-title">
+            <div>
+              <span className="driver-app-platform-label">Android</span>
+              <h2 id="driver-android-title">Google Play</h2>
+              <p>Google Play에서 최신 정식 버전을 설치하거나 업데이트합니다.</p>
+            </div>
+            <a className="driver-app-store-link" href={DRIVER_ANDROID_PLAY_URL} rel="noopener noreferrer" target="_blank">
+              <ExternalLink aria-hidden="true" /> Google Play에서 설치 및 업데이트
+            </a>
+          </section>
 
-        <ol className="driver-app-steps" aria-label="설치 순서">
-          <li><span>1</span><p><strong>설치 파일 받기</strong>위 Android 버튼을 누릅니다.</p></li>
-          <li><span>2</span><p><strong>설치 허용</strong>휴대전화가 묻는 경우 이 출처의 앱 설치를 허용합니다.</p></li>
-          <li><span>3</span><p><strong>회원가입</strong>앱에서 이름, 휴대전화 번호, 로그인 아이디와 비밀번호를 입력합니다.</p></li>
-          <li><span>4</span><p><strong>배송 업무 연결</strong>DSV에 등록된 활성 배송원의 이름과 휴대전화 번호가 모두 일치하면 배송 업무가 자동으로 연결됩니다. 일치 정보가 없으면 연결 대기 상태로 가입됩니다.</p></li>
-        </ol>
+          <section className="driver-app-platform" aria-labelledby="driver-ios-title">
+            <div>
+              <span className="driver-app-platform-label">iPhone</span>
+              <h2 id="driver-ios-title">App Store</h2>
+              <p>검색 결과 대신 전용 링크에서 설치하거나 업데이트합니다.</p>
+            </div>
+            <a className="driver-app-store-link" href={DRIVER_IOS_APP_STORE_URL} rel="noopener noreferrer" target="_blank">
+              <ExternalLink aria-hidden="true" /> App Store에서 설치 및 업데이트
+            </a>
+          </section>
+        </div>
+
+        <section className="driver-app-details" aria-labelledby="driver-details-title">
+          <div className="driver-app-section-heading">
+            <span className="driver-app-platform-label">설치 후 안내</span>
+            <h2 id="driver-details-title">앱 설치 후 회원가입</h2>
+          </div>
+          <ol className="driver-app-steps" aria-label="설치 후 이용 순서">
+            <li><span>1</span><p><strong>앱 설치</strong>사용 중인 휴대전화의 스토어에서 앱을 설치합니다.</p></li>
+            <li><span>2</span><p><strong>회원가입</strong>이름, 휴대전화 번호, 로그인 아이디와 비밀번호를 입력합니다.</p></li>
+            <li><span>3</span><p><strong>배송 업무 연결</strong>DSV에 등록된 활성 배송원의 이름과 휴대전화 번호가 모두 일치하면 배송 업무가 자동으로 연결됩니다. 일치 정보가 없으면 연결 대기 상태로 가입됩니다.</p></li>
+          </ol>
+        </section>
 
         <section className="driver-app-platform driver-app-guide" aria-labelledby="driver-guide-title">
           <div>
@@ -46,12 +64,6 @@ export function DriverAppInstallPage(): ReactElement {
           <a className="driver-app-store-link" href="/api/dsv/public/guides/driver?download=1">
             <Download aria-hidden="true" /> PDF 가이드 다운로드
           </a>
-        </section>
-
-        <section className="driver-app-ios" aria-labelledby="driver-ios-title">
-          <span className="driver-app-platform-label">iPhone</span>
-          <h2 id="driver-ios-title">아이폰 버전</h2>
-          <p>아이폰용 CLEVER Driver는 전용 App Store 설치 링크 승인을 기다리고 있습니다. 승인 전에는 이 페이지에서 설치 링크를 제공하지 않습니다.</p>
         </section>
 
         <footer className="driver-app-trust">

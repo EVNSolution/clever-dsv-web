@@ -238,7 +238,7 @@ test('manual router, local state, layered plain CSS, and lazy map loading remain
   expect(routes).toContain("export const driverAppPath = '/driver-app'");
 });
 
-test('public driver app page uses the canonical Android APK and direct signup', () => {
+test('public driver app page uses the production store links and direct signup', () => {
   const app = readSrc('App.tsx');
   const config = readSrc('config/driver-app.ts');
   const page = readSrc('pages/DriverAppInstallPage.tsx');
@@ -247,24 +247,27 @@ test('public driver app page uses the canonical Android APK and direct signup', 
 
   expect(app).toContain('path === driverAppPath');
   expect(config).toContain("DRIVER_APP_INSTALL_PAGE_URL = 'https://dsv.cleversystem.ai/driver-app'");
-  expect(config).toContain('DRIVER_ANDROID_DOWNLOAD_URL');
-  expect(config).toContain('drive.usercontent.google.com/download?id=1XRXAqREGtJJRMUsRnKgRAhFsiikE4V1y');
-  expect(config).not.toMatch(/play\.google\.com/i);
-  expect(page).toContain('Android 설치 파일');
-  expect(page).toContain('Android 설치 파일 받기');
+  expect(config).toContain('DRIVER_ANDROID_PLAY_URL');
+  expect(config).toContain('https://play.google.com/store/apps/details?id=com.evnsolution.clever.driver');
+  expect(config).toContain('DRIVER_IOS_APP_STORE_URL');
+  expect(config).toContain('https://apps.apple.com/kr/app/clever-driver/id6806955523');
+  expect(config).not.toMatch(/drive\.usercontent\.google\.com/i);
+  expect(page).toContain('Google Play');
+  expect(page).toContain('Google Play에서 설치 및 업데이트');
   expect(page).toContain('/api/dsv/public/guides/driver?download=1');
   expect(page).toContain('PDF 가이드 다운로드');
-  expect(page).toContain('최신 정식 APK');
-  expect(page).toContain('전용 App Store 설치 링크 승인을 기다리고 있습니다.');
+  expect(page).toContain('최신 정식 버전');
+  expect(page).toContain('App Store에서 설치 및 업데이트');
+  expect(page).toContain('검색 결과 대신 전용 링크');
   expect(page).toContain('이름과 휴대전화 번호가 모두 일치');
   expect(page).toContain('회원가입');
-  expect(page).not.toMatch(/Google Play|App Store Connect|build 11|TestFlight/u);
+  expect(page).not.toMatch(/App Store Connect|build 11|TestFlight/u);
   expect(settings).toContain('href={driverAppPath}');
   expect(settings).not.toContain("setActiveGuide('driver')");
   expect(settings).not.toContain('/api/dsv/guides/driver');
   expect(onboarding).toContain('`/driver-app`');
-  expect(onboarding).toContain('`clever-driver-app/docs/android-drive-release.md`');
-  expect(onboarding).not.toContain('`clever-driver-app/docs/google-play-release.md`');
+  expect(onboarding).toContain('https://play.google.com/store/apps/details?id=com.evnsolution.clever.driver');
+  expect(onboarding).toContain('https://apps.apple.com/kr/app/clever-driver/id6806955523');
   expect(onboarding).toContain('PDF 가이드 다운로드');
   expect(onboarding).toContain('일회용 초대 링크나 QR 코드를 생성하지 않는다.');
 });
@@ -277,7 +280,7 @@ test('single-concept labels remain', () => {
     readSrc('pages/MasterDataPage.tsx'),
   ].join('\n');
   const labels = [...readSrc('app-routes.ts').matchAll(/label: '([^']+)'/g)].map((match) => match[1]);
-  expect(labels).toEqual(['관제', '배차', '이력', '관리', '설정']);
+  expect(labels).toEqual(['관제', '배차', '이력', '관리', '설정', '문의']);
   expect(source).not.toMatch(/배송원·차량|고객·배송망|운영\/알림/);
 });
 
@@ -294,6 +297,10 @@ test('public customer account pages keep invitation and login contract explicit'
   expect(setup).toContain('window.history.replaceState');
   expect(setup).toContain('validateCustomerInvitation');
   expect(setup).toContain('completeCustomerInvitation');
+  expect(setup).toContain("state.validation.purpose === 'SIGNUP'");
+  expect(setup).toContain('name="displayName"');
+  expect(setup).toContain('name="loginId"');
+  expect(setup).toContain('허용 시간이 초과된 링크입니다. 담당자에게 새 초대 링크를 요청해 주세요.');
   expect(setup).not.toContain('URLSearchParams(window.location.search)');
   expect(login).toContain('loginCustomerAccount');
   expect(app).toContain('logoutCustomerAccount');
@@ -302,6 +309,7 @@ test('public customer account pages keep invitation and login contract explicit'
   expect(service).toContain("'customer/auth/complete'");
   expect(service).toContain("'customer/auth/login'");
   expect(service).toContain("'session/logout'");
+  expect(service).toContain('setupUrl');
   expect(readSrc('api/client.ts')).toContain('!isPublicAuthPath(target.path)');
 });
 

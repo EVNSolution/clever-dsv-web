@@ -1,7 +1,32 @@
 import { apiConfig } from './config';
 import { expireTransportSession, readAuthToken, readCsrfToken, storeCsrfToken } from './auth-session';
 
-type JsonRequestInit = Omit<RequestInit, 'body'> & { json?: unknown };
+export type DsvDispatchResource = 'customers' | 'destinations' | 'dispatches' | 'drivers' | 'vehicles';
+export type DsvDispatchAttempt = {
+  attemptId: string;
+  loadId: string;
+};
+export type DsvDispatchResponseMetadata = {
+  apiVersion?: 'dsv.v1' | 'invalid' | 'missing';
+  contentType?: 'application/json' | 'text/html' | 'other' | 'missing';
+  httpStatus?: number;
+  responseRequestId?: string;
+};
+export type DsvDispatchFailureMetadata = DsvDispatchResponseMetadata & {
+  errorCode: 'CONTENT_TYPE_ERROR' | 'HTTP_ERROR' | 'JSON_PARSE_ERROR' | 'LIST_PARSER_INVALID' | 'NETWORK_ERROR' | 'UNEXPECTED_ERROR' | 'V1_ENVELOPE_INVALID';
+  failedResource: DsvDispatchResource;
+  failureStage: 'content_type' | 'envelope' | 'http' | 'json' | 'parser' | 'transport' | 'unexpected';
+};
+export type DsvDispatchReadContext = {
+  attempt: DsvDispatchAttempt;
+  resource: DsvDispatchResource;
+  response?: DsvDispatchResponseMetadata;
+};
+
+type JsonRequestInit = Omit<RequestInit, 'body'> & {
+  dsvDispatchRead?: DsvDispatchReadContext;
+  json?: unknown;
+};
 
 type RequestTarget = {
   method: string;
@@ -39,6 +64,17 @@ export class ApiError extends Error {
   }
 }
 
+export class DsvDispatchLoadError extends Error {
+  constructor(
+    message: string,
+    public readonly diagnostic: DsvDispatchFailureMetadata,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'DsvDispatchLoadError';
+  }
+}
+
 const legacyAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'POST', pattern: /^auth\/login$/u },
   { method: 'POST', pattern: /^auth\/logout$/u },
@@ -55,6 +91,8 @@ const legacyAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'GET', pattern: /^manual-email$/u },
   { method: 'POST', pattern: /^manual-email$/u },
   { method: 'GET', pattern: /^admin-accounts$/u },
+  { method: 'GET', pattern: /^driver-inquiries$/u },
+  { method: 'GET', pattern: /^driver-inquiries\/[^/]+$/u },
   { method: 'POST', pattern: /^admin-accounts\/invitations$/u },
   { method: 'PATCH', pattern: /^admin-accounts\/[^/]+\/status$/u },
   { method: 'DELETE', pattern: /^admin-accounts\/[^/]+\/session$/u },
@@ -130,11 +168,35 @@ const customerCommandAllowlist: Array<{ method: string; pattern: RegExp }> = [
 export async function requestV1ReadJson<ResponseBody>(path: string, init: JsonRequestInit = {}): Promise<ResponseBody> {
   const target = requestTarget(path, init.method);
   assertAllowed('v1 read', target, v1ReadAllowlist);
-  const response = await fetchJson(apiConfig.v1BaseUrl, path, { ...init, method: target.method });
+  const dispatchRead = verifiedDsvDispatchRead(target, init.dsvDispatchRead);
+  let response: Response;
+  try {
+    response = await fetchJson(apiConfig.v1BaseUrl, path, { ...init, method: target.method });
+  } catch (error) {
+    if (dispatchRead === undefined || isAbortError(error)) throw error;
+    throw dispatchLoadError(error, dispatchRead, {
+      errorCode: 'NETWORK_ERROR',
+      failureStage: 'transport',
+    });
+  }
   if (response.status === 401) expireTransportSession();
+  if (dispatchRead !== undefined) return readInstrumentedV1Response<ResponseBody>(response, dispatchRead);
   const body = await readV1ResponseBody(response);
   if (!response.ok) throw strictV1Error(response.status, body);
   return strictV1Data<ResponseBody>(body);
+}
+
+export function markDsvDispatchParserFailure(error: unknown, context: DsvDispatchReadContext): DsvDispatchLoadError {
+  if (error instanceof DsvDispatchLoadError) return error;
+  return dispatchLoadError(error, context, {
+    ...context.response,
+    errorCode: 'LIST_PARSER_INVALID',
+    failureStage: 'parser',
+  });
+}
+
+export function dsvDispatchFailureMetadata(error: unknown): DsvDispatchFailureMetadata | null {
+  return error instanceof DsvDispatchLoadError ? error.diagnostic : null;
 }
 
 export async function requestV1AssignmentCommandJson<ResponseBody>(path: string, init: JsonRequestInit = {}): Promise<ResponseBody> {
@@ -215,10 +277,15 @@ async function fetchV1CommandResponse(
   return { body, response };
 }
 
-async function fetchJson(baseUrl: string, path: string, { json, headers, ...init }: JsonRequestInit): Promise<Response> {
+async function fetchJson(baseUrl: string, path: string, { dsvDispatchRead, json, headers, ...init }: JsonRequestInit): Promise<Response> {
   const token = readAuthToken();
   const csrfToken = readCsrfToken();
   const method = methodFor(init.method);
+  const dispatchHeaders: Record<string, string> = dsvDispatchRead === undefined ? {} : {
+    'X-Caller-Surface': 'dsv-dispatch',
+    'X-DSV-Attempt-Id': dsvDispatchRead.attempt.attemptId,
+    'X-DSV-Load-Id': dsvDispatchRead.attempt.loadId,
+  };
   return fetch(`${baseUrl}/${path.replace(/^\/+/, '')}`, {
     ...init,
     body: json === undefined ? undefined : JSON.stringify(json),
@@ -228,10 +295,137 @@ async function fetchJson(baseUrl: string, path: string, { json, headers, ...init
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(csrfToken && !['GET', 'HEAD'].includes(method) ? { 'X-CSRF-Token': csrfToken } : {}),
       ...(json === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...dispatchHeaders,
       ...headers,
     },
     method,
   });
+}
+
+function verifiedDsvDispatchRead(target: RequestTarget, context: DsvDispatchReadContext | undefined): DsvDispatchReadContext | undefined {
+  if (context === undefined) return undefined;
+  if (target.method !== 'GET' || target.path !== context.resource) {
+    throw new ApiError(400, `DSV 배차 진단 범위 밖의 API 요청입니다: ${target.method} /${target.path}`);
+  }
+  return context;
+}
+
+async function readInstrumentedV1Response<ResponseBody>(response: Response, context: DsvDispatchReadContext): Promise<ResponseBody> {
+  const baseMetadata = responseMetadata(response);
+  context.response = baseMetadata;
+  if (!response.ok) {
+    const body = await readJsonIfAvailable(response, baseMetadata.contentType);
+    const metadata = { ...baseMetadata, ...bodyMetadata(body, response) };
+    context.response = metadata;
+    const apiError = strictV1Error(response.status, body);
+    throw dispatchLoadError(apiError, context, {
+      ...metadata,
+      errorCode: 'HTTP_ERROR',
+      failureStage: 'http',
+    });
+  }
+  if (baseMetadata.contentType !== 'application/json') {
+    throw dispatchLoadError(new ApiError(502, 'API v1 응답 Content-Type이 올바르지 않습니다.'), context, {
+      ...baseMetadata,
+      errorCode: 'CONTENT_TYPE_ERROR',
+      failureStage: 'content_type',
+    });
+  }
+  let body: unknown;
+  try {
+    const text = response.status === 204 ? '' : await response.text();
+    if (!text) body = undefined;
+    else {
+      try {
+        body = JSON.parse(text) as unknown;
+      } catch {
+        throw dispatchLoadError(new ApiError(502, 'API가 올바른 JSON을 반환하지 않았습니다.'), context, {
+          ...baseMetadata,
+          errorCode: 'JSON_PARSE_ERROR',
+          failureStage: 'json',
+        });
+      }
+    }
+  } catch (error) {
+    if (error instanceof DsvDispatchLoadError || isAbortError(error)) throw error;
+    throw dispatchLoadError(error, context, {
+      ...baseMetadata,
+      errorCode: 'NETWORK_ERROR',
+      failureStage: 'transport',
+    });
+  }
+  const metadata = { ...baseMetadata, ...bodyMetadata(body, response) };
+  context.response = metadata;
+  try {
+    return strictV1Data<ResponseBody>(body);
+  } catch (error) {
+    throw dispatchLoadError(error, context, {
+      ...metadata,
+      errorCode: 'V1_ENVELOPE_INVALID',
+      failureStage: 'envelope',
+    });
+  }
+}
+
+async function readJsonIfAvailable(response: Response, contentType: DsvDispatchResponseMetadata['contentType']): Promise<unknown> {
+  if (response.status === 204 || contentType !== 'application/json') return undefined;
+  try {
+    return await readResponseBody(response);
+  } catch {
+    return undefined;
+  }
+}
+
+function responseMetadata(response: Response): DsvDispatchResponseMetadata {
+  return {
+    contentType: normalizedContentType(response.headers.get('content-type')),
+    httpStatus: response.status,
+    ...(safeIdentifier(response.headers.get('x-request-id')) === undefined
+      ? {}
+      : { responseRequestId: safeIdentifier(response.headers.get('x-request-id')) }),
+  };
+}
+
+function bodyMetadata(body: unknown, response: Response): DsvDispatchResponseMetadata {
+  const meta = isObject(body) && isObject(body.meta) ? body.meta : undefined;
+  const apiVersion = meta === undefined || !Object.hasOwn(meta, 'apiVersion')
+    ? 'missing'
+    : meta.apiVersion === 'dsv.v1' ? 'dsv.v1' : 'invalid';
+  const bodyRequestId = isObject(body) && typeof body.requestId === 'string'
+    ? body.requestId
+    : isObject(body) && isObject(body.error) && typeof body.error.requestId === 'string'
+      ? body.error.requestId
+      : undefined;
+  const responseRequestId = safeIdentifier(bodyRequestId) ?? safeIdentifier(response.headers.get('x-request-id'));
+  return {
+    apiVersion,
+    ...(responseRequestId === undefined ? {} : { responseRequestId }),
+  };
+}
+
+function normalizedContentType(value: string | null): DsvDispatchResponseMetadata['contentType'] {
+  if (value === null || value.trim() === '') return 'missing';
+  const mediaType = value.split(';', 1)[0]?.trim().toLowerCase();
+  if (mediaType === 'application/json' || mediaType?.endsWith('+json')) return 'application/json';
+  if (mediaType === 'text/html') return 'text/html';
+  return 'other';
+}
+
+function safeIdentifier(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[A-Za-z0-9._:-]{1,120}$/u.test(value) ? value : undefined;
+}
+
+function dispatchLoadError(
+  error: unknown,
+  context: DsvDispatchReadContext,
+  metadata: Omit<DsvDispatchFailureMetadata, 'failedResource'>,
+): DsvDispatchLoadError {
+  const message = error instanceof Error ? error.message : '배차 목록 요청에 실패했습니다.';
+  return new DsvDispatchLoadError(message, { ...metadata, failedResource: context.resource }, { cause: error });
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
 }
 
 async function refreshCsrfToken(): Promise<boolean> {

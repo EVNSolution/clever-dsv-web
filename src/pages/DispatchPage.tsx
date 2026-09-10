@@ -1,7 +1,7 @@
 import type { DragEvent, KeyboardEvent, ReactElement } from 'react';
 import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpRight, ChevronDown, LoaderCircle } from 'lucide-react';
-import { ApiError } from '../api/client';
+import { ApiError, dsvDispatchFailureMetadata } from '../api/client';
 import { apiConfig } from '../api/config';
 import { AdminPageHeader, AdminSectionHeader } from '../components/AdminUi';
 import { DispatchDriverRegistrationDialog, DispatchVehicleAssignmentDialog } from '../components/DispatchResourceDialogs';
@@ -44,6 +44,8 @@ import type {
 import type { ManagementData } from '../demo/management';
 import type { DepartureLocation } from '../components/DepartureMarker';
 import { loadDispatchReferenceSnapshot, persistManagementChange } from '../services/management';
+import { reportDispatchLoadAttempt } from '../services/dispatch-diagnostics';
+import type { DispatchLoadAttemptKind, DispatchLoadOutcome } from '../services/dispatch-diagnostics';
 import { defaultAdminSettings, loadAdminSettings, loadRemoteOperationalSettings, saveAdminSettings, saveRemoteOperationalSettings } from '../services/settings';
 import type { AdminSettings } from '../services/settings';
 
@@ -72,6 +74,12 @@ type UploadVehicleAssignmentTarget = {
   driverName: string;
   resources: ManagementData;
   vehiclePlate: string;
+};
+
+type RemoteLoadTrigger = {
+  attemptKind: DispatchLoadAttemptKind;
+  loadId?: string;
+  sequence: number;
 };
 
 const DispatchMapCanvas = lazy(async () => {
@@ -111,7 +119,8 @@ export function DispatchPage({ title, description }: { title: string; descriptio
   const [remoteReferences, setRemoteReferences] = useState<ManagementData | null>(null);
   const [remoteStatus, setRemoteStatus] = useState<'error' | 'loading' | 'ready'>(() => apiConfig.mode === 'remote' ? 'loading' : 'ready');
   const [remoteError, setRemoteError] = useState('');
-  const [remoteReloadKey, setRemoteReloadKey] = useState(0);
+  const failedRemoteLoadId = useRef<string | null>(null);
+  const [remoteLoadTrigger, setRemoteLoadTrigger] = useState<RemoteLoadTrigger>({ attemptKind: 'initial', sequence: 0 });
   const [mapReturnKey, setMapReturnKey] = useState(0);
   const [serviceDate, setServiceDate] = useState(todayInKorea);
   const [dispatchSearch, setDispatchSearch] = useState<DispatchSearch>({ destinationName: '', orderNumber: '' });
@@ -164,26 +173,67 @@ export function DispatchPage({ title, description }: { title: string; descriptio
   useEffect(() => {
     if (apiConfig.mode !== 'remote') return undefined;
     const controller = new AbortController();
+    const loadId = remoteLoadTrigger.attemptKind === 'retry' && remoteLoadTrigger.loadId !== undefined
+      ? remoteLoadTrigger.loadId
+      : crypto.randomUUID();
+    const attemptId = crypto.randomUUID();
+    const attempt = { attemptId, loadId };
+    const startedAt = performance.now();
+    let active = true;
+    let reported = false;
+    const finish = (outcome: DispatchLoadOutcome, failure?: ReturnType<typeof dsvDispatchFailureMetadata>) => {
+      if (reported) return;
+      reported = true;
+      reportDispatchLoadAttempt({
+        attemptId,
+        attemptKind: remoteLoadTrigger.attemptKind,
+        durationMs: Math.min(300_000, Math.max(0, Math.round(performance.now() - startedAt))),
+        loadId,
+        outcome,
+        serviceDate,
+        source: 'browser',
+        ...(outcome === 'failure' && failure !== null && failure !== undefined ? failure : {}),
+      });
+    };
     setRemoteStatus('loading');
     setRemoteError('');
     setRemoteDispatch(null);
+    setRemoteReferences(null);
     Promise.all([
-      loadDispatchList(serviceDate, dispatchSearch, controller.signal),
-      loadDispatchReferenceSnapshot(),
+      loadDispatchList(serviceDate, dispatchSearch, controller.signal, attempt),
+      loadDispatchReferenceSnapshot({ attempt, signal: controller.signal }),
     ])
       .then(([view, references]) => {
+        if (!active) return;
+        failedRemoteLoadId.current = null;
         setRemoteDispatch(view);
         setRemoteReferences(references);
         setRemoteStatus('ready');
+        finish('success');
       })
       .catch((error: unknown) => {
-        if (isAbortError(error)) return;
+        if (isAbortError(error)) {
+          finish('aborted');
+          return;
+        }
+        if (!active) return;
+        controller.abort();
+        failedRemoteLoadId.current = loadId;
         setRemoteDispatch(null);
         setRemoteError(errorMessage(error));
         setRemoteStatus('error');
+        finish('failure', dsvDispatchFailureMetadata(error) ?? {
+          errorCode: 'UNEXPECTED_ERROR',
+          failedResource: 'dispatches',
+          failureStage: 'unexpected',
+        });
       });
-    return () => controller.abort();
-  }, [dispatchSearch, remoteReloadKey, serviceDate]);
+    return () => {
+      active = false;
+      controller.abort();
+      finish('aborted');
+    };
+  }, [dispatchSearch, remoteLoadTrigger, serviceDate]);
   useEffect(() => {
     if (workAction === 'upload') preloadDispatchFileParser();
   }, [workAction]);
@@ -200,7 +250,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
     const input = uploadInput();
     if (input === null) return;
     await inspectUpload(input);
-    if (apiConfig.mode === 'remote') setRemoteReloadKey((current) => current + 1);
+    if (apiConfig.mode === 'remote') setRemoteLoadTrigger((current) => ({ attemptKind: 'initial', sequence: current.sequence + 1 }));
   };
   const inspectUpload = async (input = uploadInput()) => {
     if (input === null) {
@@ -439,7 +489,7 @@ export function DispatchPage({ title, description }: { title: string; descriptio
       await commitDispatchImport(input);
       if (apiConfig.mode === 'remote') {
         setServiceDate(uploadPlanDate);
-        setRemoteReloadKey((current) => current + 1);
+        setRemoteLoadTrigger((current) => ({ attemptKind: 'initial', sequence: current.sequence + 1 }));
       }
       cancelUpload();
       setWorkAction('');
@@ -648,10 +698,20 @@ export function DispatchPage({ title, description }: { title: string; descriptio
             setOperationsError('');
           }}
           onDepartureSave={() => void saveDepartureTime()}
-          onRetry={() => setRemoteReloadKey((current) => current + 1)}
-          onSearchChange={setDispatchSearch}
-          onServiceDateChange={setServiceDate}
-          onAssignmentChanged={() => setRemoteReloadKey((current) => current + 1)}
+          onRetry={() => {
+            const loadId = failedRemoteLoadId.current;
+            if (loadId === null) return;
+            setRemoteLoadTrigger((current) => ({ attemptKind: 'retry', loadId, sequence: current.sequence + 1 }));
+          }}
+          onSearchChange={(search) => {
+            setDispatchSearch(search);
+            setRemoteLoadTrigger((current) => ({ attemptKind: 'initial', sequence: current.sequence + 1 }));
+          }}
+          onServiceDateChange={(date) => {
+            setServiceDate(date);
+            setRemoteLoadTrigger((current) => ({ attemptKind: 'initial', sequence: current.sequence + 1 }));
+          }}
+          onAssignmentChanged={() => setRemoteLoadTrigger((current) => ({ attemptKind: 'initial', sequence: current.sequence + 1 }))}
           mapReturnKey={mapReturnKey}
           operationsBusy={operationsBusy}
           operationsError={operationsError}

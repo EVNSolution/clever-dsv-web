@@ -1,4 +1,5 @@
-import { ApiError, requestLegacyJson, requestV1CustomerCommandJson, requestV1ReadJson } from '../api/client';
+import { ApiError, markDsvDispatchParserFailure, requestLegacyJson, requestV1CustomerCommandJson, requestV1ReadJson } from '../api/client';
+import type { DsvDispatchAttempt, DsvDispatchReadContext, DsvDispatchResource } from '../api/client';
 import { apiConfig } from '../api/config';
 import type { ManagementCondition, ManagementData, ManagementDriver, ManagementVehicle } from '../demo/management';
 import { loadManagementData, saveManagementData } from '../demo/management';
@@ -69,6 +70,17 @@ type V1DestinationListItem = {
   address?: string;
   destinationId: string;
   displayName: string;
+  lunchEntryStatus?: string;
+  lunchEntryStatusUpdatedAt?: string;
+  lunchTimeRange?: string;
+  lunchTimeRangeUpdatedAt?: string;
+  memo?: string;
+  memoUpdatedAt?: string;
+  openTime?: string;
+  openTimeUpdatedAt?: string;
+  postalCode?: string;
+  requiredArrivalTime?: string;
+  requiredArrivalTimeUpdatedAt?: string;
 };
 
 type V1ConditionListItem = {
@@ -114,13 +126,16 @@ export async function loadControlManagementSnapshot(): Promise<ManagementData> {
   };
 }
 
-export async function loadDispatchReferenceSnapshot(): Promise<ManagementData> {
+export async function loadDispatchReferenceSnapshot(options: {
+  attempt?: DsvDispatchAttempt;
+  signal?: AbortSignal;
+} = {}): Promise<ManagementData> {
   if (apiConfig.mode === 'mock') return loadManagementData();
   const [drivers, vehicles, customers, destinations] = await Promise.all([
-    readV1List('drivers', isV1DriverListItem),
-    readV1List('vehicles', isV1VehicleListItem),
-    readV1List('customers', isV1CustomerListItem),
-    readV1List('destinations', isV1DestinationListItem),
+    readV1List('drivers', isV1DriverListItem, dispatchReadOptions('drivers', options)),
+    readV1List('vehicles', isV1VehicleListItem, dispatchReadOptions('vehicles', options)),
+    readV1List('customers', isV1CustomerListItem, dispatchReadOptions('customers', options)),
+    readV1List('destinations', isV1DestinationListItem, dispatchReadOptions('destinations', options)),
   ]);
   return {
     ...emptyManagementData,
@@ -248,20 +263,42 @@ async function loadRemoteManagementSnapshot(): Promise<ManagementData> {
   };
 }
 
-async function readV1List<TItem>(endpoint: string, isItem: (value: unknown) => value is TItem): Promise<TItem[]> {
+async function readV1List<TItem>(
+  endpoint: string,
+  isItem: (value: unknown) => value is TItem,
+  options: { dispatchRead?: DsvDispatchReadContext; signal?: AbortSignal } = {},
+): Promise<TItem[]> {
   const items: TItem[] = [];
   let cursor: string | undefined;
   do {
     const path = cursor === undefined
       ? `${endpoint}?limit=100`
       : `${endpoint}?limit=100&cursor=${encodeURIComponent(cursor)}`;
-    const page = await requestV1ReadJson<V1ListPage<unknown>>(path);
-    if (!isV1ListPage(page, isItem)) throw new ApiError(502, 'API v1 관리 목록 형식이 올바르지 않습니다.', page);
-    items.push(...page.items);
-    cursor = page.page?.hasMore === true ? page.page.nextCursor : undefined;
-    if (page.page?.hasMore === true && !cursor) throw new ApiError(502, 'API v1 관리 목록 커서가 올바르지 않습니다.', page);
+    const page = await requestV1ReadJson<V1ListPage<unknown>>(path, {
+      dsvDispatchRead: options.dispatchRead,
+      signal: options.signal,
+    });
+    try {
+      if (!isV1ListPage(page, isItem)) throw new ApiError(502, 'API v1 관리 목록 형식이 올바르지 않습니다.', page);
+      items.push(...page.items);
+      cursor = page.page?.hasMore === true ? page.page.nextCursor : undefined;
+      if (page.page?.hasMore === true && !cursor) throw new ApiError(502, 'API v1 관리 목록 커서가 올바르지 않습니다.', page);
+    } catch (error) {
+      if (options.dispatchRead === undefined) throw error;
+      throw markDsvDispatchParserFailure(error, options.dispatchRead);
+    }
   } while (cursor !== undefined);
   return items;
+}
+
+function dispatchReadOptions(
+  resource: DsvDispatchResource,
+  options: { attempt?: DsvDispatchAttempt; signal?: AbortSignal },
+): { dispatchRead?: DsvDispatchReadContext; signal?: AbortSignal } {
+  return {
+    ...(options.attempt === undefined ? {} : { dispatchRead: { attempt: options.attempt, resource } }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  };
 }
 
 function driverViewModel(driver: V1DriverListItem): ManagementDriver {
@@ -450,10 +487,36 @@ function isV1CustomerListItem(value: unknown): value is V1CustomerListItem {
 }
 
 function isV1DestinationListItem(value: unknown): value is V1DestinationListItem {
-  return hasOnlyKeys(value, ['address', 'destinationId', 'displayName'])
+  return hasOnlyKeys(value, [
+    'address',
+    'destinationId',
+    'displayName',
+    'lunchEntryStatus',
+    'lunchEntryStatusUpdatedAt',
+    'lunchTimeRange',
+    'lunchTimeRangeUpdatedAt',
+    'memo',
+    'memoUpdatedAt',
+    'openTime',
+    'openTimeUpdatedAt',
+    'postalCode',
+    'requiredArrivalTime',
+    'requiredArrivalTimeUpdatedAt',
+  ])
     && isNonEmptyString(value.destinationId)
     && isNonEmptyString(value.displayName)
-    && isOptionalString(value.address);
+    && isOptionalString(value.address)
+    && isOptionalString(value.lunchEntryStatus)
+    && isOptionalDateTimeString(value.lunchEntryStatusUpdatedAt)
+    && isOptionalString(value.lunchTimeRange)
+    && isOptionalDateTimeString(value.lunchTimeRangeUpdatedAt)
+    && isOptionalString(value.memo)
+    && isOptionalDateTimeString(value.memoUpdatedAt)
+    && isOptionalString(value.openTime)
+    && isOptionalDateTimeString(value.openTimeUpdatedAt)
+    && isOptionalString(value.postalCode)
+    && isOptionalString(value.requiredArrivalTime)
+    && isOptionalDateTimeString(value.requiredArrivalTimeUpdatedAt);
 }
 
 function isV1ConditionListItem(value: unknown): value is V1ConditionListItem {
@@ -482,6 +545,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
+}
+
+function isOptionalDateTimeString(value: unknown): value is string | undefined {
+  return value === undefined || (typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Date.parse(value)));
 }
 
 function isOptionalStringArray(value: unknown): value is string[] | undefined {

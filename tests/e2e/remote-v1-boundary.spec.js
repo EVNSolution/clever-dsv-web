@@ -67,9 +67,9 @@ const operationalSettings = {
   forwardDelayAlerts: true,
   gpsSilenceSeconds: 30,
   loadingStartTime: '07:30',
-  manualEmailBody: '안녕하세요.\n\nCLEVER DSV 고객사 배송조회 페이지와 임시 계정 정보를 안내드립니다.\n\n배송조회 페이지:\n임시 아이디:\n임시 비밀번호:\n\n최초 로그인 후 아이디와 비밀번호를 변경해 주세요.',
+  manualEmailBody: '안녕하세요.\n\nCLEVER DSV 고객사 배송조회 계정 설정을 위한 초대 링크를 안내드립니다.\n\n계정 설정 링크:\n링크 만료 시간:\n\n위 링크에서 이름, 아이디, 비밀번호를 직접 등록해 주세요.\n링크가 만료된 경우 담당자에게 새 초대 링크를 요청해 주세요.',
   manualEmailSenderEmail: null,
-  manualEmailSubject: '[CLEVER DSV] 고객사 배송조회 계정 안내',
+  manualEmailSubject: '[CLEVER DSV] 고객사 배송조회 계정 설정 안내',
   plannedDepartureTime: '08:30',
   recordMissingProof: true,
   showTemperatureAlerts: true,
@@ -154,6 +154,7 @@ async function installApiFixtures(page, fixtures) {
     'GET /api/dsv/v1/drivers?limit=100': emptyV1List(),
     'GET /api/dsv/v1/operational-notifications': v1Envelope({ items: [] }, 'g006-empty-notifications'),
     'GET /api/dsv/settings/operations': { data: operationalSettings, error: null },
+    'POST /api/dsv/v1/diagnostics/dispatch-load': v1Envelope({ accepted: true }, 'g007-dispatch-diagnostic'),
     ...fixtures,
   };
   const calls = [];
@@ -1907,6 +1908,45 @@ test('loads the administrator customer map through the customer-scoped contract'
   expect(api.unexpected).toEqual([]);
 });
 
+test('shows an explicit empty customer vehicle state from the scoped delivery API', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(customerSession),
+    'GET /api/dsv/v1/customer/deliveries': v1Envelope({
+      emptyReason: 'NO_DELIVERIES',
+      items: [],
+      page: { hasMore: false },
+      routes: [],
+    }),
+  });
+
+  await page.goto('/customer/delivery-inquiry');
+
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries');
+  await expect(page.getByLabel('차량 목록')).toContainText('0대');
+  await expect(page.getByLabel('차량 목록')).toContainText('배정 차량 없음');
+  await expect(page.getByLabel('배송지 리스트')).toContainText('NO_DELIVERIES');
+  expect(api.unexpected).toEqual([]);
+});
+
+test('blocks the customer vehicle screen when the delivery contract is malformed', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(customerSession),
+    'GET /api/dsv/v1/customer/deliveries': v1Envelope({
+      items: [],
+      page: { hasMore: false },
+      routes: [],
+      vehicles: [],
+    }),
+  });
+
+  await page.goto('/customer/delivery-inquiry');
+
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries');
+  await expect(page.getByRole('alert')).toContainText('고객 배송 조회 응답 형식이 올바르지 않습니다.');
+  await expect(page.getByLabel('차량 목록')).toHaveCount(0);
+  expect(api.unexpected).toEqual([]);
+});
+
 test('grows the customer vehicle list through three rows and scrolls additional vehicles', async ({ page }) => {
   const api = await installApiFixtures(page, {
     'GET /api/dsv/v1/session': v1Envelope(customerSession),
@@ -2358,6 +2398,8 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'GET manual-email',
     'POST manual-email',
     'GET admin-accounts',
+    'GET driver-inquiries',
+    'GET driver-inquiries/[^/]+',
     'POST admin-accounts/invitations',
     'PATCH admin-accounts/[^/]+/status',
     'DELETE admin-accounts/[^/]+/session',
@@ -2394,6 +2436,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'src/services/management.ts',
     'src/services/manual-email.ts',
     'src/services/admin-accounts.ts',
+    'src/services/driver-inquiries.ts',
     'src/services/customer-accounts.ts',
     'src/services/driver-account-links.ts',
     'src/services/settings.ts',

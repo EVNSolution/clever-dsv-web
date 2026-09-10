@@ -62,9 +62,9 @@ function operationSettings(overrides = {}) {
     forwardDelayAlerts: true,
     gpsSilenceSeconds: 30,
     loadingStartTime: '07:30',
-    manualEmailBody: '안녕하세요.\n\nCLEVER DSV 고객사 배송조회 페이지와 임시 계정 정보를 안내드립니다.\n\n배송조회 페이지:\n임시 아이디:\n임시 비밀번호:\n\n최초 로그인 후 아이디와 비밀번호를 변경해 주세요.',
+    manualEmailBody: '안녕하세요.\n\nCLEVER DSV 고객사 배송조회 계정 설정을 위한 초대 링크를 안내드립니다.\n\n계정 설정 링크:\n링크 만료 시간:\n\n위 링크에서 이름, 아이디, 비밀번호를 직접 등록해 주세요.\n링크가 만료된 경우 담당자에게 새 초대 링크를 요청해 주세요.',
     manualEmailSenderEmail: null,
-    manualEmailSubject: '[CLEVER DSV] 고객사 배송조회 계정 안내',
+    manualEmailSubject: '[CLEVER DSV] 고객사 배송조회 계정 설정 안내',
     plannedDepartureTime: '08:30',
     recordMissingProof: true,
     showTemperatureAlerts: true,
@@ -86,6 +86,7 @@ async function installApiFixtures(page, fixtures) {
     'GET /api/dsv/v1/operational-notifications': v1Envelope({ items: [] }, 'g006-parity-empty-notifications'),
     'GET /api/dsv/manual-email': legacyEnvelope({ apiConfigured: false, configured: false, defaultRecipients: [], defaultSubject: operationSettings().manualEmailSubject, defaultTextContent: operationSettings().manualEmailBody, senderEmail: null, senderName: 'CLEVER DSV' }),
     'GET /api/dsv/settings/operations': legacyEnvelope(operationSettings()),
+    'POST /api/dsv/v1/diagnostics/dispatch-load': v1Envelope({ accepted: true }, 'g007-dispatch-diagnostic'),
     ...fixtures,
   };
   const calls = [];
@@ -94,7 +95,18 @@ async function installApiFixtures(page, fixtures) {
     const request = route.request();
     const url = new URL(request.url());
     const key = `${request.method()} ${url.pathname}${url.search}`;
-    const call = { key, method: request.method(), path: url.pathname, search: url.search };
+    const headers = request.headers();
+    const call = {
+      key,
+      method: request.method(),
+      path: url.pathname,
+      search: url.search,
+      dsvDispatchHeaders: {
+        attemptId: headers['x-dsv-attempt-id'],
+        callerSurface: headers['x-caller-surface'],
+        loadId: headers['x-dsv-load-id'],
+      },
+    };
     calls.push(call);
     const pathKey = `${request.method()} ${url.pathname}`;
     if (!Object.hasOwn(resolvedFixtures, key) && !Object.hasOwn(resolvedFixtures, pathKey)) {
@@ -107,7 +119,8 @@ async function installApiFixtures(page, fixtures) {
       return;
     }
     const fixture = resolvedFixtures[key] ?? resolvedFixtures[pathKey];
-    const resolved = typeof fixture === 'function' ? await fixture({ request, url, call }) : fixture;
+    const resolved = typeof fixture === 'function' ? await fixture({ request, route, url, call }) : fixture;
+    if (resolved === undefined) return;
     await route.fulfill({
       contentType: 'application/json',
       status: resolved.status ?? 200,
@@ -209,6 +222,26 @@ function managementListFixtures(overrides = {}) {
 
 function dispatchPageFixture() {
   return v1Envelope({ items: [], page: { hasMore: false } }, 'g006-dispatch-empty');
+}
+
+function currentDestinationFixture(overrides = {}) {
+  return {
+    address: 'Seoul Canonical Address 6006',
+    destinationId: 'destination-g006',
+    displayName: 'Canonical Destination G006',
+    lunchEntryStatus: 'AVAILABLE',
+    lunchEntryStatusUpdatedAt: '2026-09-07T00:00:00.000Z',
+    lunchTimeRange: '12:00~13:00',
+    lunchTimeRangeUpdatedAt: '2026-09-07T00:00:00.000Z',
+    memo: 'rear entrance',
+    memoUpdatedAt: '2026-09-07T00:00:00.000Z',
+    openTime: '08:30',
+    openTimeUpdatedAt: '2026-09-07T00:00:00.000Z',
+    postalCode: '04050',
+    requiredArrivalTime: '10:30',
+    requiredArrivalTimeUpdatedAt: '2026-09-07T00:00:00.000Z',
+    ...overrides,
+  };
 }
 
 function dispatchFixtures(fixtures = {}) {
@@ -1068,6 +1101,8 @@ test('dispatch keeps the last valid service date when the date input is cleared'
   await dateInput.fill('');
 
   await expect(dateInput).toHaveValue(initialDate);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByText('표시할 배송지가 없습니다.')).toBeVisible();
   expect(api.calls.filter((call) => call.path === '/api/dsv/v1/dispatches')).toHaveLength(1);
   expect(api.calls.some((call) => call.key.endsWith('serviceDate='))).toBe(false);
   expectOnlyFixtureCalls(api);
@@ -1192,6 +1227,10 @@ test('dispatch selects multiple destinations with a map polygon', async ({ page 
 
 test('dispatch keeps past service dates read-only in the same workspace', async ({ page }) => {
   const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/destinations?limit=100': v1Envelope({
+      items: [currentDestinationFixture()],
+      page: { hasMore: false },
+    }, 'g006-dispatch-current-destination-contract'),
     'GET /api/dsv/v1/dispatches': v1Envelope({
       items: [{
         assignmentStatus: 'ASSIGNED',
@@ -1216,9 +1255,488 @@ test('dispatch keeps past service dates read-only in the same workspace', async 
   await expect(page.getByText('지난 배차는 조회만 가능합니다.')).toBeVisible();
   await expect(page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배정 해제' })).toBeDisabled();
   await expect(page.getByRole('region', { name: '배송원' }).getByRole('button', { name: '배송 삭제' })).toBeDisabled();
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await expect(page.locator('.dispatch-order-table')).toContainText('SELLER-G006-PAST');
+  await expect(page.getByRole('alert')).toHaveCount(0);
   await expect.poll(() => api.calls.some((call) => call.key.includes('serviceDate=2020-01-01'))).toBe(true);
   expectOnlyFixtureCalls(api);
 });
+
+test('dispatch replaces aborted date loads, starts new search loads, and scopes diagnostic headers', async ({ page }) => {
+  const diagnostics = [];
+  const dispatchItem = (suffix) => ({
+    assignmentStatus: 'UNASSIGNED',
+    customerId: 'customer-g006',
+    destinationDisplayName: `Canonical ${suffix} Destination`,
+    destinationId: `destination-g006-${suffix.toLowerCase()}`,
+    etaStatus: 'NOT_REQUIRED',
+    sellerOrderId: `seller-order-g006-${suffix.toLowerCase()}`,
+    sellerOrderKey: `SELLER-G006-${suffix.toUpperCase()}`,
+  });
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': async ({ route, url }) => {
+      const serviceDate = url.searchParams.get('serviceDate');
+      const destinationName = url.searchParams.get('destinationName');
+      if (serviceDate !== '2020-01-01') {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        await route.fulfill({
+          body: JSON.stringify(v1Envelope({ items: [dispatchItem('Stale')], page: { hasMore: false } }, 'g007-stale-dispatch')),
+          contentType: 'application/json',
+        }).catch(() => undefined);
+        return undefined;
+      }
+      return v1Envelope({
+        items: [dispatchItem(destinationName === 'Needle' ? 'Search' : 'Past')],
+        page: { hasMore: false },
+      }, destinationName === 'Needle' ? 'g007-search-dispatch' : 'g007-past-dispatch');
+    },
+    'POST /api/dsv/v1/diagnostics/dispatch-load': async ({ request }) => {
+      diagnostics.push(await request.postDataJSON());
+      return v1Envelope({ accepted: true }, `g007-load-lifecycle-${diagnostics.length}`);
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await expect.poll(() => api.calls.filter((call) => call.path === '/api/dsv/v1/dispatches').length).toBe(1);
+  await page.getByLabel('배차일 선택').fill('2020-01-01');
+  await page.getByRole('button', { name: '목록', exact: true }).click();
+  await expect(page.locator('.dispatch-order-table')).toContainText('SELLER-G006-PAST');
+  await expect(page.locator('.dispatch-order-table')).not.toContainText('SELLER-G006-STALE');
+
+  await page.getByLabel('배송처 검색').fill('Needle');
+  await page.getByRole('button', { name: '검색', exact: true }).click();
+  await expect(page.locator('.dispatch-order-table')).toContainText('SELLER-G006-SEARCH');
+  await page.waitForTimeout(650);
+  await expect(page.locator('.dispatch-order-table')).not.toContainText('SELLER-G006-STALE');
+  await expect.poll(() => diagnostics.length).toBe(3);
+
+  expect(diagnostics).toEqual(expect.arrayContaining([
+    expect.objectContaining({ attemptKind: 'initial', outcome: 'aborted' }),
+    expect.objectContaining({ attemptKind: 'initial', outcome: 'success', serviceDate: '2020-01-01' }),
+  ]));
+  expect(new Set(diagnostics.map((diagnostic) => diagnostic.loadId)).size).toBe(3);
+  expect(new Set(diagnostics.map((diagnostic) => diagnostic.attemptId)).size).toBe(3);
+  expect(api.calls.some((call) => call.search.includes('serviceDate=2020-01-01') && call.search.includes('destinationName=Needle'))).toBe(true);
+
+  const instrumentedPaths = new Set([
+    '/api/dsv/v1/customers',
+    '/api/dsv/v1/destinations',
+    '/api/dsv/v1/dispatches',
+    '/api/dsv/v1/drivers',
+    '/api/dsv/v1/vehicles',
+  ]);
+  for (const call of api.calls) {
+    if (call.method === 'GET' && instrumentedPaths.has(call.path)) {
+      expect(call.dsvDispatchHeaders).toMatchObject({ callerSurface: 'dsv-dispatch' });
+      expect(call.dsvDispatchHeaders.loadId).toEqual(expect.any(String));
+      expect(call.dsvDispatchHeaders.attemptId).toEqual(expect.any(String));
+      continue;
+    }
+    expect(call.dsvDispatchHeaders).toEqual({ attemptId: undefined, callerSurface: undefined, loadId: undefined });
+  }
+  expectOnlyFixtureCalls(api);
+});
+
+test('dispatch keeps a response-body AbortError as one aborted attempt without a duplicate failure', async ({ page }) => {
+  await page.addInitScript(() => {
+    const nativeFetch = window.fetch.bind(window);
+    window.__dispatchBodyStreamReads = 0;
+    window.fetch = (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (method === 'GET' && url.pathname === '/api/dsv/v1/dispatches' && url.searchParams.get('serviceDate') !== '2020-01-01') {
+        window.__dispatchBodyStreamReads += 1;
+        const signal = init?.signal;
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"data":'));
+            const abort = () => controller.error(new DOMException('stale dispatch load', 'AbortError'));
+            if (signal?.aborted) abort();
+            else signal?.addEventListener('abort', abort, { once: true });
+          },
+        });
+        return Promise.resolve(new Response(stream, {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200,
+        }));
+      }
+      return nativeFetch(input, init);
+    };
+  });
+  const diagnostics = [];
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+    'POST /api/dsv/v1/diagnostics/dispatch-load': async ({ request }) => {
+      diagnostics.push(await request.postDataJSON());
+      return v1Envelope({ accepted: true }, `g007-body-abort-${diagnostics.length}`);
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await expect.poll(() => page.evaluate(() => window.__dispatchBodyStreamReads)).toBe(1);
+  await page.getByLabel('배차일 선택').fill('2020-01-01');
+  await expect(page.getByText('표시할 배송지가 없습니다.')).toBeVisible();
+  await expect.poll(() => diagnostics.length).toBe(2);
+  expect(diagnostics.filter((diagnostic) => diagnostic.outcome === 'aborted')).toHaveLength(1);
+  expect(diagnostics.filter((diagnostic) => diagnostic.outcome === 'success')).toHaveLength(1);
+  expect(diagnostics.filter((diagnostic) => diagnostic.outcome === 'failure')).toHaveLength(0);
+  expect(new Set(diagnostics.map((diagnostic) => diagnostic.attemptId)).size).toBe(2);
+  expectOnlyFixtureCalls(api);
+});
+
+test('dispatch retries after a destination parser failure without hiding the first error', async ({ page }) => {
+  let destinationReads = 0;
+  const diagnostics = [];
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/destinations?limit=100': () => {
+      destinationReads += 1;
+      return v1Envelope({
+        items: [currentDestinationFixture(destinationReads === 1 ? { unsupportedField: true } : {})],
+        page: { hasMore: false },
+      }, `g006-dispatch-destination-retry-${destinationReads}`);
+    },
+    'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+    'GET /api/dsv/v1/drivers?limit=100': v1Envelope({
+      items: [],
+      page: { hasMore: true, nextCursor: 'drivers-page-2' },
+    }, 'g006-dispatch-drivers-page-1'),
+    'GET /api/dsv/v1/drivers?limit=100&cursor=drivers-page-2': v1Envelope({
+      items: [],
+      page: { hasMore: false },
+    }, 'g006-dispatch-drivers-page-2'),
+    'POST /api/dsv/v1/diagnostics/dispatch-load': async ({ request }) => {
+      diagnostics.push(await request.postDataJSON());
+      return v1Envelope({ accepted: true }, `g007-dispatch-diagnostic-${diagnostics.length}`);
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await expect(page.getByRole('alert')).toContainText('API v1 관리 목록 형식이 올바르지 않습니다.');
+  await expect.poll(() => diagnostics.length).toBe(1);
+  await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByText('표시할 배송지가 없습니다.')).toBeVisible();
+  await expect.poll(() => diagnostics.length).toBe(2);
+  expect(destinationReads).toBe(2);
+  expect(diagnostics[0]).toMatchObject({
+    apiVersion: 'dsv.v1',
+    attemptKind: 'initial',
+    contentType: 'application/json',
+    errorCode: 'LIST_PARSER_INVALID',
+    failedResource: 'destinations',
+    failureStage: 'parser',
+    httpStatus: 200,
+    outcome: 'failure',
+    responseRequestId: 'g006-dispatch-destination-retry-1',
+    source: 'browser',
+  });
+  expect(diagnostics[1]).toMatchObject({
+    attemptKind: 'retry',
+    loadId: diagnostics[0].loadId,
+    outcome: 'success',
+    source: 'browser',
+  });
+  expect(diagnostics[1].attemptId).not.toBe(diagnostics[0].attemptId);
+  for (const diagnostic of diagnostics) {
+    expect(diagnostic.attemptId).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(diagnostic.loadId).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(diagnostic.durationMs).toEqual(expect.any(Number));
+  }
+  for (const call of api.calls.filter((candidate) => candidate.method === 'GET' && [
+    '/api/dsv/v1/customers',
+    '/api/dsv/v1/destinations',
+    '/api/dsv/v1/dispatches',
+    '/api/dsv/v1/drivers',
+    '/api/dsv/v1/vehicles',
+  ].includes(candidate.path))) {
+    expect(call.dsvDispatchHeaders.callerSurface).toBe('dsv-dispatch');
+    expect(diagnostics.map((diagnostic) => diagnostic.attemptId)).toContain(call.dsvDispatchHeaders.attemptId);
+    expect(call.dsvDispatchHeaders.loadId).toBe(diagnostics[0].loadId);
+  }
+  expect(api.calls.filter((call) => call.path === '/api/dsv/v1/drivers')).toHaveLength(4);
+  expectOnlyFixtureCalls(api);
+});
+
+test('dispatch diagnostics never alter successful reads, retries, or authentication state', async ({ browser }) => {
+  const scenarios = [
+    { label: '401', exerciseRetry: true, fixture: v1Error(401, 'diagnostic unauthenticated') },
+    { label: '403', fixture: v1Error(403, 'diagnostic forbidden') },
+    { label: '500', exerciseRetry: true, fixture: v1Error(500, 'diagnostic failed') },
+    {
+      label: 'network',
+      fixture: async ({ route }) => {
+        await route.abort('failed');
+      },
+    },
+    {
+      label: 'timeout',
+      exerciseRetry: true,
+      fixture: async ({ route }) => {
+        await new Promise((resolve) => setTimeout(resolve, 1_700));
+        await route.abort('timedout').catch(() => undefined);
+      },
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const page = await browser.newPage();
+    let destinationReads = 0;
+    const diagnostics = [];
+    const fixtures = {
+      'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+      'POST /api/dsv/v1/diagnostics/dispatch-load': async (args) => {
+        diagnostics.push(await args.request.postDataJSON());
+        if (diagnostics.length > 1) {
+          return v1Envelope({ accepted: true }, `g007-diagnostic-retry-${scenario.label}`);
+        }
+        return typeof scenario.fixture === 'function' ? scenario.fixture(args) : scenario.fixture;
+      },
+    };
+    if (scenario.exerciseRetry) {
+      fixtures['GET /api/dsv/v1/destinations?limit=100'] = () => {
+        destinationReads += 1;
+        return v1Envelope({
+          items: [currentDestinationFixture(destinationReads === 1 ? { unsupportedField: true } : {})],
+          page: { hasMore: false },
+        }, `g006-diagnostic-retry-${scenario.label}-${destinationReads}`);
+      };
+    }
+    const api = await installApiFixtures(page, adminFixtures(dispatchFixtures(fixtures)));
+    const firstDiagnosticSettled = scenario.exerciseRetry
+      ? scenario.label === 'timeout'
+        ? page.waitForEvent('requestfailed', {
+            predicate: (request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/dsv/v1/diagnostics/dispatch-load',
+          })
+        : page.waitForResponse((response) => response.request().method() === 'POST'
+          && new URL(response.url()).pathname === '/api/dsv/v1/diagnostics/dispatch-load')
+      : null;
+
+    await page.goto('/dispatch');
+    if (scenario.exerciseRetry) {
+      await expect(page.getByRole('alert'), scenario.label).toContainText('API v1 관리 목록 형식이 올바르지 않습니다.');
+    } else {
+      await expect(page.getByText('표시할 배송지가 없습니다.'), scenario.label).toBeVisible();
+      await expect(page.getByRole('button', { name: '다시 시도', exact: true }), scenario.label).toHaveCount(0);
+    }
+    await expect.poll(() => diagnostics.length, { message: scenario.label }).toBe(1);
+    if (firstDiagnosticSettled !== null) await firstDiagnosticSettled;
+    expect(api.calls.filter((call) => call.key === 'GET /api/dsv/v1/session'), scenario.label).toHaveLength(1);
+    expect(api.calls.filter((call) => call.path === '/api/dsv/v1/diagnostics/dispatch-load'), scenario.label).toHaveLength(1);
+    await expect(page, scenario.label).toHaveURL(/\/dispatch$/u);
+
+    if (scenario.exerciseRetry) {
+      await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+      await expect(page.getByRole('alert'), scenario.label).toHaveCount(0);
+      await expect(page.getByText('표시할 배송지가 없습니다.'), scenario.label).toBeVisible();
+      await expect.poll(() => diagnostics.length, { message: scenario.label }).toBe(2);
+      if (scenario.label === 'timeout') await page.waitForTimeout(1_700);
+      expect(destinationReads, scenario.label).toBe(2);
+      expect(diagnostics[0], scenario.label).toMatchObject({ attemptKind: 'initial', outcome: 'failure' });
+      expect(diagnostics[1], scenario.label).toMatchObject({
+        attemptKind: 'retry',
+        loadId: diagnostics[0].loadId,
+        outcome: 'success',
+      });
+      expect(diagnostics[1].attemptId, scenario.label).not.toBe(diagnostics[0].attemptId);
+      expect(api.calls.filter((call) => call.path === '/api/dsv/v1/diagnostics/dispatch-load'), scenario.label).toHaveLength(2);
+      expect(api.calls.filter((call) => call.key === 'GET /api/dsv/v1/session'), scenario.label).toHaveLength(1);
+    }
+
+    expectOnlyFixtureCalls(api);
+    await page.close();
+  }
+});
+
+test('dispatch diagnostic preparation failures remain fully fire-and-forget', async ({ page }) => {
+  const diagnostics = [];
+  let dispatchReads = 0;
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': () => {
+      dispatchReads += 1;
+      return dispatchPageFixture();
+    },
+    'POST /api/dsv/v1/diagnostics/dispatch-load': async ({ request }) => {
+      diagnostics.push(await request.postDataJSON());
+      return v1Envelope({ accepted: true }, `g007-preparation-${diagnostics.length}`);
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await expect(page.getByText('표시할 배송지가 없습니다.')).toBeVisible();
+  await expect.poll(() => diagnostics.length).toBe(1);
+  await page.evaluate(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    let rejectDiagnosticTimer = true;
+    window.setTimeout = (handler, timeout, ...args) => {
+      if (rejectDiagnosticTimer && timeout === 1_500) {
+        rejectDiagnosticTimer = false;
+        throw new Error('diagnostic timer preparation failed');
+      }
+      return nativeSetTimeout(handler, timeout, ...args);
+    };
+  });
+
+  await page.getByLabel('배송처 검색').fill('Needle');
+  await page.getByRole('button', { name: '검색', exact: true }).click();
+  await expect.poll(() => dispatchReads).toBe(2);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect.poll(() => api.calls.some((call) => call.search.includes('destinationName=Needle'))).toBe(true);
+  await page.waitForTimeout(100);
+  expect(diagnostics).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
+  expect(api.calls.filter((call) => call.key === 'GET /api/dsv/v1/session')).toHaveLength(1);
+  await expect(page).toHaveURL(/\/dispatch$/u);
+  expectOnlyFixtureCalls(api);
+});
+
+test('dispatch diagnostics classify the actual read failure boundary', async ({ browser }) => {
+  const scenarios = [
+    {
+      expected: { errorCode: 'NETWORK_ERROR', failureStage: 'transport' },
+      fixture: async ({ route }) => {
+        await route.abort('failed');
+      },
+      label: 'transport',
+    },
+    {
+      expected: {
+        apiVersion: 'missing',
+        contentType: 'application/json',
+        errorCode: 'HTTP_ERROR',
+        failureStage: 'http',
+        httpStatus: 503,
+        responseRequestId: 'g006-parity-error-503',
+      },
+      fixture: v1Error(503, 'dispatch unavailable'),
+      label: 'http',
+    },
+    {
+      expected: { contentType: 'text/html', errorCode: 'CONTENT_TYPE_ERROR', failureStage: 'content_type', httpStatus: 200 },
+      fixture: async ({ route }) => {
+        await route.fulfill({ body: '<html>not json</html>', contentType: 'text/html' });
+      },
+      label: 'content type',
+    },
+    {
+      expected: { contentType: 'application/json', errorCode: 'JSON_PARSE_ERROR', failureStage: 'json', httpStatus: 200 },
+      fixture: async ({ route }) => {
+        await route.fulfill({ body: '{', contentType: 'application/json' });
+      },
+      label: 'json',
+    },
+    {
+      expected: {
+        apiVersion: 'invalid',
+        contentType: 'application/json',
+        errorCode: 'V1_ENVELOPE_INVALID',
+        failureStage: 'envelope',
+        httpStatus: 200,
+        responseRequestId: 'g007-invalid-envelope',
+      },
+      fixture: { data: { items: [], page: { hasMore: false } }, meta: { apiVersion: 'legacy' }, requestId: 'g007-invalid-envelope' },
+      label: 'envelope',
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const diagnostics = [];
+    const page = await browser.newPage();
+    const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+      'GET /api/dsv/v1/dispatches': scenario.fixture,
+      'POST /api/dsv/v1/diagnostics/dispatch-load': async ({ request }) => {
+        diagnostics.push(await request.postDataJSON());
+        return v1Envelope({ accepted: true }, `g007-${scenario.label}-diagnostic`);
+      },
+    })));
+
+    await page.goto('/dispatch');
+    await expect(page.getByRole('alert'), scenario.label).toContainText('배차 정보를 불러오지 못했습니다.');
+    if (scenario.label === 'json') {
+      await expect(page.getByRole('alert')).toContainText('API가 올바른 JSON을 반환하지 않았습니다.');
+    }
+    await expect.poll(() => diagnostics.length, { message: scenario.label }).toBe(1);
+    expect(diagnostics[0]).toMatchObject({
+      attemptKind: 'initial',
+      failedResource: 'dispatches',
+      outcome: 'failure',
+      ...scenario.expected,
+    });
+    expect(api.calls.filter((call) => call.path === '/api/dsv/v1/diagnostics/dispatch-load'), scenario.label).toHaveLength(1);
+    expectOnlyFixtureCalls(api);
+    await page.close();
+  }
+});
+
+test('dispatch classifies a response-body stream failure as transport after HTTP 200 headers', async ({ page }) => {
+  await page.addInitScript(() => {
+    const nativeFetch = window.fetch.bind(window);
+    let failed = false;
+    window.fetch = (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (!failed && method === 'GET' && url.pathname === '/api/dsv/v1/dispatches') {
+        failed = true;
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('{"data":'));
+            controller.error(new TypeError('response stream interrupted'));
+          },
+        });
+        return Promise.resolve(new Response(stream, {
+          headers: { 'Content-Type': 'application/json', 'X-Request-Id': 'g007-stream-failure' },
+          status: 200,
+        }));
+      }
+      return nativeFetch(input, init);
+    };
+  });
+  const diagnostics = [];
+  const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+    'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+    'POST /api/dsv/v1/diagnostics/dispatch-load': async ({ request }) => {
+      diagnostics.push(await request.postDataJSON());
+      return v1Envelope({ accepted: true }, 'g007-stream-failure-diagnostic');
+    },
+  })));
+
+  await page.goto('/dispatch');
+  await expect(page.getByRole('alert')).toContainText('배차 정보를 불러오지 못했습니다.');
+  await expect.poll(() => diagnostics.length).toBe(1);
+  expect(diagnostics[0]).toMatchObject({
+    attemptKind: 'initial',
+    contentType: 'application/json',
+    errorCode: 'NETWORK_ERROR',
+    failedResource: 'dispatches',
+    failureStage: 'transport',
+    httpStatus: 200,
+    outcome: 'failure',
+    responseRequestId: 'g007-stream-failure',
+  });
+  expectOnlyFixtureCalls(api);
+});
+
+for (const invalidDestination of [
+  { label: 'wrong field types', overrides: { memo: 42 } },
+  { label: 'invalid timestamps', overrides: { memoUpdatedAt: 'not-a-date' } },
+]) {
+  test(`dispatch rejects destination ${invalidDestination.label}`, async ({ page }) => {
+    const api = await installApiFixtures(page, adminFixtures(dispatchFixtures({
+      'GET /api/dsv/v1/destinations?limit=100': v1Envelope({
+        items: [currentDestinationFixture(invalidDestination.overrides)],
+        page: { hasMore: false },
+      }, `g006-dispatch-destination-${invalidDestination.label.replaceAll(' ', '-')}`),
+      'GET /api/dsv/v1/dispatches': dispatchPageFixture(),
+    })));
+
+    await page.goto('/dispatch');
+
+    await expect(page.getByRole('alert')).toContainText('API v1 관리 목록 형식이 올바르지 않습니다.');
+    expectOnlyFixtureCalls(api);
+  });
+}
 
 test('dispatch read failure is visible and leaves the dispatch sentinel untouched', async ({ page }) => {
   const key = 'clever.dispatch.last-import';
@@ -1656,17 +2174,17 @@ test('management copies the install link when operating system sharing fails', a
   expectOnlyFixtureCalls(api);
 });
 
-test('customer detail manages customer accounts without exposing passwords', async ({ page }) => {
+test('customer detail manages customer accounts without exposing passwords', async ({ page, context }) => {
   let inviteBody;
   let statusBody;
   const invitedAccount = {
-    displayName: '초대 담당자',
-    email: 'customer@example.com',
+    displayName: null,
+    email: null,
     id: 'customer-account-invited',
     invitedAt: '2026-08-03T08:00:00.000Z',
     inviteExpiresAt: '2026-08-10T08:00:00.000Z',
     lastAuthenticatedAt: null,
-    loginId: 'direct-login',
+    loginId: null,
     status: 'INVITED',
   };
   const activeAccount = {
@@ -1684,15 +2202,16 @@ test('customer detail manages customer accounts without exposing passwords', asy
     'GET /api/dsv/customers/customer-g006/accounts': legacyEnvelope({ accounts: [activeAccount] }),
     'POST /api/dsv/customers/customer-g006/accounts/invitations': ({ request }) => {
       inviteBody = request.postDataJSON();
-      return { ...legacyEnvelope({ account: invitedAccount }), status: 201 };
+      return { ...legacyEnvelope({ account: invitedAccount, invitation: { expiresAt: '2026-08-10T08:00:00.000Z', setupUrl: 'https://dsv.cleversystem.ai/customer/account/setup#token=signup-token' } }), status: 201 };
     },
-    'POST /api/dsv/customer-accounts/customer-account-invited/reinvite': legacyEnvelope({ account: { ...invitedAccount, inviteExpiresAt: '2026-08-11T08:00:00.000Z' } }),
+    'POST /api/dsv/customer-accounts/customer-account-invited/reinvite': legacyEnvelope({ account: { ...invitedAccount, inviteExpiresAt: '2026-08-11T08:00:00.000Z' }, invitation: { expiresAt: '2026-08-11T08:00:00.000Z', setupUrl: 'https://dsv.cleversystem.ai/customer/account/setup#token=reissued-token' } }),
     'POST /api/dsv/customer-accounts/customer-account-active/password-reset': legacyEnvelope({ account: activeAccount }),
     'PATCH /api/dsv/customer-accounts/customer-account-active/status': ({ request }) => {
       statusBody = request.postDataJSON();
       return legacyEnvelope({ account: { ...activeAccount, status: 'DISABLED' } });
     },
   }));
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 
   await page.goto('/master-data');
   await page.getByRole('button', { name: '고객사', exact: true }).click();
@@ -1706,23 +2225,23 @@ test('customer detail manages customer accounts without exposing passwords', asy
 
   await panel.getByRole('button', { name: '계정 발급', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '고객 계정 발급' });
-  await dialog.getByLabel('수신자 이메일').fill('customer@example.com');
-  await dialog.getByLabel('표시 이름').fill('초대 담당자');
-  await dialog.getByLabel('직접 지정').check();
-  await dialog.getByLabel('직접 로그인 아이디').fill('direct-login');
-  await expect(dialog.getByLabel('발급 이메일 미리보기')).toContainText('48시간 동안 한 번만 사용할 수 있습니다.');
-  await expect(dialog.getByLabel('발급 이메일 미리보기')).toContainText('direct-login');
-  await expect(dialog.getByLabel('발급 이메일 미리보기')).toContainText('/customer/login');
-  await expect(dialog.getByLabel('발급 이메일 미리보기')).toContainText('고객이 설정 화면에서 직접 만듭니다.');
+  await expect(dialog).not.toContainText('수신자 이메일');
+  await expect(dialog).not.toContainText('로그인 아이디 방식');
   await expect(dialog).not.toContainText('임시 비밀번호');
-  await dialog.getByRole('button', { name: '발급 이메일 보내기', exact: true }).click();
-  await expect(panel.getByRole('status').filter({ hasText: '초대 이메일 발송을 요청했습니다.' })).toBeVisible();
-  await expect(panel.getByText('초대 담당자')).toBeVisible();
-  await expect(panel.getByText('direct-login')).toBeVisible();
-  expect(inviteBody).toEqual({ email: 'customer@example.com', displayName: '초대 담당자', loginId: 'direct-login' });
+  await dialog.getByRole('button', { name: '임시 링크 생성', exact: true }).click();
+  await expect(dialog.getByLabel('임시 초대 링크')).toContainText('만료 시각');
+  await expect(dialog.getByLabel('고객 가입 링크')).toHaveValue('https://dsv.cleversystem.ai/customer/account/setup#token=signup-token');
+  await expect(dialog).not.toContainText('임시 비밀번호');
+  await dialog.getByRole('button', { name: '초대 링크 복사', exact: true }).click();
+  await expect(dialog.getByRole('status').filter({ hasText: '초대 링크를 복사했습니다.' })).toBeVisible();
+  await dialog.getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(panel.getByRole('status').filter({ hasText: '임시 초대 링크를 생성했습니다.' })).toBeVisible();
+  expect(inviteBody).toEqual({});
 
-  await panel.getByRole('row').filter({ hasText: '초대 담당자' }).getByRole('button', { name: '재초대', exact: true }).click();
-  await expect(panel.getByRole('status').filter({ hasText: '재초대 이메일 발송을 요청했습니다.' })).toBeVisible();
+  await panel.getByRole('row').filter({ hasText: '고객 계정' }).getByRole('button', { name: '재초대', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '고객 계정 발급' }).getByLabel('고객 가입 링크')).toHaveValue('https://dsv.cleversystem.ai/customer/account/setup#token=reissued-token');
+  await page.getByRole('dialog', { name: '고객 계정 발급' }).getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(panel.getByRole('status').filter({ hasText: '새 임시 초대 링크를 생성했습니다.' })).toBeVisible();
 
   await panel.getByRole('row').filter({ hasText: '기존 담당자' }).getByRole('button', { name: '재설정', exact: true }).click();
   await expect(panel.getByRole('status').filter({ hasText: '비밀번호 재설정 이메일 발송을 요청했습니다.' })).toBeVisible();
@@ -1733,16 +2252,74 @@ test('customer detail manages customer accounts without exposing passwords', asy
   expectOnlyFixtureCalls(api);
 });
 
-test('customer signup uses reserved login ID and returned session', async ({ page }) => {
+test('customer switch isolates a delayed invitation response from the newly selected customer', async ({ page }) => {
+  let releaseInvitation;
+  let markInvitationStarted;
+  const invitationStarted = new Promise((resolve) => { markInvitationStarted = resolve; });
+  const api = await installApiFixtures(page, adminFixtures(managementListFixtures({
+    'GET /api/dsv/v1/customers?limit=100': v1Envelope({
+      items: [
+        { customerId: 'customer-a', displayName: 'Customer A', externalCustomerCode: 'A', orderCount: 1, status: 'ACTIVE' },
+        { customerId: 'customer-b', displayName: 'Customer B', externalCustomerCode: 'B', orderCount: 1, status: 'ACTIVE' },
+      ],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/customers/customer-a/accounts': legacyEnvelope({ accounts: [] }),
+    'GET /api/dsv/customers/customer-b/accounts': legacyEnvelope({ accounts: [] }),
+    'POST /api/dsv/customers/customer-a/accounts/invitations': async () => {
+      markInvitationStarted();
+      await new Promise((resolve) => { releaseInvitation = resolve; });
+      return legacyEnvelope({
+        account: {
+          displayName: null,
+          email: null,
+          id: 'delayed-account-a',
+          invitedAt: '2026-09-08T00:00:00.000Z',
+          inviteExpiresAt: '2026-09-10T00:00:00.000Z',
+          lastAuthenticatedAt: null,
+          loginId: null,
+          status: 'INVITED',
+        },
+        invitation: {
+          expiresAt: '2026-09-10T00:00:00.000Z',
+          setupUrl: 'https://dsv.cleversystem.ai/customer/account/setup#token=delayed-a',
+        },
+      });
+    },
+  })));
+
+  await page.goto('/master-data');
+  await page.getByRole('button', { name: '고객사', exact: true }).click();
+  await page.getByRole('row').filter({ hasText: 'Customer A' }).click();
+  const panelA = page.getByLabel('고객 계정 관리');
+  await panelA.getByRole('button', { name: '계정 발급', exact: true }).click();
+  const invitationResponse = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().includes('/customers/customer-a/accounts/invitations'));
+  await page.getByRole('dialog', { name: '고객 계정 발급' }).getByRole('button', { name: '임시 링크 생성', exact: true }).click();
+  await invitationStarted;
+  await page.getByRole('button', { name: '고객 계정 발급 닫기' }).click();
+  await page.getByRole('row').filter({ hasText: 'Customer B' }).click();
+  const panelB = page.getByLabel('고객 계정 관리');
+  await expect(panelB).toContainText('등록된 고객 계정이 없습니다.');
+
+  releaseInvitation();
+  await invitationResponse;
+
+  await expect(page.getByRole('dialog', { name: '고객 계정 발급' })).toHaveCount(0);
+  await expect(panelB).not.toContainText('delayed-account-a');
+  await expect(panelB).not.toContainText('임시 초대 링크를 생성했습니다.');
+  expectOnlyFixtureCalls(api);
+});
+
+test('customer signup collects name and login ID and uses the returned session', async ({ page }) => {
   let completeBody;
   const serviceDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
   const api = await installApiFixtures(page, {
     'POST /api/dsv/customer/auth/invitations/validate': legacyEnvelope({
       customerName: 'Canonical Customer G006',
-      displayName: '초대 담당자',
-      email: 'customer@example.com',
+      displayName: null,
+      email: null,
       expiresAt: '2026-08-10T08:00:00.000Z',
-      loginId: 'reserved-login',
+      loginId: null,
       purpose: 'SIGNUP',
     }),
     'POST /api/dsv/customer/auth/complete': ({ request }) => {
@@ -1761,15 +2338,66 @@ test('customer signup uses reserved login ID and returned session', async ({ pag
   });
 
   await page.goto('/customer/account/setup#token=signup-token');
-  await expect(page.getByLabel('Login ID')).toHaveValue('reserved-login');
-  await expect(page.getByLabel('Login ID')).toHaveAttribute('readonly', '');
+  await page.getByLabel('Name').fill('신규 담당자');
+  await page.getByLabel('Login ID').fill('new-customer');
+  await expect(page.getByLabel('Login ID')).not.toHaveAttribute('readonly', '');
   await page.getByLabel('Password', { exact: true }).fill('StrongPassw0rd!');
   await page.getByLabel('Confirm password').fill('StrongPassw0rd!');
   await page.getByRole('button', { name: '계정 설정 완료', exact: true }).click();
 
   await expect(page).toHaveURL(/\/customer\/delivery-inquiry$/u);
-  expect(completeBody).toEqual({ password: 'StrongPassw0rd!', shopDomain: 'dsv-demo.local', token: 'signup-token' });
+  expect(completeBody).toEqual({ displayName: '신규 담당자', loginId: 'new-customer', password: 'StrongPassw0rd!', shopDomain: 'dsv-demo.local', token: 'signup-token' });
   await expect.poll(() => page.evaluate(() => sessionStorage.getItem('clever.auth.csrf'))).toBe('customer-csrf-token');
+  expectOnlyFixtureCalls(api);
+});
+
+test('customer password reset keeps the existing login ID read only', async ({ page }) => {
+  let completeBody;
+  const serviceDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+  const api = await installApiFixtures(page, {
+    'POST /api/dsv/customer/auth/invitations/validate': legacyEnvelope({
+      customerName: 'Canonical Customer G006',
+      displayName: '기존 담당자',
+      email: 'active@example.com',
+      expiresAt: '2026-08-10T08:00:00.000Z',
+      loginId: 'active@example.com',
+      purpose: 'PASSWORD_RESET',
+    }),
+    'POST /api/dsv/customer/auth/complete': ({ request }) => {
+      completeBody = request.postDataJSON();
+      return legacyEnvelope({ accessToken: 'customer-access-token', csrfToken: 'customer-csrf-token' });
+    },
+    'GET /api/dsv/v1/session': v1Envelope({
+      csrfToken: 'customer-csrf-token',
+      principalType: 'CUSTOMER_USER',
+      shopId: 'shop-g006-parity',
+      actorId: 'customer-account-g006',
+      displayName: '기존 담당자',
+      scopes: ['dsv:customer-deliveries:read'],
+    }),
+    [`GET /api/dsv/v1/customer/deliveries?limit=100&serviceDate=${serviceDate}`]: v1Envelope({ items: [], page: { hasMore: false }, routes: [] }),
+  });
+
+  await page.goto('/customer/account/setup#token=reset-token');
+  await expect(page.getByLabel('Name')).toHaveCount(0);
+  await expect(page.getByLabel('Login ID')).toHaveValue('active@example.com');
+  await expect(page.getByLabel('Login ID')).toHaveAttribute('readonly', '');
+  await page.getByLabel('Password', { exact: true }).fill('ChangedPassw0rd!');
+  await page.getByLabel('Confirm password').fill('ChangedPassw0rd!');
+  await page.getByRole('button', { name: '계정 설정 완료', exact: true }).click();
+
+  expect(completeBody).toEqual({ password: 'ChangedPassw0rd!', shopDomain: 'dsv-demo.local', token: 'reset-token' });
+  expectOnlyFixtureCalls(api);
+});
+
+test('expired customer invitation blocks signup with an explicit alert', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'POST /api/dsv/customer/auth/invitations/validate': legacyError(410, '허용 시간이 초과된 링크입니다. 담당자에게 새 초대 링크를 요청해 주세요.'),
+  });
+  await page.goto('/customer/account/setup#token=expired-token');
+
+  await expect(page.getByRole('alert')).toHaveText('허용 시간이 초과된 링크입니다. 담당자에게 새 초대 링크를 요청해 주세요.');
+  await expect(page.getByLabel('Customer account setup')).toHaveCount(0);
   expectOnlyFixtureCalls(api);
 });
 
@@ -1924,6 +2552,10 @@ test('settings renders the complete backend defaults', async ({ page }) => {
   await expect(page.getByLabel('도착 후 대기시간')).toHaveValue('5');
   await expect(page.getByRole('checkbox', { name: '배송원에게 전달' })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: '기록 페이지에 표시' })).toBeChecked();
+  await expect(page.getByLabel('테스트 이메일 제목')).toHaveValue('[CLEVER DSV] 고객사 배송조회 계정 설정 안내');
+  await expect(page.getByLabel('테스트 이메일 본문')).toContainText('계정 설정 링크:');
+  await expect(page.getByLabel('테스트 이메일 본문')).not.toContainText('임시 아이디');
+  await expect(page.getByLabel('테스트 이메일 본문')).not.toContainText('임시 비밀번호');
   await expect(page.getByRole('tab', { name: '계정' })).toHaveCount(0);
   expectOnlyFixtureCalls(api);
 });

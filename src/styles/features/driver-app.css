@@ -1,29 +1,32 @@
 .driver-app-page { min-height:100dvh; box-sizing:border-box; display:grid; place-items:center; padding:24px; background:linear-gradient(145deg,var(--color-primary-soft) 0%,var(--color-row-hover) 48%,var(--color-success-soft) 100%); color:var(--color-ink); }
-.driver-app-card { width:min(680px,100%); overflow:hidden; border:1px solid var(--color-border); border-radius:28px; background:var(--color-white); box-shadow:var(--shadow-floating); }
+.driver-app-card { width:min(860px,100%); overflow:hidden; border:1px solid var(--color-border); border-radius:28px; background:var(--color-white); box-shadow:var(--shadow-floating); }
 .driver-app-brand { min-height:70px; padding:0 28px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--color-row-divider); }
 .driver-app-brand span { font-size:19px; font-weight:1000; letter-spacing:-.04em; color:var(--color-success); }
 .driver-app-brand b { color:var(--color-primary); }
 .driver-app-brand small { color:var(--color-muted); font-size:12px; font-weight:750; }
-.driver-app-hero { padding:42px 28px 34px; text-align:center; }
+.driver-app-hero { padding:36px 28px 30px; text-align:center; }
 .driver-app-hero-icon { width:62px; height:62px; margin:0 auto 18px; display:grid; place-items:center; border-radius:20px; background:var(--color-primary-soft); color:var(--color-primary); }
 .driver-app-hero-icon svg { width:30px; height:30px; }
 .driver-app-eyebrow { margin:0 0 7px; color:var(--color-primary); font-size:12px; font-weight:900; }
 .driver-app-hero h1 { margin:0; font-size:31px; font-weight:1000; letter-spacing:-.05em; }
 .driver-app-hero > p:last-child { max-width:480px; margin:14px auto 0; color:var(--color-muted); font-size:15px; line-height:1.65; }
-.driver-app-platform { margin:0 28px; padding:24px; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:20px; border:1px solid var(--color-control-border); border-radius:18px; background:var(--color-row-hover); }
+.driver-app-store-grid { margin:0 28px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.driver-app-platform { padding:24px; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:20px; border:1px solid var(--color-control-border); border-radius:18px; background:var(--color-row-hover); }
+.driver-app-store-grid .driver-app-platform { grid-template-columns:1fr; align-content:space-between; }
 .driver-app-platform-label { color:var(--color-primary); font-size:11px; font-weight:950; text-transform:uppercase; }
-.driver-app-platform h2,.driver-app-ios h2 { margin:5px 0 0; font-size:17px; font-weight:950; letter-spacing:-.03em; }
-.driver-app-platform p,.driver-app-ios p { margin:7px 0 0; color:var(--color-muted); font-size:12px; line-height:1.55; }
-.driver-app-guide { margin-top:16px; }
+.driver-app-platform h2,.driver-app-details h2 { margin:5px 0 0; font-size:17px; font-weight:950; letter-spacing:-.03em; }
+.driver-app-platform p { margin:7px 0 0; color:var(--color-muted); font-size:12px; line-height:1.55; }
+.driver-app-guide { margin:24px 28px 28px; }
 .driver-app-store-link { min-height:48px; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; gap:8px; border-radius:13px; padding:0 18px; background:var(--color-primary); color:var(--color-white); font-size:13px; font-weight:900; text-decoration:none; }
 .driver-app-store-link svg { width:17px; height:17px; }
-.driver-app-steps { margin:28px; padding:0; display:grid; gap:12px; list-style:none; }
+.driver-app-store-grid .driver-app-store-link { width:100%; margin-top:18px; text-align:center; }
+.driver-app-details { margin:28px 28px 0; }
+.driver-app-section-heading { padding:0 2px; }
+.driver-app-steps { margin:18px 0 0; padding:0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; list-style:none; }
 .driver-app-steps li { display:flex; align-items:flex-start; gap:12px; }
 .driver-app-steps li > span { width:28px; height:28px; flex:0 0 auto; display:grid; place-items:center; border-radius:99px; background:var(--color-complete-soft); color:var(--color-muted); font-size:12px; font-weight:950; }
 .driver-app-steps p { margin:2px 0 0; color:var(--color-muted); font-size:12px; line-height:1.5; }
 .driver-app-steps strong { display:block; margin-bottom:2px; color:var(--color-ink); font-size:13px; }
-.driver-app-ios { margin:0 28px 28px; padding:20px 22px; border-radius:16px; background:var(--color-complete-soft); }
-.driver-app-ios .driver-app-platform-label { color:var(--color-muted); }
 .driver-app-trust { min-height:58px; padding:0 28px; display:flex; align-items:center; justify-content:center; gap:8px; border-top:1px solid var(--color-row-divider); background:var(--color-row-hover); color:var(--color-muted); font-size:11px; font-weight:700; text-align:center; }
 .driver-app-trust svg { width:16px; height:16px; color:var(--color-success); }
 
@@ -33,9 +36,11 @@
   .driver-app-brand { padding:0 20px; }
   .driver-app-hero { padding:34px 20px 28px; }
   .driver-app-hero h1 { font-size:28px; }
-  .driver-app-platform { margin:0 20px; grid-template-columns:1fr; }
+  .driver-app-store-grid { margin:0 20px; grid-template-columns:1fr; }
+  .driver-app-platform { grid-template-columns:1fr; }
   .driver-app-store-link { width:100%; }
-  .driver-app-steps { margin:24px 20px; }
-  .driver-app-ios { margin:0 20px 24px; }
+  .driver-app-details { margin:24px 20px 0; }
+  .driver-app-steps { grid-template-columns:1fr; gap:12px; }
+  .driver-app-guide { margin:24px 20px; }
   .driver-app-trust { padding:14px 20px; }
 }
