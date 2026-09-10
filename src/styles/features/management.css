@@ -167,6 +167,10 @@
 .driver-install-footer button { min-height:38px; display:inline-flex; align-items:center; justify-content:center; gap:7px; border:1px solid var(--color-control-border); border-radius:10px; padding:0 15px; background:var(--color-white); color:var(--color-ink); font:850 12px/1 var(--font-sans); cursor:pointer; }
 .driver-invite-footer button.primary,
 .driver-install-footer button.primary { min-width:120px; border-color:var(--color-black); background:var(--color-black); color:var(--color-white); }
-.driver-invite-footer button:disabled { opacity:.45; cursor:default; }
+.driver-invite-footer button:disabled,
+.driver-install-footer button:disabled { opacity:.45; cursor:default; }
 .driver-invite-footer button svg,
 .driver-install-footer button svg { width:15px; height:15px; }
+
+.driver-install-details .driver-reset-confirm { display:flex; align-items:center; gap:8px; line-height:1.5; }
+.driver-install-details .driver-reset-confirm input { width:18px; min-height:18px; flex:0 0 auto; }

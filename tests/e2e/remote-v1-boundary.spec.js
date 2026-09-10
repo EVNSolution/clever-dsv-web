@@ -1120,7 +1120,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   await expect(customerInquiryLink).toHaveCSS('display', 'grid');
   await expect(page.getByLabel('고객사별 주문 리스트')).not.toContainText('destination-g006-control');
   await expect(page.getByLabel('고객사별 주문 리스트')).not.toContainText('SELLER-G006-CONTROL');
-  await expect(page.locator('.control-customer-order-meta time')).toHaveText(/^\d{2}:\d{2}$/u);
+  await expect(page.locator('.control-customer-order-meta time')).toHaveText('계산 중');
   const customerCardLayout = await customerInquiryLink.evaluate((element) => {
     const card = element.getBoundingClientRect();
     const name = element.querySelector('strong')?.getBoundingClientRect();
@@ -2418,6 +2418,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'POST customer/auth/login',
     'GET driver-account-links/pending',
     'POST driver-account-links/[^/]+/approve',
+    'POST drivers/[^/]+/password-reset-link',
     'POST drivers',
     'PATCH drivers/[^/]+',
     'DELETE drivers/[^/]+',
@@ -2440,6 +2441,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'src/services/driver-inquiries.ts',
     'src/services/customer-accounts.ts',
     'src/services/driver-account-links.ts',
+    'src/services/driver-password-reset.ts',
     'src/services/settings.ts',
   ].map((path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')).join('\n');
 

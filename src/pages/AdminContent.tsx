@@ -40,7 +40,7 @@ function classNameForPath(activePath: AdminPath): string {
 function contentForPath(activePath: AdminPath, title: string, description: string, principalId: string | null, principalScopes: readonly string[]): ReactElement {
   switch (activePath) {
     case '/master-data':
-      return <MasterDataPage />;
+      return <MasterDataPage principalScopes={principalScopes} />;
     case '/dispatch':
       return <DispatchPage title={title} description={description} />;
     case '/records':

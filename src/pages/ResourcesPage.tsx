@@ -9,6 +9,7 @@ import {
   ManagementListActions,
   ManagementSelectionClear,
 } from '../components/AdminUi';
+import { DriverPasswordResetDialog } from '../components/DriverPasswordResetDialog';
 import { DriverAppInstallDialog } from '../components/DriverAppInstallDialog';
 import type { ManagementData, ManagementDriver, ManagementVehicle } from '../demo/management';
 import { managementId } from '../demo/management';
@@ -24,9 +25,11 @@ type ResourceEditor =
   | null;
 
 export function ResourcesPage({
+  canResetPassword = false,
   data,
   onChange,
 }: {
+  canResetPassword?: boolean;
   data: ManagementData;
   onChange: (data: ManagementData) => Promise<void>;
 }): ReactElement {
@@ -37,6 +40,7 @@ export function ResourcesPage({
   return (
     <div className="management-resource-shell">
       <DriverWorkspace
+        canResetPassword={canResetPassword}
         data={data}
         editor={editor?.kind === 'driver' ? editor : null}
         selectedId={selectedDriverId}
@@ -63,6 +67,7 @@ export function ResourcesPage({
 }
 
 function DriverWorkspace({
+  canResetPassword,
   data,
   editor,
   onChange,
@@ -71,6 +76,7 @@ function DriverWorkspace({
   selectedId,
 }: {
   data: ManagementData;
+  canResetPassword: boolean;
   editor: Extract<NonNullable<ResourceEditor>, { kind: 'driver' }> | null;
   onChange: (data: ManagementData) => Promise<void>;
   onEdit: (editor: ResourceEditor) => void;
@@ -78,6 +84,7 @@ function DriverWorkspace({
   selectedId: string;
 }): ReactElement {
   const [installOpen, setInstallOpen] = useState(false);
+  const [resetDriverId, setResetDriverId] = useState('');
   const [linkReviews, setLinkReviews] = useState<DriverAccountLinkReview[]>([]);
   const [linkReviewError, setLinkReviewError] = useState('');
   const [linkNotice, setLinkNotice] = useState('');
@@ -178,6 +185,7 @@ function DriverWorkspace({
                   <div><dt>연락처</dt><dd>{selectedDriver.phone || '-'}</dd></div>
                   <div><dt>배정 차량</dt><dd>{assignedVehicles(data, selectedDriver.id)}</dd></div>
                 </dl>
+                {canResetPassword ? <span className="management-actions"><button type="button" onClick={() => setResetDriverId(selectedDriver.id)}>비밀번호 초기화</button></span> : null}
                 {linkNotice === '' ? null : <p className="alert success driver-account-link-notice">{linkNotice}</p>}
                 {linkReviewError === '' ? null : <p className="alert error driver-account-link-notice" role="alert">{linkReviewError}</p>}
                 {selectedLinkReviews.map((review) => (
@@ -200,6 +208,7 @@ function DriverWorkspace({
           </>
         )}
       </section>
+      {canResetPassword && selectedDriver && resetDriverId === selectedDriver.id ? <DriverPasswordResetDialog key={selectedDriver.id} driver={selectedDriver} onClose={() => setResetDriverId('')} /> : null}
       {installOpen ? <DriverAppInstallDialog onClose={() => setInstallOpen(false)} /> : null}
     </div>
   );
