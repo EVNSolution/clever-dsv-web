@@ -3,9 +3,9 @@
 ## Source of truth
 
 - Status: Active
-- Last refreshed: 2026-09-09
-- Primary product surfaces: 관제, 배차, 이력, 관리, 설정, 고객 배송조회, 배송원 앱 설치
-- Evidence reviewed: 현재 React 컴포넌트, `src/styles` 구현, 자동화된 Playwright 계약, 운영 화면과 사용자 피드백
+- Last refreshed: 2026-09-27
+- Primary product surfaces: 관제, 배차, 이력, 관리, 설정, 문의, 고객 배송조회, 배송원 앱 설치
+- Evidence reviewed: 현재 React 컴포넌트, `src/styles` 구현, 자동화된 Playwright 계약, 운영 화면과 사용자 피드백, `/tmp/dsv-design-audit-20260927/`의 기준 화면과 `geometry.json`, 인증된 Safari 화면
 - 과거 HTML 데모는 시각적 역사 자료일 뿐 현재 디자인 정본이 아니다. 현재 화면과 이 문서가 충돌하면 구현을 확인하고 문서를 함께 갱신한다.
 
 ## Brand
@@ -58,6 +58,8 @@
 - New/changed components: 768px 이하 비관제 페이지의 공용 고정 헤더는 기존 `AdminShell` 내비게이션을 변형해 사용한다. 배차 행 작업 메뉴는 진행 전 배차에 `배차 전체 취소`를 제공한다. `/driver-app`은 동일한 플랫폼 카드 두 개를 설치 선택 영역으로 묶고 설명과 PDF 가이드를 그 아래에 둔다.
 - Variants and states: 데스크톱 사이드 메뉴, 모바일 접힌 고정 헤더, 모바일 전체 화면 확장 메뉴, 관제 지도 오버레이
 - Token/component ownership: 토큰은 `src/styles/foundation/tokens.css`, 공통 셸은 `src/styles/components`, 반응형 보정은 `src/styles/responsive`가 소유한다.
+- 이력 날짜 입력과 작업 버튼은 좁은 폭에서 내용 크기를 유지하며 줄바꿈한다. 날짜 선택 팝업은 화면 안에 열리고 키보드와 터치로 사용할 수 있어야 한다.
+- 관리 목록과 상세는 각 패널의 실제 높이를 행에 반영한다. 모바일에서는 목록과 상세를 세로로 전체 폭에 배치하고, 편집 중인 상세는 숨기지 않는다.
 
 ## Accessibility
 
@@ -72,7 +74,12 @@
 - Supported breakpoints/devices: 1500px, 1120px, 920px, 768px 이하 구간을 지원한다.
 - Layout adaptations: 중간 폭에서는 사이드 메뉴를 유지한다. 768px 이하 비관제 페이지는 72px 공용 고정 헤더에 `C` 메뉴 버튼과 현재 페이지명을 표시하고, 본문 페이지 제목은 시각적으로 반복하지 않는다.
 - Touch/hover differences: 모바일 메뉴는 전체 화면으로 확장되고 충분한 터치 영역을 제공한다. 관제 화면은 지도 오버레이와 접힌 보조 카드 구조를 유지한다.
-- 좁은 관리 화면은 선택 전 목록을, 선택 후 상세를 우선하되 각 영역의 최소 폭을 유지한다.
+- 좁은 관리 화면은 목록과 상세를 전체 폭의 세로 흐름으로 배치하며, 편집 중인 상세는 계속 표시한다.
+- 1120px 이하에서는 관리 그리드의 행 높이가 패널 최소 높이를 수용한다. 모바일 목록·상세는 글자가 한 글자씩 쌓이지 않을 폭을 확보한다.
+- 이력 표와 날짜 영역은 패널 폭 안에 유지하고, 목록 스크롤과 팝업 표시가 서로 잘리지 않게 한다.
+- 고객 관제·이력은 데스크톱 내비게이션을 유지한다. 769–1120px에서는 지도 도구가 내비게이션 레일을 피하고, 768px 이하에서는 기존 브랜드·이름과 관제·이력·로그아웃을 두 줄의 전체 폭 내비게이션으로 배치한다. 도구는 그 아래에 두며 짧은 화면의 하단 패널은 화면 안에 수용한다.
+- 고객 화면 상단 도구의 날짜 선택 팝업은 아래쪽으로 열려 컨트롤을 가리지 않는다. 이 반응형 보정에는 새 내비게이션 상태를 추가하지 않는다.
+- 고객 관제 지도는 태블릿 폭에서도 화면 높이를 채운다. 920px 이하의 고정된 `56vh` 높이로 지도 아래에 빈 화면을 만들지 않는다.
 - `/driver-app`의 스토어 카드는 640px 초과에서 Google Play를 왼쪽, App Store를 오른쪽에 같은 크기로 배치하고 640px 이하에서는 같은 순서로 세로 적층한다.
 
 ## Interaction states
@@ -100,7 +107,7 @@
 - Design-token constraints: 새 전역 값보다 기존 토큰과 컴포넌트 규칙을 우선한다.
 - Performance constraints: 불필요한 UI 의존성이나 별도 상태 계층을 추가하지 않는다.
 - Compatibility constraints: 운영 nginx와 PDF.js `.mjs` MIME 계약을 유지한다.
-- Test/screenshot expectations: 코드 변경은 빌드와 관련 Playwright 테스트로 검증한다. 최종 화면의 시각적 판단은 사용자가 수행한다.
+- Test/screenshot expectations: 코드 변경은 관련 날짜 선택·목록 선택 회귀 테스트, 빌드, 기존 검사로 검증한다. 관리자 탭과 하위 탭, 고객 관제·이력은 1440×900, 1024×768, 768×1024, 390×844, 375×812를 기준 폭으로 점검하고, 밀도 높은 데이터·펼친 사이드 메뉴·짧은 화면 등은 해당 기능에 필요한 상태별로 확인한다. 실제 캡처 범위와 판정은 `.omx/state/tab-design-audit/ralph-progress.json` 및 `docs/runbooks/.local/tab-design-audit-20260927/README.md`에 기록한다.
 
 ## Open questions
 

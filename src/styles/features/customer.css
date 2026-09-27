@@ -241,11 +241,16 @@
 .customer-hint { margin:0; color:var(--color-muted); font-size:12px; font-weight:850; line-height:1.42; }
 
 @media (max-width:1120px) {
-  .customer-map-tools { left:112px; width:min(330px, calc(100vw - 490px)); }
+  .customer-map-tools { left:230px; width:min(330px, calc(100vw - 608px)); }
   .customer-control-side { right:14px; top:14px; bottom:14px; width:min(350px, calc(100vw - 112px)); }
 }
 
+@media (min-width:769px) and (max-width:920px) {
+  .customer-map-tools { width:min(330px, calc(100vw - 244px)); }
+  .customer-control-side { top:178px; }
+}
+
 @media (max-width:768px) {
-  .customer-map-tools { left:12px; right:12px; top:86px; width:auto; }
-  .customer-control-side { left:12px; right:12px; top:auto; bottom:12px; width:auto; max-height:min(62dvh, 620px); }
+  .customer-map-tools { left:12px; right:12px; top:126px; width:auto; }
+  .customer-control-side { left:12px; right:12px; top:auto; bottom:12px; width:auto; max-height:min(62dvh, calc(100dvh - 300px)); }
 }
