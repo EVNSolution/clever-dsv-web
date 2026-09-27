@@ -29,3 +29,10 @@
 .admin-table-frame .courier-list-table { margin-top:0; }
 .admin-table-frame .page-table tr:last-child td,
 .admin-table-frame .courier-list-table tr:last-child td { border-bottom:0; }
+
+@media (max-width:1120px) {
+  .page-content.records-page .admin-table-frame.record-scroll {
+    flex:0 1 auto;
+    max-height:min(58dvh, 520px);
+  }
+}
