@@ -492,6 +492,7 @@ test('renders selected control progress without letting a future destination cli
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/vehicles/vehicle-progress/gps-trail-history': v1Envelope({
+      dailyRoute: null,
       serviceDate,
       sessions: [{
         completedAt: null,
@@ -681,6 +682,144 @@ test('renders selected control progress without letting a future destination cli
     return destinations?.serialize().data.features
       .find((feature) => feature.properties.pointId === 'destination-progress-4')?.properties.color;
   })).toBe('#0066cc');
+  expect(api.unexpected).toEqual([]);
+});
+
+test('replaces only the completed first leg with daily GPS while keeping uncertain bridges dotted', async ({ page }) => {
+  await page.clock.install();
+  const serviceDate = '2026-09-29';
+  const vehicleId = 'vehicle-daily-route';
+  const routePlanId = 'route-daily-route';
+  let firstStopDelivered = false;
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Envelope({ ...controlSummary, assignedCount: 2, serviceDate, totalDispatchCount: 2, unassignedCount: 0 }),
+    'GET /api/dsv/v1/control/routes': v1Envelope({
+      routes: [{
+        coordinates: [[127, 37.5], [127.01, 37.5], [127.02, 37.5]],
+        generatedAt: '2026-09-29T00:00:00.000Z',
+        geometryStatus: 'fresh',
+        legDurationsSeconds: [600, 600],
+        routePlanId,
+      }],
+      serviceDate,
+    }),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
+      items: [{ displayName: 'Daily Route Truck', driverAssignments: [], status: 'ACTIVE', vehicleId, vehiclePlate: '경기86아2308' }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/dispatches': () => v1Envelope({
+      items: [[127.01, 37.5], [127.02, 37.5]].map(([longitude, latitude], index) => ({
+        assignmentStatus: 'ASSIGNED',
+        customerId: 'customer-daily-route',
+        destinationDisplayName: `배송지 ${index + 1}`,
+        destinationId: `destination-daily-route-${index + 1}`,
+        driverId: 'driver-daily-route',
+        etaStatus: 'PENDING',
+        eventSummary: index === 0 && firstStopDelivered
+          ? [{ occurredAt: '2026-09-29T00:10:00.000Z', type: 'STOP_DELIVERED' }]
+          : [],
+        latitude,
+        longitude,
+        routePlanId,
+        routeStopSequence: index + 1,
+        sellerOrderId: `order-daily-route-${index + 1}`,
+        sellerOrderKey: `DAILY-${index + 1}`,
+        vehicleId,
+      })),
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/vehicles/vehicle-daily-route/gps-trail-history': () => v1Envelope({
+      dailyRoute: firstStopDelivered ? {
+        type: 'LineString',
+        coordinates: [[127, 37.5], [127.003, 37.501], [127.006, 37.5], [127.008, 37.5], [127.009, 37.5], [127.018, 37.5]],
+        anchors: [
+          { coordinateIndex: 0, observedAt: '2026-09-29T00:00:00.000Z' },
+          { coordinateIndex: 2, observedAt: '2026-09-29T00:02:00.000Z' },
+          { coordinateIndex: 3, observedAt: '2026-09-29T00:05:00.000Z' },
+          { coordinateIndex: 4, observedAt: '2026-09-29T00:08:00.000Z' },
+          { coordinateIndex: 5, observedAt: '2026-09-29T00:20:00.000Z' },
+        ],
+        bridges: [
+          { fromObservedAt: '2026-09-29T00:02:00.000Z', toObservedAt: '2026-09-29T00:05:00.000Z', reason: 'NO_MATCH' },
+          { fromObservedAt: '2026-09-29T00:05:00.000Z', toObservedAt: '2026-09-29T00:08:00.000Z', reason: 'GPS_GAP' },
+        ],
+        sourceSampleCount: 5,
+      } : null,
+      serviceDate,
+      sessions: [{
+        completedAt: null,
+        completionEventId: null,
+        endpoint: { endedAt: null, reason: 'LAST_VALID_SAMPLE' },
+        restart: null,
+        routePlanId,
+        segments: [{ roadMatchedGeometry: null, samples: [], trailMarker: null }],
+        sessionIndex: 0,
+        startedAt: '2026-09-29T00:00:00.000Z',
+        startEventId: 'start-daily-route',
+        startSource: 'ROUTE_STARTED',
+      }],
+      timezone: 'Asia/Seoul',
+      vehicleId,
+    }),
+  });
+
+  const firstLegFeatures = () => page.evaluate(() => {
+    const source = window.dsvMap?.getSource('operational-routes');
+    return source?.serialize().data.features
+      .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.routeId.startsWith('route-daily-route:actual-first-leg:'))
+      .map((feature) => ({
+        coordinates: feature.geometry.coordinates,
+        dashed: feature.properties.dashed,
+        kind: feature.properties.kind,
+      })) ?? [];
+  });
+
+  await page.goto('/control');
+  await page.getByRole('button', { name: /경기86아2308/u }).click();
+  await expect.poll(firstLegFeatures).toEqual([]);
+  await expect.poll(() => api.calls.filter((call) => call.path.endsWith('/gps-trail-history') && call.search.includes('includeDailyRoute=true')).length).toBeGreaterThan(0);
+  const dailyReadsBeforeCompletion = api.calls.filter((call) => call.path.endsWith('/gps-trail-history')).length;
+
+  firstStopDelivered = true;
+  await page.clock.fastForward(30_000);
+  await expect.poll(() => api.calls.filter((call) => call.path.endsWith('/gps-trail-history')).length).toBeGreaterThan(dailyReadsBeforeCompletion);
+  await expect.poll(firstLegFeatures).toEqual([
+    { coordinates: [[127, 37.5], [127.003, 37.501], [127.006, 37.5]], dashed: false, kind: 'route' },
+    { coordinates: [[127.006, 37.5], [127.008, 37.5], [127.009, 37.5], [127.01, 37.5]], dashed: true, kind: 'trail' },
+  ]);
+  await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
+    .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.kind === 'route')
+    .map((feature) => ({ coordinates: feature.geometry.coordinates, routeId: feature.properties.routeId })) ?? []))
+    .toEqual([
+      { coordinates: [[127, 37.5], [127.003, 37.501], [127.006, 37.5]], routeId: `${routePlanId}:actual-first-leg:0` },
+      { coordinates: [[127.01, 37.5], [127.02, 37.5]], routeId: `${routePlanId}:current` },
+    ]);
+  expect(api.unexpected).toEqual([]);
+});
+
+test('rejects a GPS history response that omits the requested dailyRoute', async ({ page }) => {
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Envelope(controlSummary),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
+      items: [{ displayName: 'Missing Daily Route', driverAssignments: [], status: 'ACTIVE', vehicleId: 'vehicle-missing-daily-route', vehiclePlate: '경기86아2308' }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/dispatches': emptyV1List(),
+    'GET /api/dsv/v1/vehicles/vehicle-missing-daily-route/gps-trail-history': v1Envelope({
+      serviceDate: controlSummary.serviceDate,
+      sessions: [],
+      timezone: 'Asia/Seoul',
+      vehicleId: 'vehicle-missing-daily-route',
+    }),
+  });
+
+  await page.goto('/control');
+  await page.getByRole('button', { name: /경기86아2308/u }).click();
+  await expect(page.getByRole('alert')).toHaveText('차량 자취를 불러오지 못했습니다.');
   expect(api.unexpected).toEqual([]);
 });
 
@@ -926,12 +1065,14 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
       ],
     }),
     'GET /api/dsv/v1/vehicles/vehicle-g006-scheduled/gps-trail-history': v1Envelope({
+      dailyRoute: null,
       serviceDate: currentSummary.serviceDate,
       sessions: [],
       timezone: 'Asia/Seoul',
       vehicleId: 'vehicle-g006-scheduled',
     }),
     'GET /api/dsv/v1/vehicles/vehicle-g006-unscheduled/gps-trail-history': v1Envelope({
+      dailyRoute: null,
       serviceDate: currentSummary.serviceDate,
       sessions: [{
         completedAt: null,
