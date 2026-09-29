@@ -687,18 +687,15 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory, cursorMs?: nu
       ...rawLines.map((coordinates, lineIndex) => ({ coordinates, id: `raw:${lineIndex}` })),
     ];
     return lines.flatMap((line): MapCanvasRoute[] => {
-      if (line.coordinates.length === 0) return [];
-      const visibleCoordinates = line.coordinates.length === 1 && line.id.startsWith('matched:')
-        ? [line.coordinates[0]!, line.coordinates[0]!]
-        : line.coordinates;
+      if (line.coordinates.length < 2) return [];
       return [{
-      color: '#d92d20',
-      coordinates: visibleCoordinates,
-      dashed: true,
-      id: `vehicle-trail:${session.routePlanId}:${session.sessionIndex}:${segmentOrder}:${line.id}`,
-      kind: 'trail' as const,
-      selected: true,
-      sortOrder: 200 + sessionOrder * 100 + segmentOrder * 10,
+        color: '#d92d20',
+        coordinates: line.coordinates,
+        dashed: true,
+        id: `vehicle-trail:${session.routePlanId}:${session.sessionIndex}:${segmentOrder}:${line.id}`,
+        kind: 'trail' as const,
+        selected: true,
+        sortOrder: 200 + sessionOrder * 100 + segmentOrder * 10,
       }];
     });
   }));

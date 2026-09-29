@@ -619,7 +619,7 @@ test('renders selected control progress without letting a future destination cli
       [[127.005, 37.501], [127.0055, 37.5011], [127.006, 37.5012], [127.008, 37.5014], [127.012, 37.5018], [127.015, 37.502]],
       [[127.7, 37.7], [127.8, 37.8]],
     ],
-    samplePoints: [[127.9, 37.9]],
+    samplePoints: [],
   });
   await timeline.getByRole('slider', { name: '자취 시점' }).fill(String(Date.parse('2026-08-05T00:06:00.000Z')));
   await expect(timeline.locator('header time')).toHaveText('09:06');
@@ -631,7 +631,6 @@ test('renders selected control progress without letting a future destination cli
       .map((feature) => feature.geometry.coordinates);
   })).toEqual([
     [[127, 37.5], [127.0025, 37.5005], [127.005, 37.501]],
-    [[127.015, 37.502], [127.015, 37.502]],
     [[127.005, 37.501], [127.0055, 37.5011], [127.006, 37.5012], [127.008, 37.5014], [127.012, 37.5018], [127.015, 37.502]],
   ]);
   await timeline.getByRole('slider', { name: '자취 시점' }).fill(String(Date.parse('2026-08-05T00:13:00.000Z')));
@@ -1948,6 +1947,36 @@ test('requests customer deliveries only after a valid customer v1 session', asyn
   expect(api.unexpected).toEqual([]);
 });
 
+test('lets a customer account select and keep a control date', async ({ page }) => {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+  const [year, month, day] = today.split('-').map(Number);
+  const historyDate = new Date(Date.UTC(year, month - 1, day - 1)).toISOString().slice(0, 10);
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(customerSession),
+    'GET /api/dsv/v1/customer/deliveries': ({ url }) => v1Envelope({
+      customerDisplayName: url.searchParams.get('serviceDate') === historyDate ? 'Previous Day Customer' : 'Today Customer',
+      items: [],
+      page: { hasMore: false },
+    }),
+  });
+
+  await page.goto('/customer/delivery-inquiry');
+  await expect(page.getByRole('button', { name: '관제 기준일 날짜 변경' })).toBeVisible();
+  await page.getByRole('button', { name: '관제 기준일 날짜 변경' }).click();
+  await page.locator(`.customer-map-tools [data-day="${historyDate}"] .rdp-day_button`).click();
+  await expect.poll(() => api.calls.some((call) => call.path === '/api/dsv/v1/customer/deliveries' && call.search.includes(`serviceDate=${historyDate}`))).toBe(true);
+  await expect(page.getByRole('navigation', { name: '고객사 메뉴' })).toContainText('Previous Day Customer');
+  await expect(page).toHaveURL(new RegExp(`serviceDate=${historyDate}`, 'u'));
+
+  await page.getByRole('button', { name: /이력 완료 배송 확인/u }).click();
+  await page.getByRole('button', { name: /관제 배송 위치 확인/u }).click();
+  await expect(page.getByRole('button', { name: '관제 기준일 날짜 변경' })).toContainText(historyDate.replaceAll('-', '. ').replace(/\. $/u, '.'));
+  await page.reload();
+  await expect(page.getByRole('button', { name: '관제 기준일 날짜 변경' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: '고객사 메뉴' })).toContainText('Previous Day Customer');
+  expect(api.unexpected).toEqual([]);
+});
+
 test('loads the administrator customer map through the customer-scoped contract', async ({ page }) => {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
   const [year, month, day] = today.split('-').map(Number);
@@ -2002,14 +2031,13 @@ test('loads the administrator customer map through the customer-scoped contract'
     },
   });
 
-  await page.goto('/customer/delivery-inquiry/admin?customer=customer-g006-map&serviceDate=2026-08-03');
+  await page.goto(`/customer/delivery-inquiry/admin?customer=customer-g006-map&serviceDate=${today}`);
 
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customers/deliveries');
   await expect(page.getByRole('article', { name: '고객사 배송지 지도' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: '고객사 메뉴' })).toContainText('G006 Healthcare');
   await expect.poll(() => requestedServiceDates[0]).toBe(today);
-  await expect(page).not.toHaveURL(/serviceDate=/u);
-  await expect(page.getByRole('button', { name: '이력 기준일 날짜 변경' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '관제 기준일 날짜 변경' })).toBeVisible();
   await expect(page.getByLabel('차량 목록')).toContainText('서울86바3800');
   await expect.poll(() => page.getByLabel('차량 목록').locator('.customer-vehicle-list').evaluate((element) => element.clientHeight)).toBe(56);
   await expect(page.getByLabel('배송지 리스트')).toBeVisible();

@@ -116,9 +116,6 @@ function routeFeatures(routes: MapCanvasRoute[]): FeatureCollection<Geometry> {
           coordinates: route.coordinates,
         },
       });
-      if (route.kind === 'trail' && route.coordinates.length === 1) {
-        features.push(pointFeature(route.id, route.coordinates[0]!, 'sample'));
-      }
       const start = route.startMarkerCoordinate ?? route.coordinates[0];
       if (start !== undefined && route.startMarker !== undefined) {
         features.push(pointFeature(route.id, start, route.startMarker));
@@ -133,7 +130,7 @@ function routeFeatures(routes: MapCanvasRoute[]): FeatureCollection<Geometry> {
 function pointFeature(
   routeId: string,
   coordinates: [number, number],
-  markerKind: NonNullable<MapCanvasRoute['endMarker'] | MapCanvasRoute['startMarker']> | 'sample',
+  markerKind: NonNullable<MapCanvasRoute['endMarker'] | MapCanvasRoute['startMarker']>,
 ): Feature<Point> {
   return {
     type: 'Feature',
