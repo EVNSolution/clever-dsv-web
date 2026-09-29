@@ -799,7 +799,19 @@ test('replaces only the completed first leg with daily GPS while keeping uncerta
   expect(api.unexpected).toEqual([]);
 });
 
-test('rejects a GPS history response that omits the requested dailyRoute', async ({ page }) => {
+test('rejects missing or malformed dailyRoute uncertainty metadata', async ({ page }) => {
+  const anchors = [0, 1, 2].map((coordinateIndex) => ({
+    coordinateIndex,
+    observedAt: `2026-07-23T00:0${coordinateIndex}:00.000Z`,
+  }));
+  const dailyRoute = {
+    anchors,
+    bridges: [],
+    coordinates: [[127, 37.5], [127.01, 37.5], [127.02, 37.5]],
+    sourceSampleCount: 3,
+    type: 'LineString',
+  };
+  let responseDailyRoute;
   const api = await installApiFixtures(page, {
     'GET /api/dsv/v1/session': v1Envelope(adminSession),
     'GET /api/dsv/v1/control': v1Envelope(controlSummary),
@@ -809,7 +821,8 @@ test('rejects a GPS history response that omits the requested dailyRoute', async
     }),
     'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
     'GET /api/dsv/v1/dispatches': emptyV1List(),
-    'GET /api/dsv/v1/vehicles/vehicle-missing-daily-route/gps-trail-history': v1Envelope({
+    'GET /api/dsv/v1/vehicles/vehicle-missing-daily-route/gps-trail-history': () => v1Envelope({
+      ...(responseDailyRoute === undefined ? {} : { dailyRoute: responseDailyRoute }),
       serviceDate: controlSummary.serviceDate,
       sessions: [],
       timezone: 'Asia/Seoul',
@@ -817,9 +830,16 @@ test('rejects a GPS history response that omits the requested dailyRoute', async
     }),
   });
 
-  await page.goto('/control');
-  await page.getByRole('button', { name: /경기86아2308/u }).click();
-  await expect(page.getByRole('alert')).toHaveText('차량 자취를 불러오지 못했습니다.');
+  for (const invalid of [
+    undefined,
+    { ...dailyRoute, anchors: [anchors[1], anchors[0], anchors[2]] },
+    { ...dailyRoute, bridges: [{ fromObservedAt: anchors[0].observedAt, toObservedAt: anchors[2].observedAt, reason: 'NO_MATCH' }] },
+  ]) {
+    responseDailyRoute = invalid;
+    await page.goto('/control');
+    await page.getByRole('button', { name: /경기86아2308/u }).click();
+    await expect(page.getByRole('alert')).toHaveText('차량 자취를 불러오지 못했습니다.');
+  }
   expect(api.unexpected).toEqual([]);
 });
 
