@@ -685,7 +685,11 @@ test('renders selected control progress without letting a future destination cli
 });
 
 test('replaces only the completed first leg with daily GPS while keeping uncertain bridges dotted', async ({ page }) => {
-  await page.clock.install();
+  await page.clock.install({ time: new Date('2026-09-29T00:30:00.000Z') });
+  await page.route('**/map/styles/dsv-korea-v1.json', (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#ffffff' } }] }),
+  }));
   const serviceDate = '2026-09-29';
   const vehicleId = 'vehicle-daily-route';
   const routePlanId = 'route-daily-route';
@@ -732,19 +736,21 @@ test('replaces only the completed first leg with daily GPS while keeping uncerta
     'GET /api/dsv/v1/vehicles/vehicle-daily-route/gps-trail-history': () => v1Envelope({
       dailyRoute: firstStopDelivered ? {
         type: 'LineString',
-        coordinates: [[127, 37.5], [127.003, 37.501], [127.006, 37.5], [127.008, 37.5], [127.009, 37.5], [127.018, 37.5]],
+        coordinates: [[127, 37.5], [127.003, 37.501], [127.006, 37.5], [127.007, 37.5], [127.008, 37.5], [127.009, 37.5], [127.018, 37.5]],
         anchors: [
           { coordinateIndex: 0, observedAt: '2026-09-29T00:00:00.000Z' },
           { coordinateIndex: 2, observedAt: '2026-09-29T00:02:00.000Z' },
-          { coordinateIndex: 3, observedAt: '2026-09-29T00:05:00.000Z' },
-          { coordinateIndex: 4, observedAt: '2026-09-29T00:08:00.000Z' },
-          { coordinateIndex: 5, observedAt: '2026-09-29T00:20:00.000Z' },
+          { coordinateIndex: 3, observedAt: '2026-09-29T00:04:00.000Z' },
+          { coordinateIndex: 4, observedAt: '2026-09-29T00:05:00.000Z' },
+          { coordinateIndex: 5, observedAt: '2026-09-29T00:08:00.000Z' },
+          { coordinateIndex: 6, observedAt: '2026-09-29T00:20:00.000Z' },
         ],
         bridges: [
-          { fromObservedAt: '2026-09-29T00:02:00.000Z', toObservedAt: '2026-09-29T00:05:00.000Z', reason: 'NO_MATCH' },
+          { fromObservedAt: '2026-09-29T00:02:00.000Z', toObservedAt: '2026-09-29T00:04:00.000Z', reason: 'NO_MATCH' },
+          { fromObservedAt: '2026-09-29T00:04:00.000Z', toObservedAt: '2026-09-29T00:05:00.000Z', reason: 'IMPLAUSIBLE_JUMP' },
           { fromObservedAt: '2026-09-29T00:05:00.000Z', toObservedAt: '2026-09-29T00:08:00.000Z', reason: 'GPS_GAP' },
         ],
-        sourceSampleCount: 5,
+        sourceSampleCount: 6,
       } : null,
       serviceDate,
       sessions: [{
@@ -777,16 +783,19 @@ test('replaces only the completed first leg with daily GPS while keeping uncerta
 
   await page.goto('/control');
   await page.getByRole('button', { name: /경기86아2308/u }).click();
+  await page.locator('.map-canvas.ready').waitFor({ state: 'visible', timeout: 15_000 });
   await expect.poll(firstLegFeatures).toEqual([]);
   await expect.poll(() => api.calls.filter((call) => call.path.endsWith('/gps-trail-history') && call.search.includes('includeDailyRoute=true')).length).toBeGreaterThan(0);
+  const dispatchReadsBeforeCompletion = api.calls.filter((call) => call.path === '/api/dsv/v1/dispatches').length;
   const dailyReadsBeforeCompletion = api.calls.filter((call) => call.path.endsWith('/gps-trail-history')).length;
 
   firstStopDelivered = true;
-  await page.clock.fastForward(30_000);
+  await page.clock.fastForward(31_000);
+  await expect.poll(() => api.calls.filter((call) => call.path === '/api/dsv/v1/dispatches').length).toBeGreaterThan(dispatchReadsBeforeCompletion);
   await expect.poll(() => api.calls.filter((call) => call.path.endsWith('/gps-trail-history')).length).toBeGreaterThan(dailyReadsBeforeCompletion);
   await expect.poll(firstLegFeatures).toEqual([
     { coordinates: [[127, 37.5], [127.003, 37.501], [127.006, 37.5]], dashed: false, kind: 'route' },
-    { coordinates: [[127.006, 37.5], [127.008, 37.5], [127.009, 37.5], [127.01, 37.5]], dashed: true, kind: 'trail' },
+    { coordinates: [[127.006, 37.5], [127.007, 37.5], [127.008, 37.5], [127.009, 37.5], [127.01, 37.5]], dashed: true, kind: 'trail' },
   ]);
   await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
     .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.kind === 'route')

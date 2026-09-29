@@ -74,7 +74,7 @@ GET /api/dsv/v1/customers/deliveries
 
 차량 온도 이력도 다른 v1 읽기 API와 동일한 strict envelope를 사용한다. `data`는 `{ "vehicleId": "...", "samples": [{ "observedAt": "...", "temperatureA": 4.2, "temperatureB": null }] }` 형식이며 화면은 최근 24시간을 표시한다.
 
-차량 GPS 이력의 `includeDailyRoute=true` 응답은 기존 `sessions`와 함께 `dailyRoute`(자료가 없으면 `null`)를 제공한다. `dailyRoute`의 `coordinates`는 하루 GPS의 단일 `LineString`, `anchors`는 GPS 시각과 좌표 인덱스, `bridges`는 `NO_MATCH` 또는 `GPS_GAP` 직선 연결의 양끝 시각이다. 웹은 첫 배송지의 `STOP_DELIVERED` 이후 0→1 구간에만 완료 시각까지의 경로를 사용하고, `bridges`와 양끝 연결은 확인된 도로선으로 표시하지 않는다.
+차량 GPS 이력의 `includeDailyRoute=true` 응답은 기존 `sessions`와 함께 `dailyRoute`(자료가 없으면 `null`)를 제공한다. `dailyRoute`의 `coordinates`는 하루 GPS의 단일 `LineString`, `anchors`는 GPS 시각과 좌표 인덱스, `bridges`는 `NO_MATCH`, `GPS_GAP`, `IMPLAUSIBLE_JUMP` 직선 연결의 양끝 시각이다. 웹은 첫 배송지의 `STOP_DELIVERED` 이후 0→1 구간에만 완료 시각까지의 경로를 사용하고, `bridges`와 양끝 연결은 확인된 도로선으로 표시하지 않는다.
 
 v1 read success responses use the strict envelope below.
 

@@ -54,7 +54,7 @@ export type VehicleGpsDailyRoute = {
   }>;
   bridges: Array<{
     fromObservedAt: string;
-    reason: 'GPS_GAP' | 'NO_MATCH';
+    reason: 'GPS_GAP' | 'IMPLAUSIBLE_JUMP' | 'NO_MATCH';
     toObservedAt: string;
   }>;
   coordinates: Array<[longitude: number, latitude: number]>;
@@ -296,12 +296,12 @@ function adaptVehicleGpsDailyRoute(value: unknown, body: unknown): VehicleGpsDai
       !isObject(bridge)
       || !hasExactKeys(bridge, ['fromObservedAt', 'reason', 'toObservedAt'])
       || !isDateTime(bridge.fromObservedAt)
-      || (bridge.reason !== 'GPS_GAP' && bridge.reason !== 'NO_MATCH')
+      || (bridge.reason !== 'GPS_GAP' && bridge.reason !== 'IMPLAUSIBLE_JUMP' && bridge.reason !== 'NO_MATCH')
       || !isDateTime(bridge.toObservedAt)
     ) throw invalidVehicleGpsTrailHistory(body);
     return {
       fromObservedAt: bridge.fromObservedAt,
-      reason: bridge.reason as 'GPS_GAP' | 'NO_MATCH',
+      reason: bridge.reason as 'GPS_GAP' | 'IMPLAUSIBLE_JUMP' | 'NO_MATCH',
       toObservedAt: bridge.toObservedAt,
     };
   });
