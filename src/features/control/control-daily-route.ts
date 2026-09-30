@@ -7,9 +7,13 @@ export type ActualFirstLegLine = {
 };
 
 export function dailyRouteTrailLines(dailyRoute: VehicleGpsDailyRoute, cursorMs?: number): MapCanvasCoordinate[][] {
-  const bridgeKeys = new Set(dailyRoute.bridges.map((bridge) => `${bridge.fromObservedAt}|${bridge.toObservedAt}`));
+  const bridgeReasons = new Map(dailyRoute.bridges.map((bridge) => [
+    `${bridge.fromObservedAt}|${bridge.toObservedAt}`,
+    bridge.reason,
+  ]));
   const lines: MapCanvasCoordinate[][] = [];
   let current: MapCanvasCoordinate[] = [];
+  let currentUncertain = false;
   const finish = () => {
     if (current.length > 1 && !current.every((coordinate) => sameCoordinate(coordinate, current[0]!))) {
       lines.push(current);
@@ -21,17 +25,22 @@ export function dailyRouteTrailLines(dailyRoute: VehicleGpsDailyRoute, cursorMs?
     const from = dailyRoute.anchors[index - 1]!;
     const to = dailyRoute.anchors[index]!;
     if (cursorMs !== undefined && Date.parse(to.observedAt) > cursorMs) break;
-    if (bridgeKeys.has(`${from.observedAt}|${to.observedAt}`)) {
+    const bridgeReason = bridgeReasons.get(`${from.observedAt}|${to.observedAt}`);
+    if (bridgeReason === 'GPS_GAP' || bridgeReason === 'IMPLAUSIBLE_JUMP') {
       finish();
       continue;
     }
-    const coordinates = dailyRoute.coordinates.slice(from.coordinateIndex, to.coordinateIndex + 1);
+    const coordinates = bridgeReason === 'NO_MATCH'
+      ? [dailyRoute.coordinates[from.coordinateIndex]!, dailyRoute.coordinates[to.coordinateIndex]!]
+      : dailyRoute.coordinates.slice(from.coordinateIndex, to.coordinateIndex + 1);
     if (coordinates.length < 2) continue;
-    if (current.length > 0 && sameCoordinate(current.at(-1)!, coordinates[0]!)) {
+    if (bridgeReason === 'NO_MATCH' && sameCoordinate(coordinates[0]!, coordinates[1]!)) continue;
+    if (current.length > 0 && currentUncertain === (bridgeReason === 'NO_MATCH') && sameCoordinate(current.at(-1)!, coordinates[0]!)) {
       current.push(...coordinates.slice(1));
     } else {
       finish();
       current = coordinates;
+      currentUncertain = bridgeReason === 'NO_MATCH';
     }
   }
   finish();
