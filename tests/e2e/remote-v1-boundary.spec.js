@@ -621,6 +621,15 @@ test('renders selected control progress without letting a future destination cli
     ],
     samplePoints: [],
   });
+  await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
+    .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.routeId.startsWith('vehicle-trail:'))
+    .map((feature) => ({ dashed: feature.properties.dashed, routeId: feature.properties.routeId.split(':').at(-2) })) ?? []))
+    .toEqual([
+      { dashed: false, routeId: 'matched' },
+      { dashed: false, routeId: 'matched' },
+      { dashed: true, routeId: 'raw' },
+      { dashed: true, routeId: 'raw' },
+    ]);
   await timeline.getByRole('slider', { name: '자취 시점' }).fill(String(Date.parse('2026-08-05T00:06:00.000Z')));
   await expect(timeline.locator('header time')).toHaveText('09:06');
   await expect.poll(() => page.evaluate(() => {
@@ -806,11 +815,11 @@ test('replaces only the completed first leg with daily GPS while keeping uncerta
   ]);
   await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
     .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.routeId.startsWith('vehicle-trail:daily:'))
-    .map((feature) => feature.geometry.coordinates) ?? []))
+    .map((feature) => ({ coordinates: feature.geometry.coordinates, dashed: feature.properties.dashed })) ?? []))
     .toEqual([
-      [[127, 37.5], [127.003, 37.501], [127.006, 37.5]],
-      [[127.006, 37.5], [127.007, 37.5]],
-      [[127.009, 37.5], [127.018, 37.5]],
+      { coordinates: [[127, 37.5], [127.003, 37.501], [127.006, 37.5]], dashed: false },
+      { coordinates: [[127.006, 37.5], [127.007, 37.5]], dashed: true },
+      { coordinates: [[127.009, 37.5], [127.018, 37.5]], dashed: false },
     ]);
   await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
     .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.kind === 'route')
@@ -919,7 +928,7 @@ test('uses dailyRoute road evidence without drawing September 29 uncertain jumps
   });
   const trailLines = () => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
     .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.routeId.startsWith('vehicle-trail:daily:'))
-    .map((feature) => feature.geometry.coordinates) ?? []);
+    .map((feature) => ({ coordinates: feature.geometry.coordinates, dashed: feature.properties.dashed })) ?? []);
   const inferredTunnelLines = () => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
     .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.routeId.startsWith('vehicle-trail:inferred-tunnel:'))
     .map((feature) => ({
@@ -933,7 +942,10 @@ test('uses dailyRoute road evidence without drawing September 29 uncertain jumps
   await page.getByRole('button', { name: /경기86아2308/u }).click();
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible', timeout: 15_000 });
   await expect.poll(trailLines).toEqual([
-    coordinates.slice(0, 2), coordinates.slice(2, 4), coordinates.slice(4, 7), coordinates.slice(9, 11),
+    { coordinates: coordinates.slice(0, 2), dashed: false },
+    { coordinates: coordinates.slice(2, 4), dashed: false },
+    { coordinates: coordinates.slice(4, 7), dashed: true },
+    { coordinates: coordinates.slice(9, 11), dashed: false },
   ]);
   await expect.poll(inferredTunnelLines).toEqual([]);
   const gpsReadsBeforeRefresh = gpsTrailReads;
@@ -963,10 +975,10 @@ test('uses dailyRoute road evidence without drawing September 29 uncertain jumps
   await page.getByRole('button', { name: '자취 보기' }).click();
   const cursor = page.getByRole('region', { name: '경기86아2308 자취 타임라인' }).getByRole('slider', { name: '자취 시점' });
   for (const [time, expected] of [
-    ['2026-09-28T22:34:00.000Z', [coordinates.slice(0, 2)]],
-    ['2026-09-29T02:31:00.000Z', [coordinates.slice(0, 2), coordinates.slice(2, 4)]],
-    ['2026-09-29T03:10:00.000Z', [coordinates.slice(0, 2), coordinates.slice(2, 4), coordinates.slice(4, 7)]],
-    ['2026-09-29T03:12:00.000Z', [coordinates.slice(0, 2), coordinates.slice(2, 4), coordinates.slice(4, 7), coordinates.slice(9, 11)]],
+    ['2026-09-28T22:34:00.000Z', [{ coordinates: coordinates.slice(0, 2), dashed: false }]],
+    ['2026-09-29T02:31:00.000Z', [{ coordinates: coordinates.slice(0, 2), dashed: false }, { coordinates: coordinates.slice(2, 4), dashed: false }]],
+    ['2026-09-29T03:10:00.000Z', [{ coordinates: coordinates.slice(0, 2), dashed: false }, { coordinates: coordinates.slice(2, 4), dashed: false }, { coordinates: coordinates.slice(4, 7), dashed: true }]],
+    ['2026-09-29T03:12:00.000Z', [{ coordinates: coordinates.slice(0, 2), dashed: false }, { coordinates: coordinates.slice(2, 4), dashed: false }, { coordinates: coordinates.slice(4, 7), dashed: true }, { coordinates: coordinates.slice(9, 11), dashed: false }]],
   ]) {
     await cursor.fill(String(Date.parse(time)));
     await expect.poll(trailLines).toEqual(expected);
@@ -1049,9 +1061,9 @@ test('keeps September 30 moving NO_MATCH samples visible as dotted GPS trail', a
   await page.getByRole('button', { name: /경기88바9580/u }).click();
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible', timeout: 15_000 });
   await expect.poll(trailFeatures).toEqual([
-    { coordinates: coordinates.slice(0, 2), dashed: true, kind: 'trail' },
+    { coordinates: coordinates.slice(0, 2), dashed: false, kind: 'trail' },
     { coordinates: coordinates.slice(2, 7), dashed: true, kind: 'trail' },
-    { coordinates: coordinates.slice(6, 9), dashed: true, kind: 'trail' },
+    { coordinates: coordinates.slice(6, 9), dashed: false, kind: 'trail' },
   ]);
   await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
     .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.kind === 'route')
@@ -1678,7 +1690,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
       ],
       lineOpacity: ['case', ['get', 'selected'], 0.96, 1],
       lineWidth: ['case', ['get', 'selected'], 2.6, 1.8],
-      trailDasharray: ['literal', [1, 1.75]],
+      trailDasharray: ['case', ['get', 'dashed'], ['literal', [1, 1.75]], ['literal', [1, 0]]],
       trailFilter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'trail']],
       trailLineWidth: ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 4.5, 16, 4],
       routeFilter: ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'kind'], 'trail']],

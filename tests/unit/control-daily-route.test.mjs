@@ -49,8 +49,8 @@ const dailyRoute = {
 
 test('keeps the implausible jump out of observed trail lines', () => {
   assert.deepEqual(dailyRouteTrailLines(dailyRoute), [
-    dailyRoute.coordinates.slice(0, 3),
-    dailyRoute.coordinates.slice(3, 5),
+    { coordinates: dailyRoute.coordinates.slice(0, 3), uncertain: false },
+    { coordinates: dailyRoute.coordinates.slice(3, 5), uncertain: false },
   ]);
 });
 
