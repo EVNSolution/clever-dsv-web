@@ -6,6 +6,38 @@ export type ActualFirstLegLine = {
   uncertain: boolean;
 };
 
+export function dailyRouteTrailLines(dailyRoute: VehicleGpsDailyRoute, cursorMs?: number): MapCanvasCoordinate[][] {
+  const bridgeKeys = new Set(dailyRoute.bridges.map((bridge) => `${bridge.fromObservedAt}|${bridge.toObservedAt}`));
+  const lines: MapCanvasCoordinate[][] = [];
+  let current: MapCanvasCoordinate[] = [];
+  const finish = () => {
+    if (current.length > 1 && !current.every((coordinate) => sameCoordinate(coordinate, current[0]!))) {
+      lines.push(current);
+    }
+    current = [];
+  };
+
+  for (let index = 1; index < dailyRoute.anchors.length; index += 1) {
+    const from = dailyRoute.anchors[index - 1]!;
+    const to = dailyRoute.anchors[index]!;
+    if (cursorMs !== undefined && Date.parse(to.observedAt) > cursorMs) break;
+    if (bridgeKeys.has(`${from.observedAt}|${to.observedAt}`)) {
+      finish();
+      continue;
+    }
+    const coordinates = dailyRoute.coordinates.slice(from.coordinateIndex, to.coordinateIndex + 1);
+    if (coordinates.length < 2) continue;
+    if (current.length > 0 && sameCoordinate(current.at(-1)!, coordinates[0]!)) {
+      current.push(...coordinates.slice(1));
+    } else {
+      finish();
+      current = coordinates;
+    }
+  }
+  finish();
+  return lines;
+}
+
 export function actualFirstLegLines(input: {
   completedAt: string;
   dailyRoute: VehicleGpsDailyRoute | null | undefined;
