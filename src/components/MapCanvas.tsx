@@ -1,7 +1,7 @@
 import type { ReactElement, TransitionEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { Feature, FeatureCollection } from 'geojson';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import { loadMapProviderProfile } from '../services/map-provider';
 import { MapPreview } from './MapPreview';
 import {
@@ -153,6 +153,7 @@ export function MapCanvas({
           style: profile.styleUrl,
           touchPitch: false,
           zoom: profile.initialView.zoom,
+          zoomLevelsToOverscale: undefined,
         });
         mapInstanceRef.current = map;
         (window as typeof window & { dsvMap?: maplibregl.Map }).dsvMap = map;
