@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import { loadMapProviderProfile } from '../services/map-provider';
 import { MapPreview } from './MapPreview';
 import {
@@ -50,6 +50,7 @@ export function DepartureLocationMap({
           pitch: 0,
           style: profile.styleUrl,
           zoom: coordinates === null ? profile.initialView.zoom : settingsLocationZoom,
+          zoomLevelsToOverscale: undefined,
         });
         mapRef.current = map;
         map.addControl(new maplibregl.AttributionControl({ compact: true }));

@@ -1,5 +1,5 @@
 import type { FeatureCollection, Point } from 'geojson';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import type { MapCanvasPoint } from '../MapCanvas';
 
 const sourceId = 'operational-destinations';
