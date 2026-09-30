@@ -29,6 +29,29 @@ test('web-hosted Korea profile and style declare one consistent provider boundar
   expect(index).toContain('<link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />');
 });
 
+test('OFM tunnel roads use dedicated layers below surface roads', () => {
+  const style = JSON.parse(readFileSync(new URL('../../public/map/styles/dsv-korea-v1.json', import.meta.url), 'utf8'));
+  const ids = style.layers.map((layer) => layer.id);
+  const layers = new Map(style.layers.map((layer) => [layer.id, layer]));
+  for (const [tunnelId, roadId] of [
+    ['tunnel_link', 'road_link'],
+    ['tunnel_minor', 'road_minor'],
+    ['tunnel_secondary_tertiary', 'road_secondary_tertiary'],
+    ['tunnel_trunk_primary', 'road_trunk_primary'],
+    ['tunnel_motorway', 'road_motorway'],
+  ]) {
+    const tunnel = layers.get(tunnelId);
+    const road = layers.get(roadId);
+    expect(tunnel).toMatchObject({ type: 'line', source: 'openmaptiles', 'source-layer': 'transportation' });
+    expect(tunnel.filter).toContainEqual(['==', ['get', 'brunnel'], 'tunnel']);
+    expect(tunnel.paint['line-color']).toEqual(road.paint['line-color']);
+    expect(tunnel.paint['line-width']).toEqual(road.paint['line-width']);
+    expect(tunnel.paint['line-dasharray']).toBeUndefined();
+    expect(ids.indexOf(tunnelId)).toBeLessThan(ids.indexOf(roadId));
+  }
+  expect(layers.get('tunnel_motorway').filter).toContainEqual(['==', ['get', 'class'], 'motorway']);
+});
+
 test('control map renders the configured departure marker without synthetic route layers', async ({ page }) => {
   const osrmRequests = [];
   const requestedUrls = [];

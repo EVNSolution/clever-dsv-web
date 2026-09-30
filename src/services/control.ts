@@ -54,6 +54,15 @@ export type VehicleGpsDailyRoute = {
   }>;
   bridges: Array<{
     fromObservedAt: string;
+    inferredTunnel?: {
+      confirmedByObservedAt: string;
+      coordinates: Array<[longitude: number, latitude: number]>;
+      corridorId: string;
+      fromObservedAt: string;
+      source: 'CURATED_OSM_TUNNEL_CORRIDOR';
+      toObservedAt: string;
+      type: 'LineString';
+    };
     reason: 'GPS_GAP' | 'IMPLAUSIBLE_JUMP' | 'NO_MATCH';
     toObservedAt: string;
   }>;
@@ -291,16 +300,35 @@ function adaptVehicleGpsDailyRoute(value: unknown, body: unknown): VehicleGpsDai
       || Date.parse(anchor.observedAt) <= Date.parse(anchors[index - 1]!.observedAt)
     ))
   ) throw invalidVehicleGpsTrailHistory(body);
+  const anchorObservedAt = new Set(anchors.map((anchor) => anchor.observedAt));
   const bridges = value.bridges.map((bridge) => {
     if (
       !isObject(bridge)
-      || !hasExactKeys(bridge, ['fromObservedAt', 'reason', 'toObservedAt'])
+      || !hasOnlyKeys(bridge, ['fromObservedAt', 'inferredTunnel', 'reason', 'toObservedAt'])
+      || !Object.hasOwn(bridge, 'fromObservedAt')
+      || !Object.hasOwn(bridge, 'reason')
+      || !Object.hasOwn(bridge, 'toObservedAt')
       || !isDateTime(bridge.fromObservedAt)
       || (bridge.reason !== 'GPS_GAP' && bridge.reason !== 'IMPLAUSIBLE_JUMP' && bridge.reason !== 'NO_MATCH')
       || !isDateTime(bridge.toObservedAt)
     ) throw invalidVehicleGpsTrailHistory(body);
+    const inferredTunnel = bridge.inferredTunnel === undefined
+      ? undefined
+      : adaptVehicleGpsInferredTunnel(bridge.inferredTunnel, body);
+    if (
+      inferredTunnel !== undefined
+      && (
+        bridge.reason !== 'IMPLAUSIBLE_JUMP'
+        || !anchorObservedAt.has(inferredTunnel.fromObservedAt)
+        || !anchorObservedAt.has(inferredTunnel.confirmedByObservedAt)
+        || Date.parse(inferredTunnel.fromObservedAt) > Date.parse(bridge.fromObservedAt)
+        || inferredTunnel.toObservedAt !== bridge.toObservedAt
+        || Date.parse(inferredTunnel.confirmedByObservedAt) <= Date.parse(bridge.toObservedAt)
+      )
+    ) throw invalidVehicleGpsTrailHistory(body);
     return {
       fromObservedAt: bridge.fromObservedAt,
+      ...(inferredTunnel === undefined ? {} : { inferredTunnel }),
       reason: bridge.reason as 'GPS_GAP' | 'IMPLAUSIBLE_JUMP' | 'NO_MATCH',
       toObservedAt: bridge.toObservedAt,
     };
@@ -314,6 +342,48 @@ function adaptVehicleGpsDailyRoute(value: unknown, body: unknown): VehicleGpsDai
     bridges,
     coordinates,
     sourceSampleCount: value.sourceSampleCount,
+    type: 'LineString',
+  };
+}
+
+function adaptVehicleGpsInferredTunnel(
+  value: unknown,
+  body: unknown,
+): NonNullable<VehicleGpsDailyRoute['bridges'][number]['inferredTunnel']> {
+  if (
+    !isObject(value)
+    || !hasExactKeys(value, [
+      'confirmedByObservedAt', 'coordinates', 'corridorId', 'fromObservedAt',
+      'source', 'toObservedAt', 'type',
+    ])
+    || value.type !== 'LineString'
+    || !Array.isArray(value.coordinates)
+    || value.coordinates.length < 2
+    || typeof value.corridorId !== 'string'
+    || value.corridorId.trim() === ''
+    || !isDateTime(value.fromObservedAt)
+    || !isDateTime(value.toObservedAt)
+    || !isDateTime(value.confirmedByObservedAt)
+    || value.source !== 'CURATED_OSM_TUNNEL_CORRIDOR'
+  ) throw invalidVehicleGpsTrailHistory(body);
+  const coordinates = value.coordinates.map((coordinate) => {
+    if (
+      !Array.isArray(coordinate)
+      || coordinate.length !== 2
+      || !isFiniteNumber(coordinate[0])
+      || !isFiniteNumber(coordinate[1])
+      || Math.abs(coordinate[0]) > 180
+      || Math.abs(coordinate[1]) > 90
+    ) throw invalidVehicleGpsTrailHistory(body);
+    return [coordinate[0], coordinate[1]] as [number, number];
+  });
+  return {
+    confirmedByObservedAt: value.confirmedByObservedAt,
+    coordinates,
+    corridorId: value.corridorId,
+    fromObservedAt: value.fromObservedAt,
+    source: 'CURATED_OSM_TUNNEL_CORRIDOR',
+    toObservedAt: value.toObservedAt,
     type: 'LineString',
   };
 }

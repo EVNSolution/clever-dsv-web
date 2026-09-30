@@ -6,6 +6,25 @@ export type ActualFirstLegLine = {
   uncertain: boolean;
 };
 
+export type InferredTunnelCandidateLine = {
+  coordinates: MapCanvasCoordinate[];
+  corridorId: string;
+};
+
+export function inferredTunnelCandidateLines(
+  dailyRoute: VehicleGpsDailyRoute,
+  cursorMs?: number,
+): InferredTunnelCandidateLine[] {
+  return dailyRoute.bridges.flatMap((bridge) => {
+    const candidate = bridge.inferredTunnel;
+    if (
+      candidate === undefined
+      || (cursorMs !== undefined && Date.parse(candidate.confirmedByObservedAt) > cursorMs)
+    ) return [];
+    return [{ coordinates: candidate.coordinates, corridorId: candidate.corridorId }];
+  });
+}
+
 export function dailyRouteTrailLines(dailyRoute: VehicleGpsDailyRoute, cursorMs?: number): MapCanvasCoordinate[][] {
   const bridgeReasons = new Map(dailyRoute.bridges.map((bridge) => [
     `${bridge.fromObservedAt}|${bridge.toObservedAt}`,

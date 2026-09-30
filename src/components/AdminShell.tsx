@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LogOut, UserCog } from 'lucide-react';
 import { adminTabs } from '../app-routes';
 import type { AdminPath } from '../app-routes';
@@ -35,7 +35,11 @@ import {
   splitControlRouteAtStop,
   splitControlRouteByProgress,
 } from '../features/control/control-progress';
-import { actualFirstLegLines, dailyRouteTrailLines } from '../features/control/control-daily-route';
+import {
+  actualFirstLegLines,
+  dailyRouteTrailLines,
+  inferredTunnelCandidateLines,
+} from '../features/control/control-daily-route';
 import type { ControlProgressStatus } from '../features/control/control-progress';
 import {
   controlVehicleColor,
@@ -95,6 +99,8 @@ export function AdminShell({
   const [controlRouteResults, setControlRouteResults] = useState<ReadonlyMap<string, ControlRouteResult>>(new Map());
   const [controlVehicleTrail, setControlVehicleTrail] = useState<VehicleGpsTrailHistory>();
   const [controlVehicleTrailError, setControlVehicleTrailError] = useState('');
+  const [controlTrailRefreshKey, setControlTrailRefreshKey] = useState(0);
+  const controlVehicleTrailIdentityRef = useRef<string | undefined>(undefined);
   const [controlTrailOpen, setControlTrailOpen] = useState(false);
   const [controlTrailCursorMs, setControlTrailCursorMs] = useState<number>();
   const [controlTrailPlaying, setControlTrailPlaying] = useState(false);
@@ -163,6 +169,9 @@ export function AdminShell({
   const handleControlOrdersChange = useCallback((orders: DispatchListItem[], serviceDate?: string) => {
     setControlOrders(orders);
     setControlServiceDate(serviceDate);
+    if (serviceDate !== undefined && isTodayInSeoul(serviceDate)) {
+      setControlTrailRefreshKey((current) => current + 1);
+    }
   }, []);
   const handleControlTrailToggle = useCallback(() => {
     setControlTrailOpen((open) => {
@@ -241,8 +250,15 @@ export function AdminShell({
 
   useEffect(() => {
     const controller = new AbortController();
-    setControlVehicleTrail(undefined);
-    setControlVehicleTrailError('');
+    const identity = selectedControlVehicleId === undefined || controlServiceDate === undefined
+      ? undefined
+      : `${selectedControlVehicleId}\u0000${controlServiceDate}`;
+    const identityChanged = controlVehicleTrailIdentityRef.current !== identity;
+    controlVehicleTrailIdentityRef.current = identity;
+    if (identityChanged) {
+      setControlVehicleTrail(undefined);
+      setControlVehicleTrailError('');
+    }
     if (
       apiConfig.mode !== 'remote'
       || selectedControlVehicleId === undefined
@@ -250,16 +266,19 @@ export function AdminShell({
     ) return () => controller.abort();
     void loadVehicleGpsTrailHistory(selectedControlVehicleId, controlServiceDate, controller.signal)
       .then((history) => {
-        if (!controller.signal.aborted) setControlVehicleTrail(history);
-      })
-      .catch(() => {
         if (!controller.signal.aborted) {
-          setControlVehicleTrail(undefined);
+          setControlVehicleTrail(history);
+          setControlVehicleTrailError('');
+        }
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError') && !controller.signal.aborted) {
+          if (identityChanged) setControlVehicleTrail(undefined);
           setControlVehicleTrailError('차량 자취를 불러오지 못했습니다.');
         }
       });
     return () => controller.abort();
-  }, [controlDailyRouteCompletionKey, controlServiceDate, selectedControlVehicleId]);
+  }, [controlDailyRouteCompletionKey, controlServiceDate, controlTrailRefreshKey, selectedControlVehicleId]);
 
   useEffect(() => {
     setControlTrailOpen(false);
@@ -676,7 +695,7 @@ function completedStopEventAt(orders: DispatchListItem[]): string | undefined {
 
 function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory, cursorMs?: number): MapCanvasRoute[] {
   if (history.dailyRoute !== null) {
-    return dailyRouteTrailLines(history.dailyRoute, cursorMs).map((coordinates, index) => ({
+    const observedRoutes = dailyRouteTrailLines(history.dailyRoute, cursorMs).map((coordinates, index) => ({
       color: '#d92d20',
       coordinates,
       dashed: true,
@@ -685,6 +704,16 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory, cursorMs?: nu
       selected: true,
       sortOrder: 200 + index,
     }));
+    const inferredTunnelRoutes = inferredTunnelCandidateLines(history.dailyRoute, cursorMs).map((candidate, index) => ({
+      color: '#b45309',
+      coordinates: candidate.coordinates,
+      dashed: true,
+      id: `vehicle-trail:inferred-tunnel:${candidate.corridorId}:${index}`,
+      kind: 'trail' as const,
+      selected: true,
+      sortOrder: 300 + index,
+    }));
+    return [...observedRoutes, ...inferredTunnelRoutes];
   }
   const sessions = [...history.sessions].sort((left, right) => {
     const timeOrder = Date.parse(left.startedAt) - Date.parse(right.startedAt);

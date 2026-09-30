@@ -851,6 +851,20 @@ test('uses dailyRoute road evidence without drawing September 29 uncertain jumps
     [7, 8, 'GPS_GAP'],
     [8, 9, 'IMPLAUSIBLE_JUMP'], // 12:10 KST
   ].map(([from, to, reason]) => ({ fromObservedAt: observedAt[from], toObservedAt: observedAt[to], reason }));
+  const inferredTunnelCoordinates = [
+    coordinates[7], [127.014, 37.501], [127.017, 37.501], coordinates[9],
+  ];
+  bridges[6].inferredTunnel = {
+    confirmedByObservedAt: observedAt[10],
+    coordinates: inferredTunnelCoordinates,
+    corridorId: 'seoul-suam-suri-eastbound',
+    fromObservedAt: observedAt[7],
+    source: 'CURATED_OSM_TUNNEL_CORRIDOR',
+    toObservedAt: observedAt[9],
+    type: 'LineString',
+  };
+  let dispatchReads = 0;
+  let gpsTrailReads = 0;
   const api = await installApiFixtures(page, {
     'GET /api/dsv/v1/session': v1Envelope(adminSession),
     'GET /api/dsv/v1/control': v1Envelope({ ...controlSummary, assignedCount: 2, serviceDate, totalDispatchCount: 2, unassignedCount: 0 }),
@@ -863,40 +877,57 @@ test('uses dailyRoute road evidence without drawing September 29 uncertain jumps
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
-    'GET /api/dsv/v1/dispatches': v1Envelope({
+    'GET /api/dsv/v1/dispatches': () => v1Envelope({
       items: [[127.01, 37.5], [127.02, 37.5]].map(([longitude, latitude], index) => ({
         assignmentStatus: 'ASSIGNED', customerId: 'customer-gps-bridges', destinationDisplayName: `배송지 ${index + 1}`,
         destinationId: `destination-gps-bridges-${index + 1}`, driverId: 'driver-gps-bridges', etaStatus: 'PENDING',
-        eventSummary: [], latitude, longitude, routePlanId, routeStopSequence: index + 1,
+        eventSummary: index === 0 && dispatchReads > 0
+          ? [{ occurredAt: observedAt[6], type: 'STOP_DELIVERED' }]
+          : [],
+        latitude, longitude, routePlanId, routeStopSequence: index + 1,
         sellerOrderId: `order-gps-bridges-${index + 1}`, sellerOrderKey: `BRIDGE-${index + 1}`, vehicleId,
       })),
       page: { hasMore: false },
-    }),
-    'GET /api/dsv/v1/vehicles/vehicle-gps-bridges/gps-trail-history': v1Envelope({
-      dailyRoute: {
-        anchors: observedAt.map((time, coordinateIndex) => ({ coordinateIndex, observedAt: time })),
-        bridges,
-        coordinates,
-        sourceSampleCount: observedAt.length,
-        type: 'LineString',
-      },
-      serviceDate,
-      sessions: [{
-        completedAt: null, completionEventId: null, endpoint: { endedAt: null, reason: 'LAST_VALID_SAMPLE' },
-        restart: null, routePlanId,
-        segments: [{
-          roadMatchedGeometry: null,
-          samples: [0, 10].map((index) => ({ distanceTodayKm: null, ignitionOn: true, latitude: coordinates[index][1], longitude: coordinates[index][0], observedAt: observedAt[index], speedKph: null })),
-          trailMarker: null,
+    }, `gps-bridges-dispatch-${++dispatchReads}`),
+    'GET /api/dsv/v1/vehicles/vehicle-gps-bridges/gps-trail-history': () => {
+      gpsTrailReads += 1;
+      if (dispatchReads > 2) return v1Error(500, 'trail refresh unavailable');
+      return v1Envelope({
+        dailyRoute: {
+          anchors: observedAt.map((time, coordinateIndex) => ({ coordinateIndex, observedAt: time })),
+          bridges: dispatchReads === 1
+            ? bridges.map(({ inferredTunnel: _inferredTunnel, ...bridge }) => bridge)
+            : bridges,
+          coordinates,
+          sourceSampleCount: observedAt.length,
+          type: 'LineString',
+        },
+        serviceDate,
+        sessions: [{
+          completedAt: null, completionEventId: null, endpoint: { endedAt: null, reason: 'LAST_VALID_SAMPLE' },
+          restart: null, routePlanId,
+          segments: [{
+            roadMatchedGeometry: null,
+            samples: [0, 10].map((index) => ({ distanceTodayKm: null, ignitionOn: true, latitude: coordinates[index][1], longitude: coordinates[index][0], observedAt: observedAt[index], speedKph: null })),
+            trailMarker: null,
+          }],
+          sessionIndex: 0, startedAt: '2026-09-28T22:30:00.000Z', startEventId: 'start-gps-bridges', startSource: 'ROUTE_STARTED',
         }],
-        sessionIndex: 0, startedAt: '2026-09-28T22:30:00.000Z', startEventId: 'start-gps-bridges', startSource: 'ROUTE_STARTED',
-      }],
-      timezone: 'Asia/Seoul', vehicleId,
-    }),
+        timezone: 'Asia/Seoul', vehicleId,
+      });
+    },
   });
   const trailLines = () => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
     .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.routeId.startsWith('vehicle-trail:daily:'))
     .map((feature) => feature.geometry.coordinates) ?? []);
+  const inferredTunnelLines = () => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
+    .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.routeId.startsWith('vehicle-trail:inferred-tunnel:'))
+    .map((feature) => ({
+      color: feature.properties.color,
+      coordinates: feature.geometry.coordinates,
+      dashed: feature.properties.dashed,
+      kind: feature.properties.kind,
+    })) ?? []);
 
   await page.goto('/control');
   await page.getByRole('button', { name: /경기86아2308/u }).click();
@@ -904,10 +935,31 @@ test('uses dailyRoute road evidence without drawing September 29 uncertain jumps
   await expect.poll(trailLines).toEqual([
     coordinates.slice(0, 2), coordinates.slice(2, 4), coordinates.slice(4, 7), coordinates.slice(9, 11),
   ]);
+  await expect.poll(inferredTunnelLines).toEqual([]);
+  const gpsReadsBeforeRefresh = gpsTrailReads;
   await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
     .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.kind === 'route')
     .map((feature) => feature.geometry.coordinates) ?? []))
     .toEqual([[[127, 37.5], [127.01, 37.5]], [[127.01, 37.5], [127.02, 37.5]]]);
+  await page.clock.fastForward(30_000);
+  await expect.poll(() => dispatchReads).toBeGreaterThan(1);
+  await expect.poll(() => gpsTrailReads).toBeGreaterThan(gpsReadsBeforeRefresh);
+  await expect.poll(inferredTunnelLines).toEqual([{
+    color: '#b45309',
+    coordinates: inferredTunnelCoordinates,
+    dashed: true,
+    kind: 'trail',
+  }]);
+  const gpsReadsBeforeFailedRefresh = gpsTrailReads;
+  await page.clock.fastForward(30_000);
+  await expect.poll(() => gpsTrailReads).toBeGreaterThan(gpsReadsBeforeFailedRefresh);
+  await expect(page.getByText('차량 자취를 불러오지 못했습니다.')).toBeVisible();
+  await expect.poll(inferredTunnelLines).toEqual([{
+    color: '#b45309',
+    coordinates: inferredTunnelCoordinates,
+    dashed: true,
+    kind: 'trail',
+  }]);
   await page.getByRole('button', { name: '자취 보기' }).click();
   const cursor = page.getByRole('region', { name: '경기86아2308 자취 타임라인' }).getByRole('slider', { name: '자취 시점' });
   for (const [time, expected] of [
@@ -918,6 +970,11 @@ test('uses dailyRoute road evidence without drawing September 29 uncertain jumps
   ]) {
     await cursor.fill(String(Date.parse(time)));
     await expect.poll(trailLines).toEqual(expected);
+    await expect.poll(inferredTunnelLines).toEqual(
+      Date.parse(time) < Date.parse(observedAt[10])
+        ? []
+        : [{ color: '#b45309', coordinates: inferredTunnelCoordinates, dashed: true, kind: 'trail' }],
+    );
   }
   expect(api.unexpected).toEqual([]);
 });
@@ -1038,6 +1095,40 @@ test('rejects missing or malformed dailyRoute uncertainty metadata', async ({ pa
     undefined,
     { ...dailyRoute, anchors: [anchors[1], anchors[0], anchors[2]] },
     { ...dailyRoute, bridges: [{ fromObservedAt: anchors[0].observedAt, toObservedAt: anchors[2].observedAt, reason: 'NO_MATCH' }] },
+    {
+      ...dailyRoute,
+      bridges: [{
+        fromObservedAt: anchors[0].observedAt,
+        inferredTunnel: {
+          confirmedByObservedAt: anchors[1].observedAt,
+          coordinates: dailyRoute.coordinates.slice(0, 2),
+          corridorId: 'seoul-suam-suri-eastbound',
+          fromObservedAt: anchors[0].observedAt,
+          source: 'CURATED_OSM_TUNNEL_CORRIDOR',
+          toObservedAt: anchors[1].observedAt,
+          type: 'LineString',
+        },
+        reason: 'IMPLAUSIBLE_JUMP',
+        toObservedAt: anchors[1].observedAt,
+      }],
+    },
+    {
+      ...dailyRoute,
+      bridges: [{
+        fromObservedAt: anchors[0].observedAt,
+        inferredTunnel: {
+          confirmedByObservedAt: anchors[2].observedAt,
+          coordinates: dailyRoute.coordinates.slice(0, 2),
+          corridorId: 'seoul-suam-suri-eastbound',
+          fromObservedAt: anchors[1].observedAt,
+          source: 'CURATED_OSM_TUNNEL_CORRIDOR',
+          toObservedAt: anchors[1].observedAt,
+          type: 'LineString',
+        },
+        reason: 'IMPLAUSIBLE_JUMP',
+        toObservedAt: anchors[1].observedAt,
+      }],
+    },
   ]) {
     responseDailyRoute = invalid;
     await page.goto('/control');
