@@ -50,12 +50,15 @@ npm run dev:remote
 ## 검증
 
 ```bash
+npm run test:unit
 npm run build
 npm run test:e2e
 npm run test:e2e:remote
 ```
 
-전체 검증은 다음 명령으로 실행합니다.
+`npm run test:unit`은 `tests/unit`에서 Node.js 테스트 러너를 실행해 하위 디렉터리의 테스트도 재귀적으로 찾습니다.
+
+전체 검증은 단위 테스트 → 정적 검사 → mock 빌드 → mock E2E → remote E2E 순서로 실행하며, 앞 단계가 실패하면 다음 단계로 넘어가지 않습니다.
 
 ```bash
 npm run check
