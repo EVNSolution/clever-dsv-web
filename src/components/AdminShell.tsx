@@ -35,7 +35,7 @@ import {
   splitControlRouteAtStop,
   splitControlRouteByProgress,
 } from '../features/control/control-progress';
-import { actualFirstLegLines } from '../features/control/control-daily-route';
+import { actualFirstLegLines, dailyRouteTrailLines } from '../features/control/control-daily-route';
 import type { ControlProgressStatus } from '../features/control/control-progress';
 import {
   controlVehicleColor,
@@ -675,6 +675,17 @@ function completedStopEventAt(orders: DispatchListItem[]): string | undefined {
 }
 
 function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory, cursorMs?: number): MapCanvasRoute[] {
+  if (history.dailyRoute !== null) {
+    return dailyRouteTrailLines(history.dailyRoute, cursorMs).map((coordinates, index) => ({
+      color: '#d92d20',
+      coordinates,
+      dashed: true,
+      id: `vehicle-trail:daily:${index}`,
+      kind: 'trail' as const,
+      selected: true,
+      sortOrder: 200 + index,
+    }));
+  }
   const sessions = [...history.sessions].sort((left, right) => {
     const timeOrder = Date.parse(left.startedAt) - Date.parse(right.startedAt);
     return timeOrder === 0 ? left.sessionIndex - right.sessionIndex : timeOrder;

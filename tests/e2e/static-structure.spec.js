@@ -130,7 +130,7 @@ test('the first five control vehicles receive distinct fixed high-contrast color
   expect(vehicles).not.toContain('CONTROL_VEHICLE_NO_ORDERS_COLOR');
 });
 
-test('vehicle trail map prefers clipped matched geometry without restart markers', () => {
+test('vehicle trail fallback uses clipped matched geometry without restart markers', () => {
   const adminShell = readFileSync(new URL('../../src/components/AdminShell.tsx', import.meta.url), 'utf8');
   const playback = readSrc('features/control/control-trail-playback.ts');
   const trailRoutes = adminShell.match(/function vehicleGpsTrailMapRoutes[\s\S]*?\n\}/u)?.[0] ?? '';
