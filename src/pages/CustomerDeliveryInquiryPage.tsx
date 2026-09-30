@@ -199,18 +199,8 @@ function RemoteCustomerDeliveryInquiryPage({
   const [searchValue, setSearchValue] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchDestinationIds, setSearchDestinationIds] = useState<string[]>([]);
-  const [serviceDate, setServiceDate] = useState(() => (
-    initialView === 'history' ? initialQuery.get('serviceDate') ?? todayInSeoul() : todayInSeoul()
-  ));
+  const [serviceDate, setServiceDate] = useState(() => initialQuery.get('serviceDate') ?? todayInSeoul());
   const [view, setView] = useState<CustomerInquiryView>(initialView);
-
-  useEffect(() => {
-    if (view !== 'control') return;
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has('serviceDate')) return;
-    url.searchParams.delete('serviceDate');
-    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
-  }, [view]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -306,14 +296,11 @@ function RemoteCustomerDeliveryInquiryPage({
   const selectView = (nextView: CustomerInquiryView) => {
     const url = new URL(window.location.href);
     if (nextView === 'control') {
-      const today = todayInSeoul();
       url.searchParams.delete('view');
-      url.searchParams.delete('serviceDate');
-      setServiceDate(today);
     } else {
       url.searchParams.set('view', nextView);
-      url.searchParams.set('serviceDate', serviceDate);
     }
+    url.searchParams.set('serviceDate', serviceDate);
     window.history.replaceState({}, '', `${url.pathname}${url.search}`);
     setView(nextView);
     setSelectedVehicleId(undefined);
@@ -381,11 +368,11 @@ function RemoteCustomerDeliveryInquiryPage({
           />
         </Suspense>
         <div className="customer-map-tools">
-          {view === 'history' ? <ServiceDateSelector
-            label="이력 기준일"
+          <ServiceDateSelector
+            label={view === 'history' ? '이력 기준일' : '관제 기준일'}
             onChange={(value) => { if (value !== undefined) selectServiceDate(value); }}
             serviceDate={serviceDate}
-          /> : null}
+          />
           <div
             className="customer-search-card"
             onBlur={(event) => {

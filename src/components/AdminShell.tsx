@@ -32,8 +32,10 @@ import type { MapCanvasCenterRequest, MapCanvasPoint, MapCanvasRoute, MapCanvasV
 import {
   assignControlDestinationProgress,
   CONTROL_PROGRESS_COLORS,
+  splitControlRouteAtStop,
   splitControlRouteByProgress,
 } from '../features/control/control-progress';
+import { actualFirstLegLines } from '../features/control/control-daily-route';
 import type { ControlProgressStatus } from '../features/control/control-progress';
 import {
   controlVehicleColor,
@@ -53,6 +55,7 @@ type ControlRouteRequest = {
   vehicleId: string;
 };
 type ControlRouteStopRequest = {
+  completedAt?: string;
   coordinate: [number, number];
   orderIds: string[];
   progressStatus: ControlProgressStatus;
@@ -108,14 +111,19 @@ export function AdminShell({
     () => assignedControlRouteRequests(controlOrders, vehicleColors),
     [controlOrders, vehicleColors],
   );
+  const controlDailyRouteCompletionKey = controlRouteRequests
+    .filter((route) => route.vehicleId === selectedControlVehicleId)
+    .map((route) => `${route.id}:${route.stops[0]?.completedAt ?? ''}`)
+    .join('|');
   const controlMapRoutes = useMemo(
     () => assignedControlMapRoutes(
       controlRouteRequests,
       controlRouteResults,
       isTodayInSeoul(controlServiceDate) ? controlManagement : undefined,
       selectedControlVehicleId,
+      controlVehicleTrail,
     ),
-    [controlManagement, controlRouteRequests, controlRouteResults, controlServiceDate, selectedControlVehicleId],
+    [controlManagement, controlRouteRequests, controlRouteResults, controlServiceDate, controlVehicleTrail, selectedControlVehicleId],
   );
   const controlTrailRange = useMemo(() => controlTrailBounds(controlVehicleTrail), [controlVehicleTrail]);
   const controlTrailPlaybackSample = useMemo(
@@ -251,7 +259,7 @@ export function AdminShell({
         }
       });
     return () => controller.abort();
-  }, [controlServiceDate, selectedControlVehicleId]);
+  }, [controlDailyRouteCompletionKey, controlServiceDate, selectedControlVehicleId]);
 
   useEffect(() => {
     setControlTrailOpen(false);
@@ -570,6 +578,7 @@ function assignedControlRouteRequests(
         return anchor?.latitude === null || anchor?.latitude === undefined || anchor.longitude === null
           ? []
           : [{
+              ...(stop.progressStatus === 'completed' ? { completedAt: completedStopEventAt(stop.orders) } : {}),
               coordinate: [anchor.longitude, anchor.latitude] as [number, number],
               orderIds: stop.orders.map((order) => order.sellerOrderId),
               progressStatus: stop.progressStatus,
@@ -585,6 +594,7 @@ function assignedControlMapRoutes(
   results: ReadonlyMap<string, ControlRouteResult>,
   management?: ManagementData,
   selectedVehicleId?: string,
+  history?: VehicleGpsTrailHistory,
 ): MapCanvasRoute[] {
   return requests.flatMap((request) => {
     const coordinates = results.get(request.id)?.coordinates;
@@ -599,14 +609,69 @@ function assignedControlMapRoutes(
       && Number.isFinite(vehicle.vehicleLatitude)
       ? [vehicle.vehicleLongitude, vehicle.vehicleLatitude] as [number, number]
       : undefined;
-    return splitControlRouteByProgress({ coordinates, stops: request.stops, vehiclePosition }).map((segment, index) => ({
+    const plannedSegments = splitControlRouteByProgress({ coordinates, stops: request.stops, vehiclePosition });
+    const plannedRoutes = plannedSegments.map((segment, index) => ({
       color: CONTROL_PROGRESS_COLORS[segment.status],
       coordinates: segment.coordinates,
       id: `${request.id}:${segment.status}`,
       selected: true,
       sortOrder: index,
     }));
+    const firstStop = request.stops[0];
+    const completedIndex = plannedSegments.findIndex((segment) => segment.status === 'completed');
+    if (
+      firstStop?.progressStatus !== 'completed'
+      || firstStop.completedAt === undefined
+      || completedIndex < 0
+      || history?.vehicleId !== request.vehicleId
+    ) return plannedRoutes;
+    const startedAt = history.sessions
+      .filter((session) => session.routePlanId === request.id && Date.parse(session.startedAt) <= Date.parse(firstStop.completedAt!))
+      .map((session) => session.startedAt)
+      .sort()[0];
+    if (startedAt === undefined) return plannedRoutes;
+    const completedPart = splitControlRouteAtStop(plannedSegments[completedIndex]!.coordinates, firstStop.coordinate);
+    if (completedPart === null) return plannedRoutes;
+    const actualLines = actualFirstLegLines({
+      completedAt: firstStop.completedAt,
+      dailyRoute: history.dailyRoute,
+      destination: firstStop.coordinate,
+      origin: completedPart.firstLeg[0]!,
+      startedAt,
+    });
+    if (actualLines.length === 0) return plannedRoutes;
+    const actualRoutes: MapCanvasRoute[] = actualLines.map((line, index) => ({
+      color: CONTROL_PROGRESS_COLORS.completed,
+      coordinates: line.coordinates,
+      id: `${request.id}:actual-first-leg:${index}`,
+      ...(line.uncertain ? { kind: 'trail' as const, dashed: true } : {}),
+      selected: true,
+      sortOrder: index,
+    }));
+    const remaining: MapCanvasRoute[] = completedPart.remaining.length > 1
+      ? [{
+          color: CONTROL_PROGRESS_COLORS.completed,
+          coordinates: completedPart.remaining,
+          id: `${request.id}:completed:remaining`,
+          selected: true,
+          sortOrder: actualRoutes.length,
+        }]
+      : [];
+    return [
+      ...plannedRoutes.slice(0, completedIndex),
+      ...actualRoutes,
+      ...remaining,
+      ...plannedRoutes.slice(completedIndex + 1),
+    ];
   });
+}
+
+function completedStopEventAt(orders: DispatchListItem[]): string | undefined {
+  const latestEvents = orders.map((order) => order.eventSummary
+    .filter((event) => event.type === 'STOP_ARRIVED' || event.type === 'STOP_DELIVERED' || event.type === 'STOP_FAILED')
+    .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt))[0]);
+  if (latestEvents.length === 0 || latestEvents.some((event) => event?.type !== 'STOP_DELIVERED')) return undefined;
+  return latestEvents.map((event) => event!.occurredAt).sort().at(-1);
 }
 
 function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory, cursorMs?: number): MapCanvasRoute[] {
@@ -622,18 +687,15 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory, cursorMs?: nu
       ...rawLines.map((coordinates, lineIndex) => ({ coordinates, id: `raw:${lineIndex}` })),
     ];
     return lines.flatMap((line): MapCanvasRoute[] => {
-      if (line.coordinates.length === 0) return [];
-      const visibleCoordinates = line.coordinates.length === 1 && line.id.startsWith('matched:')
-        ? [line.coordinates[0]!, line.coordinates[0]!]
-        : line.coordinates;
+      if (line.coordinates.length < 2) return [];
       return [{
-      color: '#d92d20',
-      coordinates: visibleCoordinates,
-      dashed: true,
-      id: `vehicle-trail:${session.routePlanId}:${session.sessionIndex}:${segmentOrder}:${line.id}`,
-      kind: 'trail' as const,
-      selected: true,
-      sortOrder: 200 + sessionOrder * 100 + segmentOrder * 10,
+        color: '#d92d20',
+        coordinates: line.coordinates,
+        dashed: true,
+        id: `vehicle-trail:${session.routePlanId}:${session.sessionIndex}:${segmentOrder}:${line.id}`,
+        kind: 'trail' as const,
+        selected: true,
+        sortOrder: 200 + sessionOrder * 100 + segmentOrder * 10,
       }];
     });
   }));

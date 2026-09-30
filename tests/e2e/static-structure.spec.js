@@ -138,10 +138,13 @@ test('vehicle trail map prefers clipped matched geometry without restart markers
   expect(trailRoutes).toContain('visibleTrailRawLines(segment.samples, segment.roadMatchedGeometry, cursorMs)');
   expect(trailRoutes).toContain('segment.samples');
   expect(playback).toContain('[sample.longitude, sample.latitude]');
-  expect(trailRoutes).toContain("line.coordinates.length === 1 && line.id.startsWith('matched:')");
+  expect(trailRoutes).toContain('if (line.coordinates.length < 2) return []');
+  expect(trailRoutes).not.toContain('visibleCoordinates');
   expect(trailRoutes).not.toContain('trailMarker');
   expect(trailRoutes).not.toContain('startMarker');
-  expect(readSrc('components/map/OperationalRoutes.ts')).not.toMatch(/restart|interrupted|Interruption|#f59e0b|#fff7ed/u);
+  const operationalRoutes = readSrc('components/map/OperationalRoutes.ts');
+  expect(operationalRoutes).not.toMatch(/restart|interrupted|Interruption|#f59e0b|#fff7ed/u);
+  expect(operationalRoutes).not.toContain("pointFeature(route.id, route.coordinates[0]!, 'sample')");
   expect(readSrc('styles/features/control.css')).not.toContain('control-trail-interruption-popup');
 });
 

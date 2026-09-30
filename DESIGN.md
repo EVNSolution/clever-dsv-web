@@ -3,7 +3,7 @@
 ## Source of truth
 
 - Status: Active
-- Last refreshed: 2026-09-27
+- Last refreshed: 2026-09-30
 - Primary product surfaces: 관제, 배차, 이력, 관리, 설정, 문의, 고객 배송조회, 배송원 앱 설치
 - Evidence reviewed: 현재 React 컴포넌트, `src/styles` 구현, 자동화된 Playwright 계약, 운영 화면과 사용자 피드백, `/tmp/dsv-design-audit-20260927/`의 기준 화면과 `geometry.json`, 인증된 Safari 화면
 - 과거 HTML 데모는 시각적 역사 자료일 뿐 현재 디자인 정본이 아니다. 현재 화면과 이 문서가 충돌하면 구현을 확인하고 문서를 함께 갱신한다.
@@ -60,6 +60,8 @@
 - Token/component ownership: 토큰은 `src/styles/foundation/tokens.css`, 공통 셸은 `src/styles/components`, 반응형 보정은 `src/styles/responsive`가 소유한다.
 - 이력 날짜 입력과 작업 버튼은 좁은 폭에서 내용 크기를 유지하며 줄바꿈한다. 날짜 선택 팝업은 화면 안에 열리고 키보드와 터치로 사용할 수 있어야 한다.
 - 관리 목록과 상세는 각 패널의 실제 높이를 행에 반영한다. 모바일에서는 목록과 상세를 세로로 전체 폭에 배치하고, 편집 중인 상세는 숨기지 않는다.
+- 관제 지도에서 첫 배송지의 완료 이벤트가 확인되면 0→1 예측선만 그 시각까지의 차량 GPS 경로로 바꾼다. 확인된 도로 구간은 기존 완료 색상의 실선, `NO_MATCH`·`GPS_GAP`·`IMPLAUSIBLE_JUMP` 및 출발지·배송지 연결은 기존 자취 점선으로 나타낸다. 이후 구간과 자취 타임라인의 표시 방식은 유지한다.
+- 차량 자취의 좌표가 한 점뿐인 구간은 원이나 길이 0인 선으로 표시하지 않는다. 고객 계정의 관제와 이력은 같은 기준일을 선택하고 탭 이동·새로고침 후에도 유지한다.
 
 ## Accessibility
 

@@ -1454,7 +1454,12 @@ test('dispatch retries after a destination parser failure without hiding the fir
     expect(diagnostics.map((diagnostic) => diagnostic.attemptId)).toContain(call.dsvDispatchHeaders.attemptId);
     expect(call.dsvDispatchHeaders.loadId).toBe(diagnostics[0].loadId);
   }
-  expect(api.calls.filter((call) => call.path === '/api/dsv/v1/drivers')).toHaveLength(4);
+  const driverCalls = api.calls.filter((call) => call.path === '/api/dsv/v1/drivers');
+  expect(driverCalls.filter((call) => call.dsvDispatchHeaders.attemptId === diagnostics[0].attemptId && call.search === '?limit=100')).toHaveLength(1);
+  expect(driverCalls.filter((call) => call.dsvDispatchHeaders.attemptId === diagnostics[1].attemptId).map((call) => call.search)).toEqual([
+    '?limit=100',
+    '?limit=100&cursor=drivers-page-2',
+  ]);
   expectOnlyFixtureCalls(api);
 });
 

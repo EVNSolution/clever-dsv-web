@@ -47,7 +47,23 @@ export type VehicleGpsTrailMarker = {
   observedAt: string;
 };
 
+export type VehicleGpsDailyRoute = {
+  anchors: Array<{
+    coordinateIndex: number;
+    observedAt: string;
+  }>;
+  bridges: Array<{
+    fromObservedAt: string;
+    reason: 'GPS_GAP' | 'IMPLAUSIBLE_JUMP' | 'NO_MATCH';
+    toObservedAt: string;
+  }>;
+  coordinates: Array<[longitude: number, latitude: number]>;
+  sourceSampleCount: number;
+  type: 'LineString';
+};
+
 export type VehicleGpsTrailHistory = {
+  dailyRoute: VehicleGpsDailyRoute | null;
   serviceDate: string;
   sessions: Array<{
     completedAt: string | null;
@@ -98,7 +114,7 @@ export async function loadVehicleGpsTrailHistory(
   serviceDate: string,
   signal?: AbortSignal,
 ): Promise<VehicleGpsTrailHistory> {
-  const query = new URLSearchParams({ serviceDate });
+  const query = new URLSearchParams({ serviceDate, includeDailyRoute: 'true' });
   return adaptVehicleGpsTrailHistory(await requestV1ReadJson<unknown>(
     `vehicles/${encodeURIComponent(vehicleId)}/gps-trail-history?${query.toString()}`,
     { signal },
@@ -162,7 +178,7 @@ function invalidVehicleTemperatureHistory(body: unknown): ApiError {
 function adaptVehicleGpsTrailHistory(data: unknown): VehicleGpsTrailHistory {
   if (
     !isObject(data)
-    || !hasExactKeys(data, ['serviceDate', 'sessions', 'timezone', 'vehicleId'])
+    || !hasExactKeys(data, ['dailyRoute', 'serviceDate', 'sessions', 'timezone', 'vehicleId'])
     || typeof data.serviceDate !== 'string'
     || !/^\d{4}-\d{2}-\d{2}$/u.test(data.serviceDate)
     || !Array.isArray(data.sessions)
@@ -225,7 +241,81 @@ function adaptVehicleGpsTrailHistory(data: unknown): VehicleGpsTrailHistory {
       startSource: session.startSource as 'PLANNED_DEPARTURE' | 'ROUTE_STARTED',
     };
   });
-  return { serviceDate: data.serviceDate, sessions, timezone: data.timezone, vehicleId: data.vehicleId };
+  return {
+    dailyRoute: adaptVehicleGpsDailyRoute(data.dailyRoute, data),
+    serviceDate: data.serviceDate,
+    sessions,
+    timezone: data.timezone,
+    vehicleId: data.vehicleId,
+  };
+}
+
+function adaptVehicleGpsDailyRoute(value: unknown, body: unknown): VehicleGpsDailyRoute | null {
+  if (value === null) return null;
+  if (
+    !isObject(value)
+    || !hasExactKeys(value, ['anchors', 'bridges', 'coordinates', 'sourceSampleCount', 'type'])
+    || value.type !== 'LineString'
+    || !Array.isArray(value.coordinates)
+    || value.coordinates.length < 2
+    || !Array.isArray(value.anchors)
+    || !Array.isArray(value.bridges)
+    || !isNonNegativeInteger(value.sourceSampleCount)
+  ) throw invalidVehicleGpsTrailHistory(body);
+
+  const coordinates = value.coordinates.map((coordinate) => {
+    if (
+      !Array.isArray(coordinate)
+      || coordinate.length !== 2
+      || !isFiniteNumber(coordinate[0])
+      || !isFiniteNumber(coordinate[1])
+      || Math.abs(coordinate[0]) > 180
+      || Math.abs(coordinate[1]) > 90
+    ) throw invalidVehicleGpsTrailHistory(body);
+    return [coordinate[0], coordinate[1]] as [number, number];
+  });
+  const anchors = value.anchors.map((anchor) => {
+    if (
+      !isObject(anchor)
+      || !hasExactKeys(anchor, ['coordinateIndex', 'observedAt'])
+      || !isNonNegativeInteger(anchor.coordinateIndex)
+      || coordinates[anchor.coordinateIndex] === undefined
+      || !isDateTime(anchor.observedAt)
+    ) throw invalidVehicleGpsTrailHistory(body);
+    return { coordinateIndex: anchor.coordinateIndex, observedAt: anchor.observedAt };
+  });
+  if (
+    anchors.length !== value.sourceSampleCount
+    || anchors.some((anchor, index) => index > 0 && (
+      anchor.coordinateIndex < anchors[index - 1]!.coordinateIndex
+      || Date.parse(anchor.observedAt) <= Date.parse(anchors[index - 1]!.observedAt)
+    ))
+  ) throw invalidVehicleGpsTrailHistory(body);
+  const bridges = value.bridges.map((bridge) => {
+    if (
+      !isObject(bridge)
+      || !hasExactKeys(bridge, ['fromObservedAt', 'reason', 'toObservedAt'])
+      || !isDateTime(bridge.fromObservedAt)
+      || (bridge.reason !== 'GPS_GAP' && bridge.reason !== 'IMPLAUSIBLE_JUMP' && bridge.reason !== 'NO_MATCH')
+      || !isDateTime(bridge.toObservedAt)
+    ) throw invalidVehicleGpsTrailHistory(body);
+    return {
+      fromObservedAt: bridge.fromObservedAt,
+      reason: bridge.reason as 'GPS_GAP' | 'IMPLAUSIBLE_JUMP' | 'NO_MATCH',
+      toObservedAt: bridge.toObservedAt,
+    };
+  });
+  const adjacentAnchors = new Set(anchors.slice(1).map((anchor, index) => `${anchors[index]!.observedAt}|${anchor.observedAt}`));
+  if (bridges.some((bridge) => !adjacentAnchors.has(`${bridge.fromObservedAt}|${bridge.toObservedAt}`))) {
+    throw invalidVehicleGpsTrailHistory(body);
+  }
+  return {
+    anchors,
+    bridges,
+    coordinates,
+    sourceSampleCount: value.sourceSampleCount,
+    type: 'LineString',
+  };
 }
 
 function adaptVehicleGpsTrailRoadMatchedGeometry(
