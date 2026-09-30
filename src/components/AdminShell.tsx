@@ -695,10 +695,10 @@ function completedStopEventAt(orders: DispatchListItem[]): string | undefined {
 
 function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory, cursorMs?: number): MapCanvasRoute[] {
   if (history.dailyRoute !== null) {
-    const observedRoutes = dailyRouteTrailLines(history.dailyRoute, cursorMs).map((coordinates, index) => ({
+    const observedRoutes = dailyRouteTrailLines(history.dailyRoute, cursorMs).map((line, index) => ({
       color: '#d92d20',
-      coordinates,
-      dashed: true,
+      coordinates: line.coordinates,
+      dashed: line.uncertain,
       id: `vehicle-trail:daily:${index}`,
       kind: 'trail' as const,
       selected: true,
@@ -723,15 +723,15 @@ function vehicleGpsTrailMapRoutes(history: VehicleGpsTrailHistory, cursorMs?: nu
     const matchedLines = visibleTrailGeometryLines(segment.roadMatchedGeometry, cursorMs);
     const rawLines = visibleTrailRawLines(segment.samples, segment.roadMatchedGeometry, cursorMs);
     const lines = [
-      ...(matchedLines ?? []).map((line) => ({ coordinates: line.coordinates, id: `matched:${line.lineIndex}` })),
-      ...rawLines.map((coordinates, lineIndex) => ({ coordinates, id: `raw:${lineIndex}` })),
+      ...(matchedLines ?? []).map((line) => ({ coordinates: line.coordinates, dashed: false, id: `matched:${line.lineIndex}` })),
+      ...rawLines.map((coordinates, lineIndex) => ({ coordinates, dashed: true, id: `raw:${lineIndex}` })),
     ];
     return lines.flatMap((line): MapCanvasRoute[] => {
       if (line.coordinates.length < 2) return [];
       return [{
         color: '#d92d20',
         coordinates: line.coordinates,
-        dashed: true,
+        dashed: line.dashed,
         id: `vehicle-trail:${session.routePlanId}:${session.sessionIndex}:${segmentOrder}:${line.id}`,
         kind: 'trail' as const,
         selected: true,

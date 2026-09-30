@@ -1,7 +1,7 @@
 import type { MapCanvasCoordinate } from '../../components/MapCanvas';
 import type { VehicleGpsDailyRoute } from '../../services/control';
 
-export type ActualFirstLegLine = {
+export type ControlTrailLine = {
   coordinates: MapCanvasCoordinate[];
   uncertain: boolean;
 };
@@ -25,17 +25,17 @@ export function inferredTunnelCandidateLines(
   });
 }
 
-export function dailyRouteTrailLines(dailyRoute: VehicleGpsDailyRoute, cursorMs?: number): MapCanvasCoordinate[][] {
+export function dailyRouteTrailLines(dailyRoute: VehicleGpsDailyRoute, cursorMs?: number): ControlTrailLine[] {
   const bridgeReasons = new Map(dailyRoute.bridges.map((bridge) => [
     `${bridge.fromObservedAt}|${bridge.toObservedAt}`,
     bridge.reason,
   ]));
-  const lines: MapCanvasCoordinate[][] = [];
+  const lines: ControlTrailLine[] = [];
   let current: MapCanvasCoordinate[] = [];
   let currentUncertain = false;
   const finish = () => {
     if (current.length > 1 && !current.every((coordinate) => sameCoordinate(coordinate, current[0]!))) {
-      lines.push(current);
+      lines.push({ coordinates: current, uncertain: currentUncertain });
     }
     current = [];
   };
@@ -72,7 +72,7 @@ export function actualFirstLegLines(input: {
   destination: MapCanvasCoordinate;
   origin: MapCanvasCoordinate;
   startedAt: string;
-}): ActualFirstLegLine[] {
+}): ControlTrailLine[] {
   const { completedAt, dailyRoute, destination, origin, startedAt } = input;
   if (dailyRoute === null || dailyRoute === undefined) return [];
   const startMs = Date.parse(startedAt);
@@ -85,7 +85,7 @@ export function actualFirstLegLines(input: {
   if (anchors.length < 2) return [];
 
   const bridgeKeys = new Set(dailyRoute.bridges.map((bridge) => `${bridge.fromObservedAt}|${bridge.toObservedAt}`));
-  const lines: ActualFirstLegLine[] = [];
+  const lines: ControlTrailLine[] = [];
   const append = (coordinates: MapCanvasCoordinate[], uncertain: boolean) => {
     if (coordinates.length < 2 || coordinates.every((coordinate) => sameCoordinate(coordinate, coordinates[0]!))) return;
     const previous = lines.at(-1);
