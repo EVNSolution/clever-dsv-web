@@ -41,6 +41,8 @@ DSV_OPERATIONS_SERVER_SOURCE=/tmp/dsv-operations-server-source DSV_OPERATIONS_SC
 - 조회/변경 권한, CSRF, 사업장 변경과 권한 상실을 검사한다.
 - 직접 URL, 새로고침, 로그인 복구, 취소·재배정·만료 안내를 검사한다.
 - commandId와 고정 입력으로 map/select를 재시도한다. 중복 입력, 응답 유실, 새로고침 복구, 충돌과 확정되지 않은 결과를 검사한다.
+- 정확히 조회한 회차의 상태가 알 수 없으면 새 `SAME_EXECUTION`과 차량 선택을 차단한다. 대소문자가 다른 동일 UUID도 같은 대상으로 판정한다. 차단된 두 경로에서 POST가 0건인지 검사한다.
+- `NEW_EXECUTION`과 응답 유실 뒤의 동일 commandId 재시도는 상태 차단과 구분한다. 미조회 ID와 최종 업무 권한은 서버가 검증한다.
 - 30초 갱신, 늦은 응답, 페이지 cursor, 한도, 생략, 알 수 없는 상태와 입력 보존을 검사한다.
 - 1440×900, 1024×768, 768×1024, 390×844, 375×812에서 실제 컨트롤의 경계를 검사한다. 모바일 영역 선택과 보고 이동도 검사한다.
 
@@ -67,7 +69,7 @@ DSV_OPERATIONS_SERVER_SOURCE=/tmp/dsv-operations-server-source DSV_OPERATIONS_SC
 | 정적 구조 | 25 통과 | `check.log` |
 | 기존 mock 브라우저 | 55 통과, remote 전용 33 제외 | `check.log` |
 | 기존 remote API와 기본 OFF 브라우저 | 181 통과 | `check.log` |
-| 신규 operations 계약 모킹 Chromium | 46 통과 | `check.log` |
+| 신규 operations 계약 모킹 Chromium | 47 통과 | 직접 실행 |
 | 최종 화면 캡처 검사 | 8 통과 | `final-captures.log` |
 | 고정 서버 소스 HTTP 통합 | 9 통과, 0 skip | `source-http.log` |
 | 고정 서버 소스 HTTP Chromium | 1 통과 | `source-browser.log` |

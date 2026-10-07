@@ -40,6 +40,7 @@ const knownStates: Record<string, string> = {
   REMINDER_ACTIVE: '시작 경고 감시 중', INCIDENT_MISSING: '경고 사건 없음', AUTHORITY_ENDED: '감시 권한 종료',
   LEASED: '작업 확보', DEAD: '재시도 종료',
 };
+const executionStates = new Set(['ACTIVE', 'CANCELLED', 'COMPLETED', 'EXPIRED', 'REASSIGNED']);
 const notificationNames: Record<string, string> = {
   N01: '배차 등록', N02: '배차 변경', N03: '배정 해제', N04: '창고 도착',
   N05: '시작 경고', N06: '배송지 도착', N07: '미배송 보고',
@@ -388,6 +389,16 @@ export function ExecutionOperationsPage({ principalScopes, principalId, principa
     }
   }
 
+  function blocksNewExecutionCommand(executionContextId: string): boolean {
+    const targetId = executionContextId.toLowerCase();
+    const status = detail?.context.executionContextId.toLowerCase() === targetId
+      ? detail.context.status
+      : executions.find((item) => item.executionContextId.toLowerCase() === targetId)?.status;
+    if (status === undefined || executionStates.has(status)) return false;
+    setActionError(`조회한 회차의 상태를 해석할 수 없습니다. 새 명령을 보내지 않았습니다. (${status})`);
+    return true;
+  }
+
   function submitMap(event: FormEvent) {
     event.preventDefault();
     if (!canWrite || storageKey === null || loading || loadError || pending !== null || actionLock.current) return;
@@ -396,6 +407,7 @@ export function ExecutionOperationsPage({ principalScopes, principalId, principa
       || effectiveAt === null || new Date(effectiveAt).getTime() > Date.now()) {
       setActionError('배차 ID와 회차 ID를 확인해 주세요. 적용 시각은 현재 이전의 한국시간이어야 합니다.'); return;
     }
+    if (mapDraft.mapping === 'SAME_EXECUTION' && blocksNewExecutionCommand(mapDraft.executionContextId)) return;
     const common = { commandId: crypto.randomUUID(), routePlanId: mapDraft.routePlanId, effectiveAt };
     const input: MappingCommand = mapDraft.mapping === 'SAME_EXECUTION'
       ? { ...common, mapping: 'SAME_EXECUTION', executionContextId: mapDraft.executionContextId }
@@ -411,6 +423,7 @@ export function ExecutionOperationsPage({ principalScopes, principalId, principa
     if (!UUID.test(selectDraft.executionContextId) || !UUID.test(selectDraft.vehicleId) || validFrom === null || validUntil === null || validUntil <= validFrom) {
       setActionError('회차 ID와 차량 ID를 확인해 주세요. 선택 종료는 선택 시작 이후의 한국시간이어야 합니다.'); return;
     }
+    if (blocksNewExecutionCommand(selectDraft.executionContextId)) return;
     const input: SelectionCommand = { commandId: crypto.randomUUID(), executionContextId: selectDraft.executionContextId, vehicleId: selectDraft.vehicleId, validFrom, validUntil };
     void sendCommand({ kind: 'select', input, status: 'sending', ownerKey: storageKey });
   }

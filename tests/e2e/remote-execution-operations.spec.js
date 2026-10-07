@@ -243,6 +243,27 @@ test('displays unknown states and all server truncation flags', async ({ page })
   expect(mutationCalls(api)).toEqual([]);
 });
 
+test('blocks new SAME_EXECUTION and selection commands for an exact target with an unknown status', async ({ page }) => {
+  const future = detail();
+  future.context.status = 'FUTURE_STATE';
+  const api = await installOperationsFixtures(page, {
+    [`GET ${base}/executions/${ids.executionA}`]: envelope(future),
+  });
+  await openExecution(page, api);
+
+  const mapForm = await fillMapping(page, 'SAME_EXECUTION');
+  await mapForm.getByLabel('연결할 회차 ID', { exact: true }).fill(ids.executionA.toUpperCase());
+  await mapForm.getByRole('button', { name: '회차 연결 실행', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText(/상태.*해석.*새 명령.*보내지 않았/u);
+
+  const selectForm = await fillSelection(page);
+  await selectForm.getByLabel('선택할 회차 ID', { exact: true }).fill(ids.executionA.toUpperCase());
+  await selectForm.getByRole('button', { name: '회차 선택 실행', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('FUTURE_STATE');
+  expect(mutationCalls(api)).toEqual([]);
+  expect(api.unexpected).toEqual([]);
+});
+
 for (const [name, response] of [
   ['legacy v1 envelope', v1Envelope({ items: [execution()], limit: 100 })],
   ['extra envelope field', { ...envelope({ items: [execution()], limit: 100 }), meta: { apiVersion: 'dsv.v1' } }],
