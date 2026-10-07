@@ -17,6 +17,7 @@ import { logoutCustomerAccount } from './services/customer-accounts';
 import { PasswordChangePage } from './pages/PasswordChangePage';
 import { DriverAppInstallPage } from './pages/DriverAppInstallPage';
 import { DriverPasswordResetPage } from './pages/DriverPasswordResetPage';
+import { operationsEnabled } from './config/dsv-operations';
 
 const CustomerDeliveryInquiryPage = lazy(() => import('./pages/CustomerDeliveryInquiryPage').then((module) => ({ default: module.CustomerDeliveryInquiryPage })));
 
@@ -26,6 +27,24 @@ type SessionGate = {
 };
 
 const SESSION_REVALIDATION_INTERVAL_MS = 60_000;
+const operationsReturnKey = 'clever.operations.return';
+
+function rememberOperationsDestination(): void {
+  if (operationsEnabled && window.location.pathname === '/executions') {
+    window.sessionStorage.setItem(operationsReturnKey, `/executions${window.location.search}`);
+  }
+}
+
+function takeOperationsDestination(): string | null {
+  const destination = window.sessionStorage.getItem(operationsReturnKey);
+  window.sessionStorage.removeItem(operationsReturnKey);
+  if (!operationsEnabled || !destination || destination.length > 1200) return null;
+  let url: URL;
+  try { url = new URL(destination, window.location.origin); } catch { return null; }
+  if (url.origin !== window.location.origin || url.pathname !== '/executions') return null;
+  if ([...url.searchParams.keys()].some((key) => !['serviceDate', 'execution', 'notification', 'report'].includes(key))) return null;
+  return `${url.pathname}${url.search}`;
+}
 
 function readPath(): AppPath {
   const decodedPath = decodeURI(window.location.pathname);
@@ -56,6 +75,7 @@ export function App(): ReactElement {
 
   useEffect(() => {
     const expire = () => {
+      rememberOperationsDestination();
       setPrincipal(null);
       const currentPath = readPath();
       if (roleForPath(currentPath) === 'DSV_ADMIN') {
@@ -112,6 +132,7 @@ export function App(): ReactElement {
       .catch((error: unknown) => {
         if (!active) return;
         if (error instanceof ApiError && error.status === 401) {
+          rememberOperationsDestination();
           const loginPath = requiredRole === 'CUSTOMER_USER' ? customerLoginPath : '/login';
           navigate(loginPath);
           setPath(loginPath);
@@ -168,7 +189,9 @@ export function App(): ReactElement {
   }
 
   function handleLogout(): void {
+    window.sessionStorage.removeItem(operationsReturnKey);
     void logout().catch(() => undefined).then(() => {
+      window.sessionStorage.removeItem(operationsReturnKey);
       setPrincipal(null);
       setSessionGate({ status: 'ready' });
       go('/login');
@@ -187,7 +210,15 @@ export function App(): ReactElement {
     ? accessGateFor(principal, path)
     : sessionGate;
 
-  if (path === '/login') return <LoginPage onLogin={() => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(defaultPath); }} />;
+  if (path === '/login') return <LoginPage onLogin={() => {
+    setPrincipal(null);
+    setSessionGate({ status: 'checking' });
+    const destination = takeOperationsDestination();
+    if (destination) {
+      window.history.replaceState({}, '', destination);
+      setPath('/executions');
+    } else go(defaultPath);
+  }} />;
   if (path === driverAppPath) return <DriverAppInstallPage />;
   if (path === driverPasswordResetPath) return <DriverPasswordResetPage />;
   if (path === customerLoginPath) return <CustomerLoginPage onLogin={(nextPath) => { setPrincipal(null); setSessionGate({ status: 'checking' }); go(nextPath); }} />;
@@ -203,6 +234,7 @@ export function App(): ReactElement {
           activePath="/control"
           previewOnly
           principalId={principal?.id ?? null}
+          principalShopId={principal?.shopId ?? null}
           principalScopes={principal?.scopes ?? []}
           onNavigate={(nextPath) => go(nextPath)}
           onLogout={handleLogout}
@@ -243,6 +275,7 @@ export function App(): ReactElement {
       key={`${principal?.id}:${principal?.shopId}`}
       activePath={path}
       principalId={principal?.id ?? null}
+      principalShopId={principal?.shopId ?? null}
       principalScopes={principal?.scopes ?? []}
       onNavigate={(nextPath) => go(nextPath)}
       onLogout={handleLogout}
@@ -275,6 +308,7 @@ const requiredScopesByPath: Record<AppPath, string[]> = {
   ],
   '/settings': ['dsv:settings:read'],
   '/inquiries': ['dsv:accounts:read'],
+  '/executions': ['dsv:control:read'],
   [adminCustomerDeliveryPath]: ['dsv:customers:read', 'dsv:dispatches:read'],
   [customerDeliveryPath]: ['dsv:customer-deliveries:read'],
   '/login': [],
@@ -292,6 +326,7 @@ function hasRequiredScopes(principal: Principal, path: AppPath): boolean {
 }
 
 function accessGateFor(principal: Principal, path: AppPath): SessionGate {
+  if (path === '/executions' && !operationsEnabled) return { status: 'blocked', message: '회차 기능이 비활성화되어 있습니다.' };
   if (!hasRole(principal, roleForPath(path))) return { status: 'blocked', message: '이 계정은 현재 화면을 볼 수 없습니다.' };
   if (!hasRequiredScopes(principal, path)) return { status: 'blocked', message: '이 계정에는 현재 화면의 조회 권한이 없습니다.' };
   return { status: 'ready' };

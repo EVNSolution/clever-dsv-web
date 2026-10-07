@@ -5,6 +5,7 @@ import { adminTabs } from '../app-routes';
 import type { AdminPath } from '../app-routes';
 import type { Principal } from '../services/auth';
 import { apiConfig } from '../api/config';
+import { operationsEnabled } from '../config/dsv-operations';
 import { AdminCredentialDialog } from './AdminCredentialDialog';
 import { NotificationIsland } from './NotificationIsland';
 import { ControlPage, ControlPreviewPanels } from '../pages/ControlPage';
@@ -71,6 +72,7 @@ export function AdminShell({
   onLogout,
   onSessionUpdate,
   principalId = null,
+  principalShopId = null,
   principalScopes = [],
   previewOnly = false,
 }: {
@@ -79,6 +81,7 @@ export function AdminShell({
   onLogout: () => void;
   onSessionUpdate?: (principal: Principal) => void;
   principalId?: string | null;
+  principalShopId?: string | null;
   principalScopes?: readonly string[];
   previewOnly?: boolean;
 }): ReactElement {
@@ -365,7 +368,8 @@ export function AdminShell({
           <h1 className="sidebar-brand-title">CLEVER DSV</h1>
         </button>
         <span className="mobile-header-title" aria-hidden="true">{activeTab.label}</span>
-        {adminTabs.filter((tab) => tab.path !== '/inquiries' || principalScopes.includes('dsv:accounts:read')).map((tab) => (
+        {adminTabs.filter((tab) => (tab.path !== '/inquiries' || principalScopes.includes('dsv:accounts:read'))
+          && (tab.path !== '/executions' || (operationsEnabled && principalScopes.includes('dsv:control:read')))).map((tab) => (
           <a
             key={tab.path}
             className={`main-tab${tab.path === activePath ? ' active' : ''}`}
@@ -492,7 +496,7 @@ export function AdminShell({
                   onVehicleVisibilityChange={setControlVehicleVisibility}
                 />
               ))
-          : <AdminContent activePath={activePath} title={activeTab.title} description={activeTab.description} principalId={principalId} principalScopes={principalScopes} />}
+          : <AdminContent activePath={activePath} title={activeTab.title} description={activeTab.description} principalId={principalId} principalShopId={principalShopId} principalScopes={principalScopes} />}
       </section>
       {credentialsOpen && !previewOnly ? <AdminCredentialDialog
         onClose={() => setCredentialsOpen(false)}

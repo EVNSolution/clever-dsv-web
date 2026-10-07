@@ -166,6 +166,139 @@ const customerCommandAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'PATCH', pattern: /^customers\/[^/]+\/notification-settings$/u },
 ];
 
+type DsvOperationsRequestInit = {
+  json?: unknown;
+  method?: 'GET' | 'POST';
+  signal?: AbortSignal;
+};
+
+export class DsvOperationsError extends ApiError {
+  constructor(status: number, public readonly code: string, message: string, body?: unknown) {
+    super(status, message, body);
+    this.name = 'DsvOperationsError';
+  }
+}
+
+const operationsUuidSource = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+const operationsUuid = new RegExp(`^${operationsUuidSource}$`, 'iu');
+const operationsAllowlist = [
+  { method: 'GET', pattern: /^operations\/executions$/u, query: ['serviceDate'] },
+  { method: 'GET', pattern: new RegExp(`^operations/executions/${operationsUuidSource}$`, 'iu'), query: [] },
+  { method: 'POST', pattern: /^operations\/executions\/(?:map|select)$/u, query: [] },
+  { method: 'GET', pattern: /^operations\/(?:notifications|delivery-exceptions)$/u, query: ['cursor', 'limit'] },
+  { method: 'GET', pattern: new RegExp(`^operations/notifications/${operationsUuidSource}/resolve$`, 'iu'), query: [] },
+  { method: 'POST', pattern: new RegExp(`^operations/notifications/${operationsUuidSource}/acks$`, 'iu'), query: [] },
+  { method: 'GET', pattern: new RegExp(`^operations/delivery-exceptions/${operationsUuidSource}$`, 'iu'), query: [] },
+  { method: 'POST', pattern: new RegExp(`^operations/delivery-exceptions/${operationsUuidSource}/(?:acknowledge|resolve)$`, 'iu'), query: [] },
+];
+
+/** This envelope is exclusive to the additive operations routes. */
+export async function requestDsvOperationsJson<ResponseBody>(path: string, init: DsvOperationsRequestInit = {}): Promise<ResponseBody> {
+  const target = requestTarget(path, init.method);
+  assertOperationsRequest(path, target, init.json);
+  // Retain one immutable payload through the existing CSRF refresh retry.
+  const request: JsonRequestInit = {
+    cache: 'no-store', method: target.method, signal: init.signal,
+    ...(init.json === undefined ? {} : { json: JSON.parse(JSON.stringify(init.json)) as unknown }),
+  };
+  let response: Response;
+  let body: unknown;
+  try {
+    response = await fetchJson(apiConfig.v1BaseUrl, path, request);
+    if (response.status === 401) expireTransportSession();
+    body = await readOperationsResponseBody(response);
+    // The additive server uses the same FORBIDDEN response for CSRF and scope failure.
+    // Refresh once; the retried command retains its input and still requires server permission.
+    const forbidden = strictOperationsError(response.status, body);
+    if (target.method === 'POST' && response.status === 403 && forbidden.code === 'FORBIDDEN'
+      && (forbidden.message === 'FORBIDDEN' || forbidden.message === 'Invalid CSRF token')
+      && await refreshCsrfToken()) {
+      response = await fetchJson(apiConfig.v1BaseUrl, path, request);
+      if (response.status === 401) expireTransportSession();
+      body = await readOperationsResponseBody(response);
+    }
+  } catch (error) {
+    if (error instanceof ApiError || isAbortError(error)) throw error;
+    throw new DsvOperationsError(0, 'NETWORK_ERROR', '운영 API에 연결하지 못했습니다.');
+  }
+  if (!response.ok) throw strictOperationsError(response.status, body);
+  if (!isExactObject(body, ['data', 'error']) || body.error !== null || body.data === null || body.data === undefined) {
+    throw new DsvOperationsError(502, 'INVALID_RESPONSE', '운영 API 응답 형식이 올바르지 않습니다.');
+  }
+  return body.data as ResponseBody;
+}
+
+function assertOperationsRequest(path: string, target: RequestTarget, json: unknown): void {
+  const entry = operationsAllowlist.find((allowed) => allowed.method === target.method && allowed.pattern.test(target.path));
+  if (entry === undefined || path.startsWith('/') || path.includes('#')) throw disallowedRequest('operations', target);
+  const query = new URLSearchParams(path.split('?')[1] ?? '');
+  const keys = [...query.keys()];
+  if (path.split('?').length > 2 || keys.some((key) => !entry.query.includes(key)) || new Set(keys).size !== keys.length) {
+    throw disallowedRequest('operations query', target);
+  }
+  for (const [key, value] of query) {
+    if ((key === 'serviceDate' && !validOperationsDate(value))
+      || (key === 'cursor' && !/^[A-Za-z0-9_-]{1,300}$/u.test(value))
+      || (key === 'limit' && (!/^\d+$/u.test(value) || Number(value) < 1 || Number(value) > 100))) {
+      throw disallowedRequest('operations query', target);
+    }
+  }
+  if (target.method === 'GET') {
+    if (json !== undefined) throw disallowedRequest('operations body', target);
+    return;
+  }
+  const body = json;
+  const isUuid = (value: unknown): boolean => typeof value === 'string' && operationsUuid.test(value);
+  let valid = false;
+  if (target.path === 'operations/executions/map' && isJsonObject(body)) {
+    const required = ['commandId', 'effectiveAt', 'mapping', 'routePlanId'];
+    valid = isExactObject(body, body.mapping === 'SAME_EXECUTION' ? [...required, 'executionContextId'] : required)
+      && isUuid(body.commandId) && isUuid(body.routePlanId) && validOperationsInstant(body.effectiveAt)
+      && (body.mapping === 'NEW_EXECUTION' || (body.mapping === 'SAME_EXECUTION' && isUuid(body.executionContextId)));
+  } else if (target.path === 'operations/executions/select' && isExactObject(body, ['commandId', 'executionContextId', 'validFrom', 'validUntil', 'vehicleId'])) {
+    valid = isUuid(body.commandId) && isUuid(body.executionContextId) && isUuid(body.vehicleId)
+      && validOperationsInstant(body.validFrom) && validOperationsInstant(body.validUntil)
+      && Date.parse(body.validUntil as string) > Date.parse(body.validFrom as string);
+  } else if (target.path.endsWith('/acks') && isExactObject(body, ['ackKind'])) {
+    valid = body.ackKind === 'READ' || body.ackKind === 'OPENED';
+  } else if (/\/(?:acknowledge|resolve)$/u.test(target.path)) {
+    valid = isExactObject(body, []);
+  }
+  if (!valid) throw disallowedRequest('operations body', target);
+}
+
+function validOperationsDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/u.test(value) && !value.startsWith('0000-')
+    && Number.isFinite(Date.parse(`${value}T00:00:00.000Z`))
+    && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value;
+}
+
+function validOperationsInstant(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(value)) return false;
+  return Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === (value.includes('.') ? value : value.replace('Z', '.000Z'));
+}
+
+async function readOperationsResponseBody(response: Response): Promise<unknown> {
+  if (normalizedContentType(response.headers.get('content-type')) !== 'application/json') {
+    throw new DsvOperationsError(response.ok ? 502 : response.status, 'INVALID_RESPONSE', '운영 API가 JSON 응답을 반환하지 않았습니다.');
+  }
+  try {
+    return await readResponseBody(response);
+  } catch (error) {
+    if (isAbortError(error) || !(error instanceof ApiError)) throw error;
+    throw new DsvOperationsError(response.ok ? 502 : response.status, 'INVALID_RESPONSE', '운영 API JSON 응답 형식이 올바르지 않습니다.');
+  }
+}
+
+function strictOperationsError(status: number, body: unknown): DsvOperationsError {
+  if (!isExactObject(body, ['data', 'error']) || body.data !== null || !isExactObject(body.error, ['code', 'message'])
+    || typeof body.error.code !== 'string' || body.error.code.trim() === ''
+    || typeof body.error.message !== 'string' || body.error.message.trim() === '') {
+    return new DsvOperationsError(status, 'INVALID_RESPONSE', '운영 API 오류 응답 형식이 올바르지 않습니다.');
+  }
+  return new DsvOperationsError(status, body.error.code, body.error.message, body);
+}
+
 export async function requestV1ReadJson<ResponseBody>(path: string, init: JsonRequestInit = {}): Promise<ResponseBody> {
   const target = requestTarget(path, init.method);
   assertAllowed('v1 read', target, v1ReadAllowlist);

@@ -18,6 +18,7 @@
 @import "./features/control.css" layer(features);
 @import "./features/settings.css" layer(features);
 @import "./features/inquiries.css" layer(features);
+@import "./features/execution-operations.css" layer(features);
 @import "./features/dispatch.css" layer(features);
 @import "./features/resources.css" layer(features);
 @import "./features/records.css" layer(features);

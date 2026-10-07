@@ -12,10 +12,13 @@
     "test:unit": "cd tests/unit && node --test",
     "test:static": "playwright test --config=playwright.static.config.cjs",
     "test:e2e": "VITE_DSV_API_MODE=mock playwright test",
-    "test:e2e:remote": "CI=1 VITE_DSV_API_MODE=remote VITE_DSV_API_PROXY_TARGET=http://127.0.0.1:3001 VITE_DSV_SHOP_DOMAIN=dsv-demo.local playwright test tests/e2e/remote-v1-boundary.spec.js tests/e2e/remote-tab-parity.spec.js tests/e2e/remote-inquiries.spec.js tests/e2e/remote-driver-reset-admin.spec.js tests/e2e/remote-driver-reset-public.spec.js tests/e2e/layout-regressions.spec.js",
-    "check": "npm run test:unit && npm run test:static && VITE_DSV_API_MODE=mock npm run build && npm run test:e2e && npm run test:e2e:remote",
+    "test:e2e:remote": "CI=1 VITE_DSV_API_MODE=remote VITE_DSV_API_PROXY_TARGET=http://127.0.0.1:3001 VITE_DSV_SHOP_DOMAIN=dsv-demo.local playwright test tests/e2e/remote-v1-boundary.spec.js tests/e2e/remote-tab-parity.spec.js tests/e2e/remote-inquiries.spec.js tests/e2e/remote-driver-reset-admin.spec.js tests/e2e/remote-driver-reset-public.spec.js tests/e2e/layout-regressions.spec.js tests/e2e/operations-disabled.spec.js",
+    "check": "npm run test:unit && npm run test:static && VITE_DSV_API_MODE=mock npm run build && npm run test:e2e && npm run test:e2e:remote && npm run test:operations",
     "lint": "tsc -p tsconfig.json --noEmit --noUnusedLocals --noUnusedParameters",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:operations": "playwright test --config=playwright.operations.config.cjs",
+    "test:operations:source": "node --test tests/integration/dsv-operations-source.test.mjs",
+    "test:e2e:operations:source": "playwright test --config=playwright.operations.integration.config.cjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.2",
