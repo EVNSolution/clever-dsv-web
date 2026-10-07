@@ -2,7 +2,7 @@
 
 검증일: 2026-10-07, 한국시간.
 웹 base: `4f261b67cfb22669cb26a093eb1f3f59ab9c7606`.
-웹 검증 소스: `5895e11a6d5e77a7ae99c9e447d2580163fa5514`와 이 기록의 전용 spec 제외 수정.
+웹 제품 소스: `8cb17bc7e75a2ec7359ad656e08c563e53ca3efa`. 아래 실기기 보완은 제품 소스를 변경하지 않는다.
 서버 source 검사 기준: `af9b4b43b40a5c6c5cba7bc83587217b2bbe25ab`.
 실제 PostgreSQL runtime 기준: `2d28b39bfb5956b23b26e6d112860d0f6e80ed04`.
 격리 브랜치: `codex/dsv-operations-web`.
@@ -59,11 +59,22 @@ DSV_OPERATIONS_POSTGRES_RUNTIME_URL=http://127.0.0.1:4908 DSV_OPERATIONS_POSTGRE
 
 실제 PostgreSQL 전용 spec가 일반 mock Playwright 설정에 포함되면 mock HTML을 fixture JSON으로 읽는다. 일반 설정의 `testIgnore`에 전용 spec를 추가했다. 실제 DB 검사는 전용 설정에서만 실행한다.
 
+## 실기기 Driver 보고에서 관제 웹 처리까지
+
+격리 Android 앱이 실제 PostgreSQL과 API에 만든 미배송 보고를 관제 웹에서 처리했다. 보고 ID는 `dcf298a2-64ec-4097-b789-bbd2b6b4e1de`이며 N07 알림 ID는 `0fce16a9-977d-44ff-98f8-d73c96edbe82`다. 이 흐름은 브라우저 route mock을 사용하지 않았다.
+
+- 보고 상세 조회와 화면 열기는 업무 POST를 만들지 않았다.
+- 사용자가 알림 READ, 보고 ACKNOWLEDGED, 보고 RESOLVED를 순서대로 실행했다. 요청 기록에는 이 세 POST만 있다.
+- 처리 후 보고 수는 1건이다. 대상 배송지는 `PENDING`, 회차는 `IN_PROGRESS`, 주문의 현재 route version은 그대로다.
+- 시작 경고는 실제 서버 재조회와 화면 새로고침 후 `RESOLVED_START`로 표시됐다. 최초 selector harness는 120초에 실패했다. 따라서 이 캡처는 자동 polling 증거가 아니다. 30초 자동 polling은 별도 PostgreSQL Chromium 검사에서 검증했다.
+
+원본 증거는 `/tmp/dsv-android-flow-20261007/web-report-requests.json`, `web-report-after.db.json`과 아래 화면 캡처다. 합성 local notification tap은 실제 FCM 수신 증거가 아니다.
+
 ## 남은 차단
 
 - 실제 배포 서버 API는 미검증이다. 별도 서버 검사는 PostgreSQL 잠금·동시성·DB 기본값을 담당한다. 웹 브라우저 검사는 그 runtime의 조회와 보고 처리 흐름만 검증한다.
 - 서버 PR483은 미병합·미배포다. 이번 웹 PR도 병합하거나 배포하지 않는다.
-- Driver PR64 소스 검토와 앱 보안, 실기기, FCM 수신 검증은 별도다.
+- Driver 실기기 격리 업무 흐름은 별도 기록에서 검증했다. 실제 FCM 수신, 실차 GPS, 배포 서명과 운영 활성화는 별도다.
 - D01/D02/D04/D05/D07, 운영 사유 목록과 최종 보고 처리 흐름은 미승인이다. 반복 최대 6회도 확정하지 않는다.
 - 실제 운영 활성화와 실발송은 기본 OFF 경계 밖이며 이번 작업에서 수행하지 않는다.
 
@@ -101,6 +112,10 @@ DSV_OPERATIONS_POSTGRES_RUNTIME_URL=http://127.0.0.1:4908 DSV_OPERATIONS_POSTGRE
 | `source-http-report-resolved.png` | 실제 고정 소스 route와 DTO를 통한 보고 처리 완료 | `e7616de4a502dc3e71f34da58f09f696da5d475d3582dfef4c1eee5d64234813` |
 | `postgres-n07-resolved-1440x900.png` | 최종 서버 SHA와 독립 PostgreSQL의 N07 처리 완료 | `2b1e1d6f638e578ffb4a54487318cf3cd1b1ec18b39b43f00e96c971456ea07c` |
 | `postgres-n07-resolved-375x812.png` | 같은 실제 DB 보고의 375 px 배치와 가로 넘침 없음 | `fe6245f8ad9398a24a7a10d2fe21772a9188d757f62aaf7fc04c618f59e8e77e` |
+| `web-02-warning-resolved.png` | 실제 서버 재조회 후 시작 경고 `RESOLVED_START`; 자동 polling 증거 아님 | `83a3bb350ceeccb796a0c23305a671791cc2f7a941cf68e56394f622675c8a9b` |
+| `web-03-native-report-open.png` | 실기기 보고로 생성된 N07과 OPEN 보고 상세 | `b47fbc3512c9c8db97aa943608d317975829f5d0cd0b86e737fe2ab25daec20e` |
+| `web-04-native-report-acknowledged.png` | 같은 보고의 ACKNOWLEDGED 상태 | `3ae72d03cd715be8c2471302e4bb8e7fa93a51cdc9a1297beb9fdf834ec83eb9` |
+| `web-05-native-report-resolved.png` | 같은 보고의 RESOLVED 상태와 분리된 업무 결과 | `b78e5774751c6b00d998703d26de0acd73e49b08d68dc4c9f89b4164c8dc8848` |
 | `notification-error-403.png` | 권한 오류와 상세 비노출 | `083123e0b20231682a9b63dd3f47036eb2f14fad89329a0dbbef1d9647b80751` |
 
 추가 캡처는 `execution-1440x900.png`, `execution-1024x768.png`, `execution-768x1024.png`, `execution-390x844.png`와 `notification-error-404.png`, `notification-error-409.png`, `notification-error-503.png`다. 이 파일들은 최종 캡처 검사로 갱신했다. Safari 수용 검사는 완료하지 않았다. Chromium 증거를 다른 브라우저의 검증으로 해석하지 않는다.
