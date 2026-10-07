@@ -18,7 +18,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:operations": "playwright test --config=playwright.operations.config.cjs",
     "test:operations:source": "node --test tests/integration/dsv-operations-source.test.mjs",
-    "test:e2e:operations:source": "playwright test --config=playwright.operations.integration.config.cjs"
+    "test:e2e:operations:source": "playwright test --config=playwright.operations.integration.config.cjs",
+    "test:e2e:operations:postgres": "playwright test --config=playwright.operations.postgres.config.cjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.2",

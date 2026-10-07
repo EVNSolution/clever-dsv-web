@@ -264,6 +264,51 @@ test('blocks new SAME_EXECUTION and selection commands for an exact target with 
   expect(api.unexpected).toEqual([]);
 });
 
+test('keeps NEW_EXECUTION available when the queried execution has an unknown status', async ({ page }) => {
+  const future = detail();
+  future.context.status = 'FUTURE_STATE';
+  const api = await installOperationsFixtures(page, {
+    [`GET ${base}/executions/${ids.executionA}`]: envelope(future),
+    [`POST ${base}/executions/map`]: envelope({ assignmentEpoch: '10', executionContextId: ids.executionB, notificationKinds: [], outcome: 'ACCEPT', routePlanId: ids.routeB, routeVersion: 4 }),
+  });
+  await openExecution(page, api);
+  const form = await fillMapping(page, 'NEW_EXECUTION');
+  await form.getByRole('button', { name: '회차 연결 실행', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: '회차 연결 결과: ACCEPT' })).toBeVisible();
+  expect(mutationCalls(api)).toHaveLength(1);
+  expect(mutationCalls(api)[0].body).toMatchObject({ mapping: 'NEW_EXECUTION', routePlanId: ids.routeB });
+  expect(api.unexpected).toEqual([]);
+});
+
+test('retries a frozen SAME_EXECUTION command after the queried state becomes unknown', async ({ page }) => {
+  let responseLost = false;
+  const api = await installOperationsFixtures(page, {
+    [`GET ${base}/executions/${ids.executionA}`]: () => {
+      const current = detail();
+      if (responseLost) current.context.status = 'FUTURE_STATE';
+      return envelope(current);
+    },
+    [`POST ${base}/executions/map`]: async ({ route }) => {
+      if (!responseLost) {
+        responseLost = true;
+        await route.abort('failed');
+        return null;
+      }
+      return envelope({ assignmentEpoch: '9', executionContextId: ids.executionA, notificationKinds: [], outcome: 'REPLAY', routePlanId: ids.routeB, routeVersion: 3 });
+    },
+  });
+  await openExecution(page, api);
+  const form = await fillMapping(page, 'SAME_EXECUTION');
+  await form.getByRole('button', { name: '회차 연결 실행', exact: true }).click();
+  await expect(detailRegion(page)).toContainText('FUTURE_STATE');
+  const first = mutationCalls(api)[0].body;
+  await page.getByRole('button', { name: '같은 명령 재시도', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: '회차 연결 결과: REPLAY' })).toBeVisible();
+  expect(mutationCalls(api)).toHaveLength(2);
+  expect(mutationCalls(api)[1].body).toEqual(first);
+  expect(api.unexpected).toEqual([]);
+});
+
 for (const [name, response] of [
   ['legacy v1 envelope', v1Envelope({ items: [execution()], limit: 100 })],
   ['extra envelope field', { ...envelope({ items: [execution()], limit: 100 }), meta: { apiVersion: 'dsv.v1' } }],

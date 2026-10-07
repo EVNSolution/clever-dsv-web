@@ -107,7 +107,7 @@ export async function installOperationsFixtures(page, overrides = {}) {
     [`GET ${base}/delivery-exceptions`]: () => envelope({ items: state.reports, nextCursor: null }),
     ...overrides,
   };
-  await page.route('**/api/**', async (route) => {
+  await page.route('**/api/dsv/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const call = { method: request.method(), path: url.pathname, search: url.search, headers: request.headers(), body: request.postDataJSON() };
