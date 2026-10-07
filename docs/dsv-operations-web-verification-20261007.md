@@ -1,8 +1,10 @@
 # DSV 관제 웹 검증 기록
 
 검증일: 2026-10-07, 한국시간.
-웹 기준: `4f261b67cfb22669cb26a093eb1f3f59ab9c7606`.
-서버 소스 기준: `af9b4b43b40a5c6c5cba7bc83587217b2bbe25ab`.
+웹 base: `4f261b67cfb22669cb26a093eb1f3f59ab9c7606`.
+웹 검증 소스: `5895e11a6d5e77a7ae99c9e447d2580163fa5514`와 이 기록의 전용 spec 제외 수정.
+서버 source 검사 기준: `af9b4b43b40a5c6c5cba7bc83587217b2bbe25ab`.
+실제 PostgreSQL runtime 기준: `2d28b39bfb5956b23b26e6d112860d0f6e80ed04`.
 격리 브랜치: `codex/dsv-operations-web`.
 
 ## 검증 경계
@@ -38,7 +40,7 @@ DSV_OPERATIONS_POSTGRES_RUNTIME_URL=http://127.0.0.1:4908 DSV_OPERATIONS_POSTGRE
 
 실제 Chromium을 사용한다. 계약 모킹 검사와 source HTTP proxy 검사를 분리한다. source 브라우저는 operations API를 가로채지 않는다.
 
-실제 PostgreSQL 브라우저 검사는 source HTTP 합성 저장소 검사와 분리한다. 매 사례가 새 fixture를 만들며 operations API를 가로채지 않는다. Driver API가 만든 N07의 정확한 보고 이동, 읽음, 확인, 처리 완료와 주문·배송 결과 분리를 검증한다. 시작 전 OPEN 경고가 서버 시작 승인 후 새로고침에서 RESOLVED로 바뀌는지도 검증한다.
+실제 PostgreSQL 브라우저 검사는 source HTTP 합성 저장소 검사와 분리한다. 매 사례가 새 fixture를 만들며 operations API를 가로채지 않는다. Driver API가 만든 N07의 정확한 보고 이동, 읽음, 확인, 처리 완료와 주문·배송 결과 분리를 검증한다. 시작 전 OPEN 경고가 서버 시작 승인 후 30초 poll에서 RESOLVED로 바뀌는지도 검증한다.
 
 - 회차 상세에서 GPS 근거, 시작 승인, 출발 관측, N01~N06과 작업 시도를 구분한다.
 - N07은 resolver의 보고 ID, 회차 ID와 대상 배송지 ID를 검증한다.
@@ -55,6 +57,8 @@ DSV_OPERATIONS_POSTGRES_RUNTIME_URL=http://127.0.0.1:4908 DSV_OPERATIONS_POSTGRE
 
 초기 정적 구조 검사는 기존 메뉴만 기대했다. 회차 메뉴를 추가한 현재 명칭으로 기대값을 갱신했다. 신규 API의 기존 v1 parser 거절 조건은 유지했다.
 
+실제 PostgreSQL 전용 spec가 일반 mock Playwright 설정에 포함되면 mock HTML을 fixture JSON으로 읽는다. 일반 설정의 `testIgnore`에 전용 spec를 추가했다. 실제 DB 검사는 전용 설정에서만 실행한다.
+
 ## 남은 차단
 
 - 실제 배포 서버 API는 미검증이다. 별도 서버 검사는 PostgreSQL 잠금·동시성·DB 기본값을 담당한다. 웹 브라우저 검사는 그 runtime의 조회와 보고 처리 흐름만 검증한다.
@@ -65,25 +69,25 @@ DSV_OPERATIONS_POSTGRES_RUNTIME_URL=http://127.0.0.1:4908 DSV_OPERATIONS_POSTGRE
 
 ## 최종 검사 결과
 
-최종 `origin/main` 조회 결과는 웹 기준 SHA와 같다. 기본 checkout은 clean이다. 기존 worktree를 보존하고 별도 관리 worktree에서 검사했다. 최종 소스 리뷰에서 차단 결함을 찾지 못했다.
+기존 checkout을 보존하고 별도 관리 worktree에서 검사했다. 최종 소스 리뷰에서 차단 결함을 찾지 못했다.
 
 | 검사 | 결과 | 증거 |
 |---|---|---|
-| `npm run check` | 종료 코드 0 | `check.log` |
-| 단위 검사 | 13 통과, 0 실패 | `check.log` |
-| 정적 구조 | 25 통과 | `check.log` |
-| 기존 mock 브라우저 | 55 통과, remote 전용 33 제외 | `check.log` |
-| 기존 remote API와 기본 OFF 브라우저 | 181 통과 | `check.log` |
-| 신규 operations 계약 모킹 Chromium | 49 사례 작성, 최종 전체 재실행 필요 | 직접 실행 |
+| `npm run check` | 종료 코드 0 | `/tmp/dsv-web-final-check.log` |
+| 단위 검사 | 13 통과, 0 실패 | `/tmp/dsv-web-final-check.log` |
+| 정적 구조 | 25 통과 | `/tmp/dsv-web-final-check.log` |
+| 기존 mock 브라우저 | 55 통과, remote 전용 33 제외 | `/tmp/dsv-web-final-check.log` |
+| 기존 remote API와 기본 OFF 브라우저 | 181 통과 | `/tmp/dsv-web-final-check.log` |
+| 신규 operations 계약 모킹 Chromium | 49 통과 | `/tmp/dsv-web-final-check.log` |
 | 최종 화면 캡처 검사 | 8 통과 | `final-captures.log` |
 | 고정 서버 소스 HTTP 통합 | 9 통과, 0 skip | `source-http.log` |
 | 고정 서버 소스 HTTP Chromium | 1 통과 | `source-browser.log` |
-| 독립 PostgreSQL runtime Chromium | 2 통과, 1 worker | 실제 Prisma, 실제 API, 동적 fixture |
-| `npm run lint` | 종료 코드 0 | `lint.log` |
-| `npm run typecheck` | 종료 코드 0 | `typecheck.log` |
-| remote, 기능 OFF의 `npm run build` | 종료 코드 0 | `default-off-build.log` |
+| 독립 PostgreSQL runtime Chromium | 2 통과, 1 worker | `/tmp/dsv-web-final-postgres-browser.log` |
+| `npm run lint` | 종료 코드 0 | `/tmp/dsv-web-final-lint.log` |
+| TypeScript 검사 | lint와 mock/remote build에서 통과 | 위 최종 lint/check/build 로그 |
+| remote, 기능 OFF의 `npm run build` | 종료 코드 0 | `/tmp/dsv-web-final-default-off-build.log` |
 
-로그는 `/tmp/dsv-operations-web-evidence/`에 있다. 화면 캡처 재실행은 최종 모바일 수정과 보고 완료 표시를 확인했다. Vite의 500 kB 초과 chunk 경고는 남아 있다. 빌드와 정적 서버 계약 검증은 통과했다.
+이전 source 검사 로그는 `/tmp/dsv-operations-web-evidence/`에 있다. 최종 웹 로그는 위 표의 경로에 있다. 화면 캡처 재실행은 최종 PostgreSQL runtime의 보고 완료 표시를 확인했다. Vite의 500 kB 초과 chunk 경고는 남아 있다. 빌드와 정적 서버 계약 검증은 통과했다.
 
 ## 최종 화면 증거
 
@@ -95,8 +99,8 @@ DSV_OPERATIONS_POSTGRES_RUNTIME_URL=http://127.0.0.1:4908 DSV_OPERATIONS_POSTGRE
 | `execution-375x812.png` | 모바일 영역 선택, 상세와 관리자 입력 | `9c99c952d0c1ed2a99d4eba8294ba5ee25dd038ff255241f6ea493ccfed0e2b7` |
 | `n07-report-resolved.png` | 계약 모킹 N07의 정확한 보고 처리 완료 | `57257def2cb01d89c9486ea2c94f3d71dd58eae856f47797fc08f8ad94536f3e` |
 | `source-http-report-resolved.png` | 실제 고정 소스 route와 DTO를 통한 보고 처리 완료 | `e7616de4a502dc3e71f34da58f09f696da5d475d3582dfef4c1eee5d64234813` |
-| `postgres-n07-resolved-1440x900.png` | 독립 PostgreSQL의 N07 정확한 보고 처리 완료 | `026dd717aa9aa6e8df4aca774e89ba10595cef57f6ee5385da2a4064644982ba` |
-| `postgres-n07-resolved-375x812.png` | 같은 실제 DB 보고의 375 px 배치와 가로 넘침 없음 | `f8d363e25444d178357b1748c53f5e2a75ef780759b971a57479aae5eccb9683` |
+| `postgres-n07-resolved-1440x900.png` | 최종 서버 SHA와 독립 PostgreSQL의 N07 처리 완료 | `2b1e1d6f638e578ffb4a54487318cf3cd1b1ec18b39b43f00e96c971456ea07c` |
+| `postgres-n07-resolved-375x812.png` | 같은 실제 DB 보고의 375 px 배치와 가로 넘침 없음 | `fe6245f8ad9398a24a7a10d2fe21772a9188d757f62aaf7fc04c618f59e8e77e` |
 | `notification-error-403.png` | 권한 오류와 상세 비노출 | `083123e0b20231682a9b63dd3f47036eb2f14fad89329a0dbbef1d9647b80751` |
 
 추가 캡처는 `execution-1440x900.png`, `execution-1024x768.png`, `execution-768x1024.png`, `execution-390x844.png`와 `notification-error-404.png`, `notification-error-409.png`, `notification-error-503.png`다. 이 파일들은 최종 캡처 검사로 갱신했다. Safari 수용 검사는 완료하지 않았다. Chromium 증거를 다른 브라우저의 검증으로 해석하지 않는다.
