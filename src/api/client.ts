@@ -111,6 +111,7 @@ const legacyAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'GET', pattern: /^driver-account-links\/pending$/u },
   { method: 'POST', pattern: /^driver-account-links\/[^/]+\/approve$/u },
   { method: 'POST', pattern: /^drivers\/[^/]+\/password-reset-link$/u },
+  { method: 'GET', pattern: /^drivers\/[^/]+\/account$/u },
   { method: 'POST', pattern: /^drivers$/u },
   { method: 'PATCH', pattern: /^drivers\/[^/]+$/u },
   { method: 'DELETE', pattern: /^drivers\/[^/]+$/u },
