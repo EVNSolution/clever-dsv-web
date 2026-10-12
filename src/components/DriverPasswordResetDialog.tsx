@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { apiConfig } from '../api/config';
 import type { ManagementDriver } from '../demo/management';
-import { issueDriverPasswordReset, type DriverPasswordResetLink } from '../services/driver-password-reset';
+import { describeAccountStatus, describeSessionState, type DriverAccountSummary } from '../services/driver-account-summary';
+import { fetchDriverAccountSummary, issueDriverPasswordReset, type DriverPasswordResetLink } from '../services/driver-password-reset';
 
 export function DriverPasswordResetDialog({ driver, onClose }: { driver: ManagementDriver; onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -11,6 +13,17 @@ export function DriverPasswordResetDialog({ driver, onClose }: { driver: Managem
   const [phase, setPhase] = useState<'confirm' | 'issuing' | 'issued' | 'cleared'>('confirm');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [account, setAccount] = useState<DriverAccountSummary | 'loading' | 'missing' | 'failed'>('loading');
+
+  // Show the login id first: a driver who forgot it only needs the id, not a new password.
+  useEffect(() => {
+    if (apiConfig.mode === 'mock') { setAccount('missing'); return undefined; }
+    const controller = new AbortController();
+    fetchDriverAccountSummary(driver.id, controller.signal)
+      .then((summary) => { if (!controller.signal.aborted) setAccount(summary ?? 'missing'); })
+      .catch(() => { if (!controller.signal.aborted) setAccount('failed'); });
+    return () => controller.abort();
+  }, [driver.id]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -90,15 +103,22 @@ export function DriverPasswordResetDialog({ driver, onClose }: { driver: Managem
 
   return (
     <dialog ref={dialogRef} className="driver-install-dialog" aria-labelledby="driver-reset-title" onCancel={(event) => { event.preventDefault(); onClose(); }}>
-      <header className="driver-install-header"><strong id="driver-reset-title">CLEVER Driver 비밀번호 초기화</strong></header>
+      <header className="driver-install-header"><strong id="driver-reset-title">CLEVER Driver 계정 확인 · 비밀번호 초기화</strong></header>
       <div className="driver-install-body">
         <div className="driver-install-details">
           <dl className="management-detail compact">
             <div><dt>배송원</dt><dd>{driver.name}</dd></div>
             <div><dt>연락처</dt><dd>{driver.phone || '미등록'}</dd></div>
             <div><dt>배송원 ID</dt><dd>{driver.id}</dd></div>
+            <div><dt>로그인 아이디</dt><dd data-testid="driver-account-login-id">{
+              account === 'loading' ? '확인 중' : account === 'missing' ? '연결된 앱 계정 없음' : account === 'failed' ? '확인 불가'
+                : <strong>{account.loginId ?? '아이디 미설정'}</strong>
+            }</dd></div>
+            <div><dt>앱 계정 상태</dt><dd>{
+              typeof account === 'string' ? '-' : `${describeAccountStatus(account.status)} · ${describeSessionState(account)}`
+            }</dd></div>
           </dl>
-          <p>선택한 배송원에 연결된 CLEVER Driver 앱 계정의 초기화 링크를 발급합니다. 계정 연결과 차량 배정은 유지됩니다.</p>
+          <p>배송원이 로그인 아이디를 잊은 경우 위 아이디를 본인에게 안내합니다. 비밀번호를 모르는 경우에만 아래 초기화 링크를 발급합니다. 계정 연결과 차량 배정은 유지됩니다.</p>
           {phase === 'confirm' || phase === 'issuing' ? <>
             <p>새 링크를 발급하면 기존 미사용 링크는 폐기됩니다. 링크는 30분 동안 한 번 사용할 수 있으며, 비밀번호 변경 후 기존 앱 세션은 종료됩니다.</p>
             <label className="driver-reset-confirm"><input type="checkbox" checked={confirmed} disabled={phase === 'issuing'} onChange={(event) => setConfirmed(event.target.checked)} />배송원 본인과 앱 계정 연결을 확인했습니다.</label>

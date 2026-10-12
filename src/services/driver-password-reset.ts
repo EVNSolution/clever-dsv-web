@@ -1,5 +1,6 @@
 import { ApiError, requestLegacyJson } from '../api/client';
 import { apiConfig } from '../api/config';
+import { parseDriverAccountSummary, type DriverAccountSummary } from './driver-account-summary';
 
 export type DriverPasswordResetLink = { expiresAt: string; method: 'ADMIN_LINK'; setupUrl: string };
 
@@ -34,6 +35,17 @@ export async function issueDriverPasswordReset(driverId: string, signal?: AbortS
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) throw new Error('관리자 세션이 만료되었습니다. 다시 로그인해 주세요.');
     throw sanitized(error);
+  }
+}
+
+// Administrators read the login id a driver forgot; a 404 means no linked app account.
+export async function fetchDriverAccountSummary(driverId: string, signal?: AbortSignal): Promise<DriverAccountSummary | null> {
+  try {
+    const result = await requestLegacyJson<unknown>(`drivers/${encodeURIComponent(driverId)}/account`, { method: 'GET', cache: 'no-store', signal });
+    return object(result) ? parseDriverAccountSummary(result.account) : null;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
   }
 }
 
