@@ -105,6 +105,7 @@ const legacyAllowlist: Array<{ method: string; pattern: RegExp }> = [
   { method: 'POST', pattern: /^customer-accounts\/[^/]+\/reinvite$/u },
   { method: 'POST', pattern: /^customer-accounts\/[^/]+\/password-reset$/u },
   { method: 'PATCH', pattern: /^customer-accounts\/[^/]+\/status$/u },
+  { method: 'DELETE', pattern: /^customer-accounts\/[^/]+$/u },
   { method: 'POST', pattern: /^customer\/auth\/invitations\/validate$/u },
   { method: 'POST', pattern: /^customer\/auth\/complete$/u },
   { method: 'POST', pattern: /^customer\/auth\/login$/u },

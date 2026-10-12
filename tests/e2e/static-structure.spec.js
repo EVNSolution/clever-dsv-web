@@ -315,6 +315,11 @@ test('public customer account pages keep invitation and login contract explicit'
   expect(service).toContain("'session/logout'");
   expect(service).toContain('setupUrl');
   expect(readSrc('api/client.ts')).toContain('!isPublicAuthPath(target.path)');
+  const panel = readSrc('pages/MasterDataPage.tsx');
+  expect(panel).toContain('discardCustomerAccount');
+  expect(panel).toContain('canReinvite && !account.loginId');
+  expect(panel).toContain("setInvitationPurpose(action === 'reinvite' ? 'SIGNUP' : 'PASSWORD_RESET')");
+  expect(panel).not.toContain('이메일 발송');
 });
 
 test('public DSV admin account setup and credentials keep top-level account contract explicit', () => {
