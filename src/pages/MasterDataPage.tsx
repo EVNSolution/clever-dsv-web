@@ -15,8 +15,8 @@ import {
 import type { ManagementData } from '../demo/management';
 import { addressSimilarity, loadManagementData, managementId } from '../demo/management';
 import { getCustomerOrders } from '../demo/selectors/customer';
-import type { CustomerAccount, CustomerAccountInvitationIssue, CustomerAccountStatus } from '../services/customer-accounts';
-import { inviteCustomerAccount, loadCustomerAccounts, reinviteCustomerAccount, sendCustomerAccountPasswordReset, setCustomerAccountStatus } from '../services/customer-accounts';
+import type { CustomerAccount, CustomerAccountInvitationIssue, CustomerAccountInvitePurpose, CustomerAccountStatus } from '../services/customer-accounts';
+import { discardCustomerAccount, inviteCustomerAccount, loadCustomerAccounts, reinviteCustomerAccount, sendCustomerAccountPasswordReset, setCustomerAccountStatus } from '../services/customer-accounts';
 import { emptyManagementData, loadManagementSnapshot, persistManagementChange } from '../services/management';
 import { ResourcesPage } from './ResourcesPage';
 
@@ -223,6 +223,7 @@ function CustomerAccountPanel({ customerId }: { customerId: string }): ReactElem
   const [state, setState] = useState<{ busyId: string | null; error: string | null; loading: boolean; message: string | null }>({ busyId: null, error: null, loading: true, message: null });
   const [inviteOpen, setInviteOpen] = useState(false);
   const [invitationIssue, setInvitationIssue] = useState<CustomerAccountInvitationIssue | null>(null);
+  const [invitationPurpose, setInvitationPurpose] = useState<CustomerAccountInvitePurpose>('SIGNUP');
 
   const refresh = () => {
     if (apiConfig.mode === 'mock') {
@@ -246,6 +247,7 @@ function CustomerAccountPanel({ customerId }: { customerId: string }): ReactElem
     try {
       const issue = await inviteCustomerAccount(customerId);
       setAccounts((current) => upsertAccount(current, issue.account));
+      setInvitationPurpose('SIGNUP');
       setInvitationIssue(issue);
       setState({ busyId: null, error: null, loading: false, message: '임시 초대 링크를 생성했습니다.' });
     } catch (error) {
@@ -253,20 +255,26 @@ function CustomerAccountPanel({ customerId }: { customerId: string }): ReactElem
     }
   };
 
-  const accountAction = async (account: CustomerAccount, action: 'reinvite' | 'password-reset' | 'disable' | 'enable') => {
+  const accountAction = async (account: CustomerAccount, action: 'reinvite' | 'password-reset' | 'disable' | 'enable' | 'discard') => {
+    if (action === 'discard' && !window.confirm('가입 전 고객 계정을 폐기합니다. 발급한 링크는 더 이상 사용할 수 없습니다.')) return;
     setState({ busyId: `${action}:${account.id}`, error: null, loading: false, message: null });
     try {
-      if (action === 'reinvite') {
-        const issue = await reinviteCustomerAccount(account.id);
+      if (action === 'reinvite' || action === 'password-reset') {
+        const issue = action === 'reinvite' ? await reinviteCustomerAccount(account.id) : await sendCustomerAccountPasswordReset(account.id);
         setAccounts((current) => upsertAccount(current, issue.account));
+        setInvitationPurpose(action === 'reinvite' ? 'SIGNUP' : 'PASSWORD_RESET');
         setInvitationIssue(issue);
         setInviteOpen(true);
-        setState({ busyId: null, error: null, loading: false, message: '새 임시 초대 링크를 생성했습니다. 이전 링크는 사용할 수 없습니다.' });
+        setState({ busyId: null, error: null, loading: false, message: customerAccountActionMessage(action) });
         return;
       }
-      const updated = action === 'password-reset'
-        ? await sendCustomerAccountPasswordReset(account.id)
-        : await setCustomerAccountStatus(account.id, action === 'disable' ? 'DISABLED' : 'ACTIVE');
+      if (action === 'discard') {
+        const accountId = await discardCustomerAccount(account.id);
+        setAccounts((current) => current.filter((item) => item.id !== accountId));
+        setState({ busyId: null, error: null, loading: false, message: customerAccountActionMessage(action) });
+        return;
+      }
+      const updated = await setCustomerAccountStatus(account.id, action === 'disable' ? 'DISABLED' : 'ACTIVE');
       setAccounts((current) => upsertAccount(current, updated));
       setState({ busyId: null, error: null, loading: false, message: customerAccountActionMessage(action) });
     } catch (error) {
@@ -277,9 +285,9 @@ function CustomerAccountPanel({ customerId }: { customerId: string }): ReactElem
   return <section className="customer-account-panel" aria-label="고객 계정 관리">
     <div className="customer-account-heading">
       <span><strong>고객 계정</strong><small>{accounts.length}개 계정</small></span>
-      <button className="customer-account-issue-button" type="button" disabled={state.busyId === 'invite'} onClick={() => { setInvitationIssue(null); setInviteOpen(true); }}>{state.busyId === 'invite' ? '요청 중' : '계정 발급'}</button>
+      <button className="customer-account-issue-button" type="button" disabled={state.busyId === 'invite'} onClick={() => { setInvitationPurpose('SIGNUP'); setInvitationIssue(null); setInviteOpen(true); }}>{state.busyId === 'invite' ? '요청 중' : '계정 발급'}</button>
     </div>
-    {inviteOpen ? <CustomerAccountInviteDialog busy={state.busyId === 'invite'} issue={invitationIssue} onClose={() => { setInviteOpen(false); setInvitationIssue(null); }} onSubmit={submitInvite} /> : null}
+    {inviteOpen ? <CustomerAccountInviteDialog busy={state.busyId === 'invite'} issue={invitationIssue} purpose={invitationPurpose} onClose={() => { setInviteOpen(false); setInvitationIssue(null); }} onSubmit={submitInvite} /> : null}
     {state.loading ? <p className="customer-account-status" role="status">고객 계정을 불러오는 중입니다.</p> : null}
     {!state.loading && !accounts.length ? <p className="customer-account-status" role="status">등록된 고객 계정이 없습니다.</p> : null}
     {accounts.length ? <AdminTableFrame>
@@ -290,6 +298,7 @@ function CustomerAccountPanel({ customerId }: { customerId: string }): ReactElem
           const canReinvite = account.status === 'INVITED' || account.status === 'EXPIRED';
           const canDisable = account.status === 'ACTIVE';
           const canEnable = account.status === 'DISABLED';
+          const canDiscard = canReinvite && !account.loginId;
           return <tr key={account.id}>
             <td><strong>{account.displayName || account.email || account.loginId || '고객 계정'}</strong><small>{account.loginId || account.email || '-'}</small></td>
             <td><span className={`customer-account-status-pill ${account.status.toLowerCase()}`}>{customerAccountStatusLabel(account.status)}</span></td>
@@ -299,6 +308,7 @@ function CustomerAccountPanel({ customerId }: { customerId: string }): ReactElem
               <button type="button" disabled={isBusy || !canReinvite} onClick={() => accountAction(account, 'reinvite')}>재초대</button>
               <button type="button" disabled={isBusy || account.status !== 'ACTIVE'} onClick={() => accountAction(account, 'password-reset')}>재설정</button>
               <button type="button" className={canDisable ? 'danger' : undefined} disabled={isBusy || (!canDisable && !canEnable)} onClick={() => accountAction(account, canDisable ? 'disable' : 'enable')}>{canEnable ? '활성화' : '비활성화'}</button>
+              {canDiscard ? <button type="button" className="danger" disabled={isBusy} onClick={() => accountAction(account, 'discard')}>폐기</button> : null}
             </span></td>
           </tr>;
         })}</tbody>
@@ -314,14 +324,17 @@ function CustomerAccountInviteDialog({
   issue,
   onClose,
   onSubmit,
+  purpose,
 }: {
   busy: boolean;
   issue: CustomerAccountInvitationIssue | null;
   onClose: () => void;
+  purpose: CustomerAccountInvitePurpose;
   onSubmit: () => Promise<void>;
 }): ReactElement {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [copyState, setCopyState] = useState<'copied' | 'error' | 'idle'>('idle');
+  const linkName = purpose === 'SIGNUP' ? '초대 링크' : '재설정 링크';
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -359,28 +372,28 @@ function CustomerAccountInviteDialog({
     >
       <header className="driver-invite-header">
         <span>
-          <strong id="customer-account-invite-title">고객 계정 발급</strong>
-          <small id="customer-account-invite-description">고객 담당자가 직접 가입할 수 있는 임시 링크를 만듭니다.</small>
+          <strong id="customer-account-invite-title">{purpose === 'SIGNUP' ? '고객 계정 발급' : '고객 계정 비밀번호 재설정'}</strong>
+          <small id="customer-account-invite-description">{purpose === 'SIGNUP' ? '고객 담당자가 직접 가입할 수 있는 임시 링크를 만듭니다.' : '고객 담당자가 새 비밀번호를 설정할 수 있는 임시 링크입니다.'}</small>
         </span>
         <button aria-label="고객 계정 발급 닫기" type="button" onClick={onClose}><X aria-hidden="true" /></button>
       </header>
       {!issue ? <form className="customer-account-invite-form" id="customer-account-invite-form" aria-label="고객 계정 발급" onSubmit={submit}>
         <p className="customer-account-invite-message">링크를 전달받은 고객 담당자가 이름, 로그인 아이디, 비밀번호를 직접 설정합니다. 링크는 만료 전까지 한 번만 사용할 수 있습니다.</p>
       </form> : null}
-      {issue ? <section className="customer-account-invite-preview" id="customer-account-invite-preview" aria-label="임시 초대 링크">
-        <strong>임시 초대 링크</strong>
+      {issue ? <section className="customer-account-invite-preview" id="customer-account-invite-preview" aria-label={`임시 ${linkName}`}>
+        <strong>임시 {linkName}</strong>
         <p>아래 링크를 고객 담당자에게 안전하게 전달해 주세요. 새 링크를 다시 만들면 이전 링크는 사용할 수 없습니다.</p>
-        <label>가입 링크
-          <input aria-label="고객 가입 링크" readOnly value={issue.invitation.setupUrl} onFocus={(event) => event.currentTarget.select()} />
+        <label>{purpose === 'SIGNUP' ? '가입 링크' : '재설정 링크'}
+          <input aria-label={purpose === 'SIGNUP' ? '고객 가입 링크' : '고객 비밀번호 재설정 링크'} readOnly value={issue.invitation.setupUrl} onFocus={(event) => event.currentTarget.select()} />
         </label>
         <dl><div><dt>만료 시각</dt><dd>{formatDate(issue.invitation.expiresAt)}</dd></div></dl>
-        {copyState === 'copied' ? <p role="status">초대 링크를 복사했습니다.</p> : null}
-        {copyState === 'error' ? <p role="alert">초대 링크를 복사하지 못했습니다. 링크를 직접 선택해 복사해 주세요.</p> : null}
+        {copyState === 'copied' ? <p role="status">{linkName}를 복사했습니다.</p> : null}
+        {copyState === 'error' ? <p role="alert">{linkName}를 복사하지 못했습니다. 링크를 직접 선택해 복사해 주세요.</p> : null}
       </section> : null}
       <footer className="driver-invite-footer">
         <button type="button" onClick={onClose}>{issue ? '닫기' : '취소'}</button>
         {issue
-          ? <button className="primary" type="button" onClick={() => void copyInvitationLink()}><Copy aria-hidden="true" /> 초대 링크 복사</button>
+          ? <button className="primary" type="button" onClick={() => void copyInvitationLink()}><Copy aria-hidden="true" /> {linkName} 복사</button>
           : <button className="primary" disabled={busy} form="customer-account-invite-form" type="submit">{busy ? '생성 중' : '임시 링크 생성'}</button>}
       </footer>
     </dialog>
@@ -400,9 +413,10 @@ function customerAccountStatusLabel(status: CustomerAccountStatus): string {
   return '만료';
 }
 
-function customerAccountActionMessage(action: 'reinvite' | 'password-reset' | 'disable' | 'enable'): string {
-  if (action === 'reinvite') return '새 임시 초대 링크를 생성했습니다.';
-  if (action === 'password-reset') return '비밀번호 재설정 이메일 발송을 요청했습니다.';
+function customerAccountActionMessage(action: 'reinvite' | 'password-reset' | 'disable' | 'enable' | 'discard'): string {
+  if (action === 'reinvite') return '새 임시 초대 링크를 생성했습니다. 이전 링크는 사용할 수 없습니다.';
+  if (action === 'password-reset') return '임시 비밀번호 재설정 링크를 생성했습니다. 이전 재설정 링크는 사용할 수 없습니다.';
+  if (action === 'discard') return '가입 전 고객 계정을 폐기했습니다.';
   if (action === 'disable') return '고객 계정을 비활성화했습니다.';
   return '고객 계정을 활성화했습니다.';
 }

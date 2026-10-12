@@ -2913,6 +2913,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'POST customer-accounts/[^/]+/reinvite',
     'POST customer-accounts/[^/]+/password-reset',
     'PATCH customer-accounts/[^/]+/status',
+    'DELETE customer-accounts/[^/]+',
     'POST customer/auth/invitations/validate',
     'POST customer/auth/complete',
     'POST customer/auth/login',

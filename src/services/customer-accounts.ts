@@ -56,9 +56,14 @@ export async function reinviteCustomerAccount(accountId: string): Promise<Custom
   return parseInvitationIssue(response);
 }
 
-export async function sendCustomerAccountPasswordReset(accountId: string): Promise<CustomerAccount> {
+export async function sendCustomerAccountPasswordReset(accountId: string): Promise<CustomerAccountInvitationIssue> {
   const response = await requestLegacyJson<unknown>(`customer-accounts/${encodeURIComponent(accountId)}/password-reset`, { method: 'POST' });
-  return parseCustomerAccount(objectField(response, 'account'));
+  return parseInvitationIssue(response);
+}
+
+export async function discardCustomerAccount(accountId: string): Promise<string> {
+  const response = await requestLegacyJson<unknown>(`customer-accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
+  return requiredString(objectField(response, 'accountId'));
 }
 
 export async function setCustomerAccountStatus(accountId: string, status: 'ACTIVE' | 'DISABLED'): Promise<CustomerAccount> {
