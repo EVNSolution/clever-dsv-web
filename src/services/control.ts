@@ -59,7 +59,7 @@ export type VehicleGpsDailyRoute = {
       coordinates: Array<[longitude: number, latitude: number]>;
       corridorId: string;
       fromObservedAt: string;
-      source: 'CURATED_OSM_TUNNEL_CORRIDOR';
+      source: 'CURATED_OSM_TUNNEL_CORRIDOR' | 'OSRM_TUNNEL_ROUTE';
       toObservedAt: string;
       type: 'LineString';
     };
@@ -364,7 +364,7 @@ function adaptVehicleGpsInferredTunnel(
     || !isDateTime(value.fromObservedAt)
     || !isDateTime(value.toObservedAt)
     || !isDateTime(value.confirmedByObservedAt)
-    || value.source !== 'CURATED_OSM_TUNNEL_CORRIDOR'
+    || (value.source !== 'CURATED_OSM_TUNNEL_CORRIDOR' && value.source !== 'OSRM_TUNNEL_ROUTE')
   ) throw invalidVehicleGpsTrailHistory(body);
   const coordinates = value.coordinates.map((coordinate) => {
     if (
@@ -382,7 +382,7 @@ function adaptVehicleGpsInferredTunnel(
     coordinates,
     corridorId: value.corridorId,
     fromObservedAt: value.fromObservedAt,
-    source: 'CURATED_OSM_TUNNEL_CORRIDOR',
+    source: value.source,
     toObservedAt: value.toObservedAt,
     type: 'LineString',
   };

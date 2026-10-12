@@ -831,7 +831,10 @@ test('replaces only the completed first leg with daily GPS while keeping uncerta
   expect(api.unexpected).toEqual([]);
 });
 
-test('uses dailyRoute road evidence without drawing September 29 uncertain jumps as traveled roads', async ({ page }) => {
+for (const tunnel of [
+  { corridorId: 'seoul-suam-suri-eastbound', source: 'CURATED_OSM_TUNNEL_CORRIDOR' },
+  { corridorId: 'osrm-route', source: 'OSRM_TUNNEL_ROUTE' },
+]) test(`uses dailyRoute road evidence without drawing September 29 uncertain jumps as traveled roads (${tunnel.source})`, async ({ page }) => {
   await page.clock.install({ time: new Date('2026-09-29T05:00:00.000Z') });
   await page.route('**/map/styles/dsv-korea-v1.json', (route) => route.fulfill({
     contentType: 'application/json',
@@ -866,9 +869,9 @@ test('uses dailyRoute road evidence without drawing September 29 uncertain jumps
   bridges[6].inferredTunnel = {
     confirmedByObservedAt: observedAt[10],
     coordinates: inferredTunnelCoordinates,
-    corridorId: 'seoul-suam-suri-eastbound',
+    corridorId: tunnel.corridorId,
     fromObservedAt: observedAt[7],
-    source: 'CURATED_OSM_TUNNEL_CORRIDOR',
+    source: tunnel.source,
     toObservedAt: observedAt[9],
     type: 'LineString',
   };
