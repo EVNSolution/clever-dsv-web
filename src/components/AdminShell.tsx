@@ -134,10 +134,12 @@ export function AdminShell({
     () => controlTrailSampleAt(controlVehicleTrail, controlTrailOpen ? controlTrailCursorMs : undefined),
     [controlTrailCursorMs, controlTrailOpen, controlVehicleTrail],
   );
+  // Red and brown are review colours for 자취 보기; the plain control view shows the travelled path as completed grey.
   const controlTrailRoutes = useMemo(
     () => controlVehicleTrail === undefined
       ? []
-      : vehicleGpsTrailMapRoutes(controlVehicleTrail, controlTrailOpen ? controlTrailCursorMs : undefined),
+      : vehicleGpsTrailMapRoutes(controlVehicleTrail, controlTrailOpen ? controlTrailCursorMs : undefined)
+        .map((route) => (controlTrailOpen ? route : { ...route, color: CONTROL_PROGRESS_COLORS.completed })),
     [controlTrailCursorMs, controlTrailOpen, controlVehicleTrail],
   );
   const controlVehiclePoints = useMemo(() => {
