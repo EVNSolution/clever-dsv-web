@@ -22,6 +22,7 @@
   grid-template-rows: minmax(276px, 36%) minmax(0, 1fr);
   gap: 14px; min-height: 0; overflow: visible;
 }
+.panel-view:has(> .control-vehicle-summary) { grid-template-rows: minmax(276px, 36%) auto minmax(0, 1fr); }
 .control-date-selector { position:relative; flex:0 0 68px; min-width:0; }
 .control-date-trigger {
   width:100%; height:68px; display:grid; grid-template-columns:40px minmax(0, 1fr) auto; gap:12px; align-items:center;
@@ -128,11 +129,20 @@
   display:block; min-width:0; overflow:visible; color:var(--color-ink); font-size:11px; font-weight:750; line-height:1.45;
   overflow-wrap:anywhere; text-overflow:clip; white-space:normal;
 }
-.control-vehicle-summary { display:grid; gap:4px; margin:0 10px; padding:6px 0 8px; border-bottom:1px solid var(--color-border); }
+.control-vehicle-summary { display:grid; gap:6px; padding:12px 26px; }
 .control-vehicle-summary-line { min-width:0; display:flex; align-items:center; gap:8px; color:var(--color-muted); font-size:11px; font-weight:800; white-space:nowrap; }
 .control-vehicle-summary-line > .control-detail-value { min-width:0; overflow:hidden; color:var(--color-ink); font-size:12px; font-weight:850; text-overflow:ellipsis; white-space:nowrap; }
-.control-vehicle-summary-line .control-telemetry-recency { display:flex; gap:5px; align-items:center; padding:3px 6px; }
+/* Same height and baseline as the 자취 보기 button beside it. */
+.control-vehicle-summary-line .control-telemetry-recency { display:inline-flex; gap:6px; align-items:center; align-self:center; min-height:30px; padding:0 9px; border-radius:9px; }
+.control-vehicle-summary-line .control-telemetry-recency small { color:var(--color-muted); font-size:10px; line-height:1; }
+.control-vehicle-summary-line .control-telemetry-recency time { line-height:1; }
 .control-vehicle-summary-line .control-trail-toggle { margin-left:auto; }
+.control-vehicle-summary-close {
+  width:30px; height:30px; flex:0 0 auto; display:grid; place-items:center; border:0; border-radius:9px; padding:0;
+  background:transparent; color:var(--color-muted); cursor:pointer;
+}
+.control-vehicle-summary-close:hover { background:var(--color-row-hover); color:var(--color-ink); }
+.control-vehicle-summary-close svg { width:16px; height:16px; }
 .control-vehicle-summary .control-trail-error { padding:0; }
 .control-vehicle-summary .control-vehicle-secondary { border-top:0; padding-top:0; }
 .control-vehicle-summary .control-vehicle-secondary summary { padding:0; }

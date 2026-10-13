@@ -547,6 +547,50 @@ function ControlPanels({
           ) : null}
         </section>
 
+        {selectedVehicle ? (
+          <section className="card panel control-vehicle-summary" aria-label="차량 상세">
+            <div className="control-vehicle-summary-line">
+              <b className="control-detail-value">{selectedVehicleDrivers.join(', ') || '미배정'}</b>
+              <span>{controlVehicleMotionText(selectedVehicle)}</span>
+              <TelemetryRecency
+                label="최근 위치 조회"
+                now={telemetryClock}
+                observedAt={selectedVehicle.vehiclePositionObservedAt}
+                stale={selectedVehicle.vehiclePositionStale === true}
+              />
+              <button
+                aria-describedby={trailError ? 'controlTrailError' : undefined}
+                aria-pressed={trailOpen}
+                className="control-trail-toggle"
+                disabled={!trailReady}
+                onClick={onTrailToggle}
+                type="button"
+              >{trailOpen ? '자취 닫기' : '자취 보기'}</button>
+              <button aria-label="차량 상세 닫기" className="control-vehicle-summary-close" onClick={() => onVehicleSelect?.(selectedVehicle.id)} type="button"><X aria-hidden="true" /></button>
+            </div>
+            {trailError ? <p className="control-trail-error" id="controlTrailError" role="alert">{trailError}</p> : null}
+            <details className="control-vehicle-secondary">
+              <summary>운송 정보</summary>
+              <span><small>차종</small><b className="control-detail-value">{selectedVehicle.type || '차종 미등록'}</b></span>
+              <span><small>운송 조건</small><b className="control-detail-value">{selectedVehicleConditions.join(', ') || '운송 조건 없음'}</b></span>
+              <span>
+                <small>배송 특이사항</small>
+                {selectedVehicleInstructions.length ? <ul className="control-detail-list">
+                  {selectedVehicleInstructions.map((instruction) => (
+                    <li key={instruction.id}><strong>{instruction.destination}</strong><span>{instruction.note}</span></li>
+                  ))}
+                </ul> : <b className="control-detail-value">특이사항 없음</b>}
+              </span>
+              <TelemetryRecency
+                label="최근 온도 조회"
+                now={telemetryClock}
+                observedAt={selectedVehicle.temperatureObservedAt}
+                stale={selectedVehicle.temperatureStale === true}
+              />
+            </details>
+          </section>
+        ) : null}
+
         {selectedVehicleId !== undefined ? <section className={`card panel expand-card mobile-panel-${mobilePanel === 'destinations' ? 'expanded' : 'collapsed'}`} id="destinationCard" aria-label="배송지 리스트">
           <div className="tab-line section-heading">
             <span className="destination-title desktop-panel-title">배송지 리스트</span>
@@ -555,48 +599,6 @@ function ControlPanels({
             </button>
             <span className="chip mini desktop-panel-tools">{selectedVehicleDestinations.length}곳</span>
           </div>
-          {selectedVehicle ? (
-            <section className="control-vehicle-summary" aria-label="차량 상세">
-              <div className="control-vehicle-summary-line">
-                <b className="control-detail-value">{selectedVehicleDrivers.join(', ') || '미배정'}</b>
-                <span>{controlVehicleMotionText(selectedVehicle)}</span>
-                <TelemetryRecency
-                  label="최근 위치 조회"
-                  now={telemetryClock}
-                  observedAt={selectedVehicle.vehiclePositionObservedAt}
-                  stale={selectedVehicle.vehiclePositionStale === true}
-                />
-                <button
-                  aria-describedby={trailError ? 'controlTrailError' : undefined}
-                  aria-pressed={trailOpen}
-                  className="control-trail-toggle"
-                  disabled={!trailReady}
-                  onClick={onTrailToggle}
-                  type="button"
-                >{trailOpen ? '자취 닫기' : '자취 보기'}</button>
-              </div>
-              {trailError ? <p className="control-trail-error" id="controlTrailError" role="alert">{trailError}</p> : null}
-              <details className="control-vehicle-secondary">
-                <summary>운송 정보</summary>
-                <span><small>차종</small><b className="control-detail-value">{selectedVehicle.type || '차종 미등록'}</b></span>
-                <span><small>운송 조건</small><b className="control-detail-value">{selectedVehicleConditions.join(', ') || '운송 조건 없음'}</b></span>
-                <span>
-                  <small>배송 특이사항</small>
-                  {selectedVehicleInstructions.length ? <ul className="control-detail-list">
-                    {selectedVehicleInstructions.map((instruction) => (
-                      <li key={instruction.id}><strong>{instruction.destination}</strong><span>{instruction.note}</span></li>
-                    ))}
-                  </ul> : <b className="control-detail-value">특이사항 없음</b>}
-                </span>
-                <TelemetryRecency
-                  label="최근 온도 조회"
-                  now={telemetryClock}
-                  observedAt={selectedVehicle.temperatureObservedAt}
-                  stale={selectedVehicle.temperatureStale === true}
-                />
-              </details>
-            </section>
-          ) : null}
           <div className="control-destination-list overlay-scroll">
             <div className="control-destination-columns" aria-hidden="true"><span>배송지</span><span>주문</span><span>예상 도착</span><span>실제 완료</span></div>
             {selectedVehicleDestinations.map((destination) => (
@@ -1393,7 +1395,6 @@ function controlVehicleDepartures(orders: DispatchListItem[]): Map<string, strin
 }
 
 function controlVehicleMotionText(vehicle: ManagementData['vehicles'][number]): string {
-  if (vehicle.vehiclePositionStale === true) return '위치 지연';
   if (vehicle.vehicleStopped === true) return '정차';
   if (vehicle.vehicleStopped === false) return '이동';
   return '운행 미확인';
