@@ -128,6 +128,10 @@
   width:24px; height:24px; display:grid; place-items:center; border-radius:50%; background:var(--color-primary);
   color:var(--color-white); font-size:10px; font-style:normal; font-weight:900; line-height:1;
 }
+.customer-destination-card.progress-completed .customer-destination-card-summary > i { background:#8e8e93; }
+.customer-destination-card.progress-current .customer-destination-card-summary > i { background:#1f8b4c; }
+.customer-destination-card.progress-planned .customer-destination-card-summary > i { background:#0066cc; }
+.customer-destination-card.progress-failed .customer-destination-card-summary > i { background:#e87514; }
 .customer-destination-card-copy { min-width:0; display:grid; }
 .customer-destination-card-copy strong {
   min-width:0; overflow:hidden; color:var(--color-ink); font-size:13px; font-weight:900;

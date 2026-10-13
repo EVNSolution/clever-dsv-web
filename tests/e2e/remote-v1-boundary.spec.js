@@ -2388,9 +2388,9 @@ test('loads the administrator customer map through the customer-scoped contract'
         routeId: feature.properties?.routeId,
       }));
   })).toEqual([
-    { color: '#0066cc', coordinates: [[126.982, 37.564], [126.98, 37.565], [126.9779, 37.5663]], dashed: false, kind: 'route', routeId: 'planned:vehicle-g006-map' },
-    { color: '#d92d20', coordinates: [[126.982, 37.564], [126.9815, 37.5642]], dashed: true, kind: 'trail', routeId: 'trail:vehicle-g006-map:0' },
-    { color: '#d92d20', coordinates: [[126.9805, 37.5648], [126.98, 37.565]], dashed: true, kind: 'trail', routeId: 'trail:vehicle-g006-map:1' },
+    { color: '#1f8b4c', coordinates: [[126.982, 37.564], [126.98, 37.565], [126.9779, 37.5663]], dashed: false, kind: 'route', routeId: 'planned:vehicle-g006-map:current' },
+    { color: '#8e8e93', coordinates: [[126.982, 37.564], [126.9815, 37.5642]], dashed: false, kind: 'route', routeId: 'trail:vehicle-g006-map:0' },
+    { color: '#8e8e93', coordinates: [[126.9805, 37.5648], [126.98, 37.565]], dashed: false, kind: 'route', routeId: 'trail:vehicle-g006-map:1' },
   ]);
   await expect.poll(() => page.evaluate(() => {
     const routeSource = window.dsvMap?.getSource('operational-routes');
@@ -2398,10 +2398,7 @@ test('loads the administrator customer map through the customer-scoped contract'
     return routeData?.features
       ?.filter((feature) => feature.geometry.type === 'Point')
       .map((feature) => ({ markerKind: feature.properties?.markerKind, routeId: feature.properties?.routeId }));
-  })).toEqual([
-    { markerKind: 'start', routeId: 'trail:vehicle-g006-map:0' },
-    { markerKind: 'end', routeId: 'trail:vehicle-g006-map:1' },
-  ]);
+  })).toEqual([]);
   await page.getByRole('button', { name: /이력 완료 배송 확인/u }).click();
   await page.getByRole('button', { name: '이력 기준일 날짜 변경' }).click();
   await page.locator(`.customer-map-tools [data-day="${historyDate}"] .rdp-day_button`).click();
@@ -2482,6 +2479,62 @@ test('grows the customer vehicle list through three rows and scrolls additional 
     clientHeight: element.clientHeight,
     scrollHeight: element.scrollHeight,
   }))).toEqual({ clientHeight: 168, scrollHeight: 224 });
+  expect(api.unexpected).toEqual([]);
+});
+
+test('colors customer destination markers by delivery status like admin control', async ({ page }) => {
+  const statuses = ['DELIVERED', 'FAILED', 'PLANNED', 'IN_TRANSIT'];
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(customerSession),
+    'GET /api/dsv/v1/customer/deliveries': v1Envelope({
+      items: statuses.map((deliveryStatus, index) => ({
+        sellerOrderId: `order-g006-progress-${index + 1}`,
+        sellerOrderKey: `SELLER-G006-PROGRESS-${index + 1}`,
+        destinationDisplayName: `G006 Progress Destination ${index + 1}`,
+        destinationId: `destination-g006-progress-${index + 1}`,
+        deliveryStatus,
+        etaStatus: 'READY',
+        estimatedArrivalAt: `2026-08-04T01:${String(index * 10).padStart(2, '0')}:00.000Z`,
+        proofStatus: 'NONE',
+        shippedBoxes: 1,
+        eventSummary: [],
+        latitude: 37.5 + index * 0.01,
+        longitude: 127.01 + index * 0.01,
+        vehicleDisplayName: '서울86바3800',
+        vehicleId: 'vehicle-g006-progress',
+        vehicleLatitude: 37.51,
+        vehicleLongitude: 127.02,
+      })),
+      page: { hasMore: false },
+      routes: [{ vehicleId: 'vehicle-g006-progress', coordinates: [[127.02, 37.51], [127.03, 37.52], [127.04, 37.53]] }],
+    }),
+  });
+
+  await page.goto('/customer/delivery-inquiry');
+
+  await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries');
+  const sequences = page.getByLabel('배송지 리스트').locator('.customer-destination-card-summary > i');
+  await expect(sequences).toHaveCount(4);
+  const expectedColors = ['rgb(142, 142, 147)', 'rgb(232, 117, 20)', 'rgb(31, 139, 76)', 'rgb(0, 102, 204)'];
+  for (const [index, color] of expectedColors.entries()) {
+    await expect(sequences.nth(index)).toHaveCSS('background-color', color);
+  }
+  await page.locator('.map-canvas.ready').waitFor({ state: 'visible' });
+  await expect.poll(() => page.evaluate(() => Object.fromEntries(
+    window.dsvMap?.getSource('operational-destinations')?.serialize().data.features
+      .map((feature) => [feature.properties.pointId, feature.properties.color]) ?? [],
+  ))).toEqual({
+    'destination-g006-progress-1': '#8e8e93',
+    'destination-g006-progress-2': '#e87514',
+    'destination-g006-progress-3': '#1f8b4c',
+    'destination-g006-progress-4': '#0066cc',
+  });
+  await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
+    .filter((feature) => feature.geometry.type === 'LineString')
+    .map((feature) => ({ color: feature.properties.color, routeId: feature.properties.routeId })) ?? [])).toEqual([
+    { color: '#1f8b4c', routeId: 'planned:vehicle-g006-progress:current' },
+    { color: '#0066cc', routeId: 'planned:vehicle-g006-progress:planned' },
+  ]);
   expect(api.unexpected).toEqual([]);
 });
 
@@ -2691,7 +2744,7 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
     return routeData?.features
       ?.filter((feature) => feature.geometry.type === 'LineString')
       .map((feature) => feature.properties?.color);
-  })).toEqual(['#8e8e93']);
+  })).toEqual(['#1f8b4c']);
   expect(api.unexpected).toEqual([]);
 });
 
