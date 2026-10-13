@@ -955,7 +955,7 @@ for (const tunnel of [
   await expect.poll(() => dispatchReads).toBeGreaterThan(1);
   await expect.poll(() => gpsTrailReads).toBeGreaterThan(gpsReadsBeforeRefresh);
   await expect.poll(inferredTunnelLines).toEqual([{
-    color: '#b45309',
+    color: '#8e8e93',
     coordinates: inferredTunnelCoordinates,
     dashed: true,
     kind: 'trail',
@@ -965,7 +965,7 @@ for (const tunnel of [
   await expect.poll(() => gpsTrailReads).toBeGreaterThan(gpsReadsBeforeFailedRefresh);
   await expect(page.getByText('차량 자취를 불러오지 못했습니다.')).toBeVisible();
   await expect.poll(inferredTunnelLines).toEqual([{
-    color: '#b45309',
+    color: '#8e8e93',
     coordinates: inferredTunnelCoordinates,
     dashed: true,
     kind: 'trail',
