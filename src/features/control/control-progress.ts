@@ -86,24 +86,6 @@ export function splitControlRouteByProgress(input: {
   ].filter((segment): segment is ControlRouteProgressSegment => segment !== null);
 }
 
-export function splitControlRouteAtStop(
-  coordinates: MapCanvasCoordinate[],
-  stop: MapCanvasCoordinate,
-): { firstLeg: MapCanvasCoordinate[]; remaining: MapCanvasCoordinate[] } | null {
-  if (coordinates.length < 2) return null;
-  const distances = cumulativeDistances(coordinates);
-  const routeLength = distances.at(-1) ?? 0;
-  if (routeLength <= 0) return null;
-  const stopDistance = projectCoordinate(coordinates, distances, stop, 0, routeLength).distance;
-  if (stopDistance <= 0) return null;
-  return {
-    firstLeg: sliceRoute(coordinates, distances, 0, stopDistance),
-    remaining: stopDistance < routeLength
-      ? sliceRoute(coordinates, distances, stopDistance, routeLength)
-      : [],
-  };
-}
-
 function destinationOutcome(destination: { orders: DispatchListItem[] }): { failed: boolean; processed: boolean } {
   const outcomes = destination.orders.map((order) => latestStopEvent(order.eventSummary));
   const failed = outcomes.some((event) => event?.type === 'STOP_FAILED');
