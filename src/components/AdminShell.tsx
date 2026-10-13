@@ -32,11 +32,9 @@ import type { MapCanvasCenterRequest, MapCanvasPoint, MapCanvasRoute, MapCanvasV
 import {
   assignControlDestinationProgress,
   CONTROL_PROGRESS_COLORS,
-  splitControlRouteAtStop,
   splitControlRouteByProgress,
 } from '../features/control/control-progress';
 import {
-  actualFirstLegLines,
   dailyRouteTrailLines,
   inferredTunnelCandidateLines,
 } from '../features/control/control-daily-route';
@@ -636,52 +634,10 @@ function assignedControlMapRoutes(
       selected: true,
       sortOrder: index,
     }));
-    const firstStop = request.stops[0];
-    const completedIndex = plannedSegments.findIndex((segment) => segment.status === 'completed');
-    if (
-      firstStop?.progressStatus !== 'completed'
-      || firstStop.completedAt === undefined
-      || completedIndex < 0
-      || history?.vehicleId !== request.vehicleId
-    ) return plannedRoutes;
-    const startedAt = history.sessions
-      .filter((session) => session.routePlanId === request.id && Date.parse(session.startedAt) <= Date.parse(firstStop.completedAt!))
-      .map((session) => session.startedAt)
-      .sort()[0];
-    if (startedAt === undefined) return plannedRoutes;
-    const completedPart = splitControlRouteAtStop(plannedSegments[completedIndex]!.coordinates, firstStop.coordinate);
-    if (completedPart === null) return plannedRoutes;
-    const actualLines = actualFirstLegLines({
-      completedAt: firstStop.completedAt,
-      dailyRoute: history.dailyRoute,
-      destination: firstStop.coordinate,
-      origin: completedPart.firstLeg[0]!,
-      startedAt,
-    });
-    if (actualLines.length === 0) return plannedRoutes;
-    const actualRoutes: MapCanvasRoute[] = actualLines.map((line, index) => ({
-      color: CONTROL_PROGRESS_COLORS.completed,
-      coordinates: line.coordinates,
-      id: `${request.id}:actual-first-leg:${index}`,
-      ...(line.uncertain ? { kind: 'trail' as const, dashed: true } : {}),
-      selected: true,
-      sortOrder: index,
-    }));
-    const remaining: MapCanvasRoute[] = completedPart.remaining.length > 1
-      ? [{
-          color: CONTROL_PROGRESS_COLORS.completed,
-          coordinates: completedPart.remaining,
-          id: `${request.id}:completed:remaining`,
-          selected: true,
-          sortOrder: actualRoutes.length,
-        }]
-      : [];
-    return [
-      ...plannedRoutes.slice(0, completedIndex),
-      ...actualRoutes,
-      ...remaining,
-      ...plannedRoutes.slice(completedIndex + 1),
-    ];
+    // The red GPS trail already shows the travelled part, so the predicted completed leg is not drawn under it.
+    const hasTrail = history?.vehicleId === request.vehicleId
+      && (history.dailyRoute !== null || history.sessions.length > 0);
+    return hasTrail ? plannedRoutes.filter((route) => !route.id.endsWith(':completed')) : plannedRoutes;
   });
 }
 

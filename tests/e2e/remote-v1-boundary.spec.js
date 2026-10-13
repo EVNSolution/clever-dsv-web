@@ -669,7 +669,6 @@ test('renders selected control progress without letting a future destination cli
   })).toEqual({
     destinations: ['#8e8e93', '#e87514', '#1f8b4c', '#0066cc'],
     routes: [
-      { casingColor: '#ffffff', color: '#8e8e93' },
       { casingColor: '#ffffff', color: '#1f8b4c' },
       { casingColor: '#ffffff', color: '#0066cc' },
     ],
@@ -693,7 +692,7 @@ test('renders selected control progress without letting a future destination cli
   expect(api.unexpected).toEqual([]);
 });
 
-test('replaces only the completed first leg with daily GPS while keeping uncertain bridges dotted', async ({ page }) => {
+test('drops the predicted completed leg once the daily GPS trail covers it', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-09-29T00:30:00.000Z') });
   await page.route('**/map/styles/dsv-korea-v1.json', (route) => route.fulfill({
     contentType: 'application/json',
@@ -809,10 +808,6 @@ test('replaces only the completed first leg with daily GPS while keeping uncerta
   await page.clock.fastForward(31_000);
   await expect.poll(() => api.calls.filter((call) => call.path === '/api/dsv/v1/dispatches').length).toBeGreaterThan(dispatchReadsBeforeCompletion);
   await expect.poll(() => api.calls.filter((call) => call.path.endsWith('/gps-trail-history')).length).toBeGreaterThan(dailyReadsBeforeCompletion);
-  await expect.poll(firstLegFeatures).toEqual([
-    { coordinates: [[127, 37.5], [127.003, 37.501], [127.006, 37.5]], dashed: false, kind: 'route' },
-    { coordinates: [[127.006, 37.5], [127.007, 37.5], [127.008, 37.5], [127.009, 37.5], [127.01, 37.5]], dashed: true, kind: 'trail' },
-  ]);
   await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
     .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.routeId.startsWith('vehicle-trail:daily:'))
     .map((feature) => ({ coordinates: feature.geometry.coordinates, dashed: feature.properties.dashed })) ?? []))
@@ -825,9 +820,9 @@ test('replaces only the completed first leg with daily GPS while keeping uncerta
     .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.kind === 'route')
     .map((feature) => ({ coordinates: feature.geometry.coordinates, routeId: feature.properties.routeId })) ?? []))
     .toEqual([
-      { coordinates: [[127, 37.5], [127.003, 37.501], [127.006, 37.5]], routeId: `${routePlanId}:actual-first-leg:0` },
       { coordinates: [[127.01, 37.5], [127.02, 37.5]], routeId: `${routePlanId}:current` },
     ]);
+  expect(await firstLegFeatures()).toEqual([]);
   expect(api.unexpected).toEqual([]);
 });
 
