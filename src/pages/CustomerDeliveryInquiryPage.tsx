@@ -9,6 +9,8 @@ import { loadRemoteCustomerDeliveries } from '../services/customer-deliveries';
 import type { CustomerDeliveryItem, RemoteCustomerDeliveries } from '../services/customer-deliveries';
 import type { MapCanvasPoint, MapCanvasRoute } from '../components/MapCanvas';
 import { ServiceDateSelector, todayInSeoul } from '../components/ServiceDateSelector';
+import { CONTROL_PROGRESS_COLORS, splitControlRouteByProgress } from '../features/control/control-progress';
+import type { ControlProgressStatus } from '../features/control/control-progress';
 
 const MapCanvas = lazy(() => import('../components/MapCanvas').then((module) => ({ default: module.MapCanvas })));
 const locationRefreshIntervalMs = 60_000;
@@ -284,7 +286,7 @@ function RemoteCustomerDeliveryInquiryPage({
     ? state.data.trails
     : state.data.trails.filter((trail) => trail.vehicleId === activeVehicleId);
   const routes = [
-    ...customerMapRoutes(visibleRoutes, activeVehicleId !== undefined, view),
+    ...customerMapRoutes(visibleRoutes, destinationGroups, vehicles, view === 'control' && activeVehicleId !== undefined),
     ...customerTrailMapRoutes(visibleTrails),
   ];
   const departureLocation = state.data.departureLocation === undefined ? null : {
@@ -460,7 +462,7 @@ function RemoteCustomerDeliveryInquiryPage({
                     <button
                       key={group.destinationId}
                       type="button"
-                      className={`customer-destination-card${active ? ' active' : ''}${searchMatch ? ' search-match' : ''}`}
+                      className={`customer-destination-card progress-${group.progressStatus}${active ? ' active' : ''}${searchMatch ? ' search-match' : ''}`}
                       aria-expanded={active}
                       onClick={() => {
                         setSelectedKey((current) => current === group.destinationId ? undefined : group.destinationId);
@@ -569,6 +571,7 @@ type CustomerDestinationGroup = {
   longitude?: number;
   orderCount: number;
   orders: CustomerDeliveryItem[];
+  progressStatus: ControlProgressStatus;
   sharedActualCompletedAt?: string;
   sharedEstimatedArrivalAt?: string;
   shippedBoxes: number;
@@ -660,13 +663,29 @@ function customerDestinationGroups(deliveries: CustomerDeliveryItem[]): Customer
         longitude: coordinateAnchor?.longitude,
         orderCount: sortedOrders.length,
         orders: sortedOrders,
+        progressStatus: 'planned' as ControlProgressStatus,
         sharedActualCompletedAt: sharedActualCompletedAt(sortedOrders),
         sharedEstimatedArrivalAt: sharedEstimatedArrivalAt(sortedOrders),
         shippedBoxes: sortedOrders.reduce((total, order) => total + order.shippedBoxes, 0),
       };
     })
     .sort(compareCustomerDestinationGroup)
-    .map((group, index) => ({ ...group, destinationSequence: index + 1 }));
+    .map((group, index) => ({ ...group, destinationSequence: index + 1 }))
+    .map(withCustomerDestinationProgress());
+}
+
+// Same rule as admin control: FAILED wins, all DELIVERED is completed, first open stop per vehicle is current.
+function withCustomerDestinationProgress(): (group: CustomerDestinationGroup) => CustomerDestinationGroup {
+  const vehiclesWithCurrent = new Set<string>();
+  return (group) => {
+    const statuses = group.orders.map((order) => order.deliveryStatus);
+    if (statuses.includes('FAILED')) return { ...group, progressStatus: 'failed' };
+    if (statuses.every((status) => status === 'DELIVERED')) return { ...group, progressStatus: 'completed' };
+    const vehicleId = group.orders[0]?.vehicleId;
+    if (vehicleId === undefined || vehiclesWithCurrent.has(vehicleId)) return group;
+    vehiclesWithCurrent.add(vehicleId);
+    return { ...group, progressStatus: 'current' };
+  };
 }
 
 function compareCustomerDeliveryOrder(left: CustomerDeliveryItem, right: CustomerDeliveryItem): number {
@@ -739,7 +758,7 @@ function customerMapPoints(groups: CustomerDestinationGroup[]): MapCanvasPoint[]
   return groups.flatMap((group) => (
     group.latitude !== undefined && group.longitude !== undefined
       ? [{
-          color: '#0066cc',
+          color: CONTROL_PROGRESS_COLORS[group.progressStatus],
           id: group.destinationId,
           label: String(group.destinationSequence),
           latitude: group.latitude,
@@ -751,32 +770,47 @@ function customerMapPoints(groups: CustomerDestinationGroup[]): MapCanvasPoint[]
   ));
 }
 
+// The server route covers only what is left, from the vehicle onward, so finished stops are not projected onto it.
 function customerMapRoutes(
   routes: RemoteCustomerDeliveries['routes'],
+  groups: CustomerDestinationGroup[],
+  vehicles: ReturnType<typeof customerVehiclePoints>,
   selected: boolean,
-  view: CustomerInquiryView,
 ): MapCanvasRoute[] {
-  return routes.map((route) => ({
-    color: view === 'history' ? '#8e8e93' : '#0066cc',
-    coordinates: route.coordinates,
-    id: `planned:${route.vehicleId}`,
-    selected: view === 'control' && selected,
-    sortOrder: 0,
-  }));
+  return routes.flatMap((route) => {
+    const stops = groups.flatMap((group) => (
+      group.orders[0]?.vehicleId === route.vehicleId
+      && (group.progressStatus === 'current' || group.progressStatus === 'planned')
+      && group.latitude !== undefined
+      && group.longitude !== undefined
+        ? [{ coordinate: [group.longitude, group.latitude] as [number, number], progressStatus: group.progressStatus }]
+        : []
+    ));
+    const vehicle = vehicles.find((item) => item.id === route.vehicleId);
+    const segments = splitControlRouteByProgress({
+      coordinates: route.coordinates,
+      stops,
+      vehiclePosition: vehicle === undefined ? undefined : [vehicle.longitude, vehicle.latitude],
+    });
+    return segments.map((segment, index) => ({
+      color: CONTROL_PROGRESS_COLORS[segment.status],
+      coordinates: segment.coordinates,
+      id: `planned:${route.vehicleId}:${segment.status}`,
+      selected,
+      sortOrder: index,
+    }));
+  });
 }
 
+// Customers see the GPS-clipped path as the completed part of the route; the red trail stays admin-only.
 function customerTrailMapRoutes(trails: RemoteCustomerDeliveries['trails']): MapCanvasRoute[] {
   return trails.flatMap((trail) => trail.segments.map((segment, index) => ({
     casingColor: '#ffffff',
-    color: '#d92d20',
+    color: CONTROL_PROGRESS_COLORS.completed,
     coordinates: segment.coordinates,
-    dashed: true,
-    ...(index === trail.segments.length - 1 ? { endMarker: 'end' as const } : {}),
     id: `trail:${trail.vehicleId}:${index}`,
-    kind: 'trail' as const,
     selected: true,
-    sortOrder: 200 + index,
-    ...(index === 0 ? { startMarker: 'start' as const } : {}),
+    sortOrder: index,
   })));
 }
 
