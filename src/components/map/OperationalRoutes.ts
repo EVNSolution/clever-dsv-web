@@ -12,7 +12,9 @@ const destinationMarkerLayerId = 'operational-destination-markers';
 
 const routeFilter: FilterSpecification = ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'kind'], 'trail']];
 const trailFilter: FilterSpecification = ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'trail']];
-const trailLineWidth: DataDrivenPropertyValueSpecification<number> = ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 4.5, 16, 4];
+// Planned routes and trails share one width so the travelled and remaining parts read as one line.
+const trailLineWidth: DataDrivenPropertyValueSpecification<number> = ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 3.5, 16, 3];
+const casingLineWidth: DataDrivenPropertyValueSpecification<number> = ['interpolate', ['linear'], ['zoom'], 4, 6, 10, 5.5, 16, 5];
 
 export function updateOperationalRoutes(
   map: maplibregl.Map,
@@ -33,7 +35,7 @@ export function updateOperationalRoutes(
       paint: {
         'line-color': ['get', 'casingColor'],
         'line-opacity': ['case', ['get', 'selected'], 0.96, 1],
-        'line-width': ['case', ['get', 'selected'], 4.6, 3.6],
+        'line-width': casingLineWidth,
         'line-dasharray': ['case', ['get', 'dashed'], ['literal', [2, 2]], ['literal', [1, 0]]],
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
@@ -50,7 +52,7 @@ export function updateOperationalRoutes(
       paint: {
         'line-color': ['get', 'color'],
         'line-opacity': ['case', ['get', 'selected'], 0.96, 1],
-        'line-width': ['case', ['get', 'selected'], 2.6, 1.8],
+        'line-width': trailLineWidth,
         'line-dasharray': ['case', ['get', 'dashed'], ['literal', [2, 2]], ['literal', [1, 0]]],
       },
     }, map.getLayer(destinationMarkerLayerId) ? destinationMarkerLayerId : undefined);
