@@ -98,7 +98,7 @@
 .control-vehicle-list, .control-destination-list, .control-customer-order-list { flex:1 1 auto; min-height:0; margin-top:8px; overflow:auto; overscroll-behavior:contain; }
 .control-vehicle-list { display:grid; grid-auto-rows:max-content; align-content:start; }
 .control-vehicle-row {
-  width:100%; min-height:48px; display:grid; grid-template-columns:8px minmax(0, 1fr) auto auto; grid-template-rows:auto; gap:8px; align-items:center;
+  width:100%; min-height:48px; display:grid; grid-template-columns:8px minmax(0, 1fr) auto auto auto; grid-template-rows:auto; gap:8px; align-items:center;
   padding:8px 6px; border-bottom:1px solid var(--color-border); background:transparent; color:inherit; font:inherit; text-align:left;
 }
 .control-vehicle-row:last-child { border-bottom:0; }
@@ -114,7 +114,8 @@
 .control-temperature-button:focus-visible { outline:2px solid var(--control-route-color); outline-offset:2px; }
 .control-vehicle-select span { min-width:0; }
 .control-vehicle-select strong { display:block; overflow:hidden; color:var(--color-ink); font-size:13px; font-weight:850; letter-spacing:-.025em; white-space:nowrap; text-overflow:ellipsis; }
-.control-vehicle-row em { grid-column:3; grid-row:1; color:var(--color-muted); font-size:11px; font-style:normal; font-weight:800; white-space:nowrap; }
+.control-vehicle-departure { grid-column:3; grid-row:1; color:var(--color-muted); font-size:11px; font-weight:700; opacity:.7; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.control-vehicle-row em { grid-column:4; grid-row:1; color:var(--color-muted); font-size:11px; font-style:normal; font-weight:800; white-space:nowrap; }
 .control-row-chevron { width:16px; height:16px; color:var(--color-muted); transition:transform .18s ease; }
 [aria-expanded="true"] > .control-row-chevron,
 .control-destination-row[aria-expanded="true"] .control-row-chevron { transform:rotate(180deg); }
@@ -127,9 +128,22 @@
   display:block; min-width:0; overflow:visible; color:var(--color-ink); font-size:11px; font-weight:750; line-height:1.45;
   overflow-wrap:anywhere; text-overflow:clip; white-space:normal;
 }
-.control-vehicle-detail-panel {
-  position:absolute; right:calc(100% + 14px); top:0; width:236px; max-height:100%; z-index:2;
-  padding:16px; overflow:auto; background:rgba(255,255,255,.97); backdrop-filter:blur(18px);
+.control-vehicle-summary { display:grid; gap:4px; margin:0 10px; padding:6px 0 8px; border-bottom:1px solid var(--color-border); }
+.control-vehicle-summary-line { min-width:0; display:flex; align-items:center; gap:8px; color:var(--color-muted); font-size:11px; font-weight:800; white-space:nowrap; }
+.control-vehicle-summary-line > .control-detail-value { min-width:0; overflow:hidden; color:var(--color-ink); font-size:12px; font-weight:850; text-overflow:ellipsis; white-space:nowrap; }
+.control-vehicle-summary-line .control-telemetry-recency { display:flex; gap:5px; align-items:center; padding:3px 6px; }
+.control-vehicle-summary-line .control-trail-toggle { margin-left:auto; }
+.control-vehicle-summary .control-trail-error { padding:0; }
+.control-vehicle-summary .control-vehicle-secondary { border-top:0; padding-top:0; }
+.control-vehicle-summary .control-vehicle-secondary summary { padding:0; }
+.control-vehicle-summary .control-vehicle-secondary > span { display:block; }
+/* Desktop: the service date sits beside the notification bell, freeing the top of the side panel. */
+@media (min-width: 921px) {
+  .control-side > .control-date-selector {
+    position:fixed; z-index:9; top:12px; left:calc(12px + var(--sidebar-width) + 12px + 52px + 12px); width:300px;
+    transition:left .2s ease;
+  }
+  .control-side > .control-date-selector .control-calendar-popover { left:0; right:auto; }
 }
 .control-trail-toggle {
   min-height:30px; border:1px solid var(--color-control-border); border-radius:9px; padding:0 9px;
@@ -139,7 +153,6 @@
 .control-trail-toggle:disabled { cursor:not-allowed; opacity:.45; }
 .control-trail-toggle[aria-pressed="true"] { border-color:var(--color-black); background:var(--color-black); color:var(--color-white); }
 .control-trail-error { margin:0; padding:8px 12px 0; color:var(--color-danger); font-size:11px; font-weight:800; }
-.control-vehicle-detail-content { grid-template-columns:1fr; gap:8px; padding:9px 10px; }
 .control-vehicle-secondary { display:grid; gap:9px; padding-top:2px; border-top:1px solid var(--color-border); }
 .control-vehicle-secondary summary { padding:8px 0 0; color:var(--color-muted); cursor:pointer; font-size:10px; font-weight:850; }
 .control-vehicle-secondary[open] { padding-bottom:2px; }
@@ -168,7 +181,7 @@
 .control-detail-list strong { color:var(--color-ink); font-weight:850; }
 .control-detail-list span { color:var(--color-muted); font-weight:700; }
 .control-temperature-button {
-  grid-column:4; grid-row:1;
+  grid-column:5; grid-row:1;
   min-height:28px; border:1px solid var(--color-control-border); border-radius:8px; padding:0 8px; background:var(--color-white); color:var(--color-ink);
   cursor:pointer; font:850 11px/1 var(--font-sans); white-space:nowrap;
 }

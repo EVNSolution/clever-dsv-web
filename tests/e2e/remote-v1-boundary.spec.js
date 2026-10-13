@@ -1679,7 +1679,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
     ],
     routePaint: {
       casingOpacity: ['case', ['get', 'selected'], 0.96, 1],
-      casingWidth: ['case', ['get', 'selected'], 4.6, 3.6],
+      casingWidth: ['interpolate', ['linear'], ['zoom'], 4, 6, 10, 5.5, 16, 5],
       layerOrder: [
         'operational-route-casing',
         'operational-route-lines',
@@ -1687,10 +1687,10 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
         'operational-route-trail-points',
       ],
       lineOpacity: ['case', ['get', 'selected'], 0.96, 1],
-      lineWidth: ['case', ['get', 'selected'], 2.6, 1.8],
+      lineWidth: ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 3.5, 16, 3],
       trailDasharray: ['case', ['get', 'dashed'], ['literal', [1, 1.75]], ['literal', [1, 0]]],
       trailFilter: ['all', ['==', ['geometry-type'], 'LineString'], ['==', ['get', 'kind'], 'trail']],
-      trailLineWidth: ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 4.5, 16, 4],
+      trailLineWidth: ['interpolate', ['linear'], ['zoom'], 4, 4, 10, 3.5, 16, 3],
       routeFilter: ['all', ['==', ['geometry-type'], 'LineString'], ['!=', ['get', 'kind'], 'trail']],
     },
     vehicles: [
@@ -1741,14 +1741,8 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   })).toEqual([127.0412, 37.5021]);
   expect(await page.evaluate(() => window.dsvMap.getZoom())).toBeCloseTo(zoomBeforeCentering, 5);
   await expect(selectedVehicleRow.locator('.control-vehicle-details')).toHaveCount(0);
-  const vehicleDetails = page.getByRole('region', { name: '차량 상세', exact: true });
+  const vehicleDetails = page.locator('#destinationCard').getByRole('region', { name: '차량 상세', exact: true });
   await expect(vehicleDetails).toBeVisible();
-  const panelPositions = await Promise.all([
-    vehicleDetails.boundingBox(),
-    scheduledFleet.boundingBox(),
-  ]);
-  expect(panelPositions[0]?.x + (panelPositions[0]?.width ?? 0)).toBeLessThan(panelPositions[1]?.x ?? 0);
-  await expect(vehicleDetails).toContainText('99테 6006');
   await expect(vehicleDetails).toContainText('Scheduled Truck');
   await expect(vehicleDetails).toContainText('이동');
   await expect(vehicleDetails).toContainText('김도윤');
