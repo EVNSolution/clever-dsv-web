@@ -65,10 +65,11 @@ export function splitControlRouteByProgress(input: {
     return [{ coordinates: input.coordinates.map(copyCoordinate), status: 'completed' }];
   }
 
-  const currentStopDistance = projectedStops[currentIndex]?.routeDistance ?? routeLength;
   const previousStopDistance = currentIndex === 0
     ? 0
     : projectedStops[currentIndex - 1]?.routeDistance ?? 0;
+  // The vehicle may already be past unmarked stops, so it is placed anywhere from the last completed stop onward
+  // and the green leg runs to the first stop still ahead of it; the predicted route is never drawn behind the vehicle.
   const vehicleDistance = input.vehiclePosition === undefined
     ? previousStopDistance
     : projectCoordinate(
@@ -76,13 +77,18 @@ export function splitControlRouteByProgress(input: {
         distances,
         input.vehiclePosition,
         previousStopDistance,
-        currentStopDistance,
+        routeLength,
       ).distance;
+  const nextStopDistance = projectedStops
+    .slice(currentIndex)
+    .find((stop) => stop.routeDistance > vehicleDistance)?.routeDistance;
 
   return [
     routeSegment(input.coordinates, distances, 0, vehicleDistance, 'completed'),
-    routeSegment(input.coordinates, distances, vehicleDistance, currentStopDistance, 'current'),
-    routeSegment(input.coordinates, distances, currentStopDistance, routeLength, 'planned'),
+    nextStopDistance === undefined
+      ? null
+      : routeSegment(input.coordinates, distances, vehicleDistance, nextStopDistance, 'current'),
+    routeSegment(input.coordinates, distances, nextStopDistance ?? vehicleDistance, routeLength, 'planned'),
   ].filter((segment): segment is ControlRouteProgressSegment => segment !== null);
 }
 
