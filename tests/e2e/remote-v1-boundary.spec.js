@@ -1741,7 +1741,7 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
   })).toEqual([127.0412, 37.5021]);
   expect(await page.evaluate(() => window.dsvMap.getZoom())).toBeCloseTo(zoomBeforeCentering, 5);
   await expect(selectedVehicleRow.locator('.control-vehicle-details')).toHaveCount(0);
-  const vehicleDetails = page.locator('#destinationCard').getByRole('region', { name: '차량 상세', exact: true });
+  const vehicleDetails = page.getByRole('region', { name: '차량 상세', exact: true });
   await expect(vehicleDetails).toBeVisible();
   await expect(vehicleDetails).toContainText('Scheduled Truck');
   await expect(vehicleDetails).toContainText('이동');
@@ -1836,6 +1836,10 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
     return [Number(center.lng.toFixed(4)), Number(center.lat.toFixed(4))];
   })).toEqual([127.0412, 37.5021]);
   expect(await page.evaluate(() => window.dsvMap.getZoom())).toBeCloseTo(markerClickTarget.zoom, 5);
+  await page.getByRole('button', { name: '차량 상세 닫기' }).click();
+  await expect(selectedVehicle).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('region', { name: '차량 상세', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: '배송지 리스트', exact: true })).toHaveCount(0);
   expect(api.unexpected).toEqual([]);
 });
 
@@ -1909,7 +1913,8 @@ test('marks previously loaded telemetry stale when a background refresh fails', 
   await expect(vehicleDetails).toContainText('정차');
   await page.clock.fastForward(30_000);
   await expect.poll(() => vehicleReads).toBeGreaterThan(1);
-  await expect(vehicleDetails).toContainText('위치 지연');
+  await expect(vehicleDetails.getByLabel(/^최근 위치 조회:.*수신 간격 지연$/u)).toBeVisible();
+  await expect(vehicleDetails).not.toContainText('위치 지연');
   expect(api.unexpected).toEqual([]);
 });
 
