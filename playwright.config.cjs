@@ -9,6 +9,9 @@ module.exports = defineConfig({
   testDir: './tests/e2e',
   testIgnore: [
     '**/static-structure.spec.js',
+    '**/remote-execution-operations.spec.js',
+    '**/operations-source.integration.spec.js',
+    '**/operations-postgres.integration.spec.js',
     ...(process.env.VITE_DSV_API_MODE === 'remote' ? [] : ['**/remote-v1-boundary.spec.js']),
   ],
   timeout: 45_000,

@@ -5,6 +5,7 @@ export const adminTabs = [
   { path: '/master-data', label: '관리', title: '관리', navDescription: '운영 기준정보 관리', description: '고객사, 배송처와 운송조건을 관리합니다.' },
   { path: '/settings', label: '설정', title: '설정', navDescription: '서비스와 알림 설정', description: '알림 기준과 서비스 연결을 설정합니다.' },
   { path: '/inquiries', label: '문의', title: '문의', navDescription: '배송원 문의 확인', description: '현재 사업장에 연결된 배송원의 문의를 확인합니다.' },
+  { path: '/executions', label: '회차', title: '회차', navDescription: '업무일별 회차 현황', description: '회차 근거, 시작 경고와 미배송 보고를 확인합니다.' },
 ] as const;
 
 export const defaultPath = '/control';

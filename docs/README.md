@@ -31,3 +31,5 @@
 - Driver 배포 경로나 회원가입 연결 조건이 바뀌면 `driver-app-onboarding.md`, `/driver-app` 화면과 관련 자동 테스트를 함께 갱신한다.
 - 배차 import, assignment, deletion 또는 time constraint가 바뀌면 `contracts/dispatch.md`를 갱신한다.
 - 배포 토폴로지가 바뀌면 Runbook 버전을 올린다.
+
+- [DSV 회차 관제](dsv-operations-web.md): 신규 operations 계약, 기본 OFF, 권한과 운영 승인 경계.
