@@ -66,11 +66,6 @@ npm run check
 
 ## 문서
 
-- [문서 인덱스](./docs/README.md)
 - [디자인 정본](./DESIGN.md)
-- [백엔드 API 연결](./docs/backend-api.md)
-- [배차 계약](./docs/contracts/dispatch.md)
-- [운영 배포 Runbook](./docs/runbooks/dsv-production-deploy.md)
-- [아카이브](./docs/archive/README.md)
 
-과거 HTML 데모, 초기 계획, 초안 계약과 외부 매뉴얼은 현재 구현 기준이 아니며 `docs/archive`에 보존합니다.
+백엔드 API 연결, 계약, 운영 배포 절차, 과거 데모와 계획 문서는 내부 문서라 저장소에 올리지 않습니다(`.gitignore`의 `docs/`). 담당자의 로컬 체크아웃에서 관리합니다.
