@@ -3616,6 +3616,31 @@ test('shows confirmed center departure and the latest ETA recalculation only whe
       timezone: 'Asia/Seoul',
       vehicleId: 'vehicle-confirmed',
     }),
+    'GET /api/dsv/v1/vehicles/vehicle-button/gps-trail-history': v1Envelope({
+      dailyRoute: null,
+      serviceDate,
+      sessions: [{
+        completedAt: null,
+        completionEventId: null,
+        endpoint: { endedAt: null, reason: 'LAST_VALID_SAMPLE' },
+        restart: null,
+        routePlanId: 'route-vehicle-button',
+        segments: [{
+          roadMatchedGeometry: null,
+          samples: [
+            { distanceTodayKm: 1, ignitionOn: true, latitude: 37.5, longitude: 127.01, observedAt: '2026-08-05T00:40:00.000Z', speedKph: 20 },
+            { distanceTodayKm: 2, ignitionOn: true, latitude: 37.5, longitude: 127.015, observedAt: '2026-08-05T00:45:00.000Z', speedKph: 22 },
+          ],
+          trailMarker: null,
+        }],
+        sessionIndex: 0,
+        startedAt: '2026-08-05T00:20:00.000Z',
+        startEventId: null,
+        startSource: 'ROUTE_STARTED',
+      }],
+      timezone: 'Asia/Seoul',
+      vehicleId: 'vehicle-button',
+    }),
     'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
     'GET /api/dsv/v1/dispatches': v1Envelope({
       items: [
