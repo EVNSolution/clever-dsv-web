@@ -597,8 +597,9 @@ test('renders selected control progress without letting a future destination cli
   await page.getByRole('button', { name: '자취 보기' }).click();
   const timeline = page.getByRole('region', { name: '진행12가3456 자취 타임라인' });
   await expect(timeline).toBeVisible();
-  await expect(timeline.locator('header time')).toHaveText('24:00');
-  await expect(timeline.locator('.control-trail-timeline__track > time')).toHaveText(['00:00', '24:00']);
+  // The range is the first to the last GPS point, not the whole day: 09:00 to 09:15 KST here.
+  await expect(timeline.locator('header time')).toHaveText('09:15');
+  await expect(timeline.locator('.control-trail-timeline__track > time')).toHaveText(['09:00', '09:15']);
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible', timeout: 15_000 });
   await expect.poll(() => page.evaluate(() => {
     const routes = window.dsvMap?.getSource('operational-routes');

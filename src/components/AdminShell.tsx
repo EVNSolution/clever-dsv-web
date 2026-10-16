@@ -27,6 +27,7 @@ import {
   visibleTrailRawLines,
 } from '../features/control/control-trail-playback';
 import type { ManagementData } from '../demo/management';
+import { centerArrivalMs, lastDeliveryFinishedMs, trimTrailHistory } from '../features/control/control-trail-window';
 import type { DepartureLocation } from './DepartureMarker';
 import type { MapCanvasCenterRequest, MapCanvasPoint, MapCanvasRoute, MapCanvasVehiclePoint } from './MapCanvas';
 import {
@@ -96,7 +97,7 @@ export function AdminShell({
   const [selectedControlDestinationId, setSelectedControlDestinationId] = useState<string>();
   const [controlMapCenterRequest, setControlMapCenterRequest] = useState<MapCanvasCenterRequest>();
   const [controlRouteResults, setControlRouteResults] = useState<ReadonlyMap<string, ControlRouteResult>>(new Map());
-  const [controlVehicleTrail, setControlVehicleTrail] = useState<VehicleGpsTrailHistory>();
+  const [controlVehicleTrailFull, setControlVehicleTrail] = useState<VehicleGpsTrailHistory>();
   const [controlVehicleTrailError, setControlVehicleTrailError] = useState('');
   const [controlTrailRefreshKey, setControlTrailRefreshKey] = useState(0);
   const controlVehicleTrailIdentityRef = useRef<string | undefined>(undefined);
@@ -104,6 +105,17 @@ export function AdminShell({
   const [controlTrailCursorMs, setControlTrailCursorMs] = useState<number>();
   const [controlTrailPlaying, setControlTrailPlaying] = useState(false);
   const [controlTrailFollow, setControlTrailFollow] = useState(false);
+  // The web shows the trail from the vehicle's arrival at the center to its last finished stop. The rest of the
+  // day stays on the server. Without a center or an arrival the whole history is shown as before.
+  const controlVehicleTrail = useMemo(() => {
+    if (controlVehicleTrailFull === undefined || departureLocation === null) return controlVehicleTrailFull;
+    const startMs = centerArrivalMs(controlVehicleTrailFull, departureLocation);
+    if (startMs === undefined) return controlVehicleTrailFull;
+    const endMs = lastDeliveryFinishedMs(controlOrders.filter((order) => (
+      order.assignmentStatus === 'ASSIGNED' && order.vehicleId === selectedControlVehicleId
+    )));
+    return trimTrailHistory(controlVehicleTrailFull, { endMs, startMs });
+  }, [controlOrders, controlVehicleTrailFull, departureLocation, selectedControlVehicleId]);
   const vehicleColors = useMemo(
     () => controlVehicleColorMap(controlManagement?.vehicles ?? [], controlOrders),
     [controlManagement, controlOrders],
