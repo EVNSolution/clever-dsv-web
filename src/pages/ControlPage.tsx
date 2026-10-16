@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, LocateFixed, Pause, Play, RotateCcw, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, LocateFixed, Pause, Play, RotateCcw, X } from 'lucide-react';
 import { apiConfig } from '../api/config';
 import { loadControlSummary, loadVehicleTemperatureHistory } from '../services/control';
 import type { ControlSummary, VehicleTemperatureHistory, VehicleTemperatureSample } from '../services/control';
@@ -10,6 +10,7 @@ import { loadControlManagementSnapshot } from '../services/management';
 import type { ManagementData } from '../demo/management';
 import { adminCustomerDeliveryPath } from '../app-routes';
 import { assignControlDestinationProgress } from '../features/control/control-progress';
+import { vehicleRouteCompletions } from '../features/control/control-trail-window';
 import { ServiceDateSelector, todayInSeoul } from '../components/ServiceDateSelector';
 import {
   controlVehicleDisplayColor,
@@ -387,6 +388,7 @@ function ControlPanels({
   const selectedVehicleDestinations = assignControlDestinationProgress(groupControlDestinations(selectedVehicleOrders));
   const vehicleOrderCounts = controlVehicleOrderCounts(orders);
   const vehicleDepartures = controlVehicleDepartures(orders);
+  const vehicleCompletions = vehicleRouteCompletions(orders);
   const visibleVehicles = visibleControlVehicles(vehicles, vehicleOrderCounts, vehicleVisibility);
   const orderedVehicleCount = vehicles.filter((vehicle) => (vehicleOrderCounts.get(vehicle.id) ?? 0) > 0).length;
   const selectedVehicle = selectedVehicleId === undefined
@@ -516,7 +518,7 @@ function ControlPanels({
             <div className="control-vehicle-list fleet overlay-scroll" id="fleetList">
               {visibleVehicles.map((vehicle) => {
                 return <div
-                  className={`control-vehicle-row${selectedVehicleId === vehicle.id ? ' selected' : ''}`}
+                  className={`control-vehicle-row${selectedVehicleId === vehicle.id ? ' selected' : ''}${vehicleCompletions.has(vehicle.id) ? ' completed' : ''}`}
                   key={vehicle.id}
                   style={{ '--control-route-color': controlVehicleDisplayColor(vehicle.id, vehicleColors) } as CSSProperties}
                 >
@@ -539,7 +541,14 @@ function ControlPanels({
                   >
                     <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong></span>
                   </button>
-                  {vehicleDepartures.has(vehicle.id) ? <small className="control-vehicle-departure">{controlDepartureText(vehicleDepartures.get(vehicle.id))}</small> : null}
+                  {vehicleDepartures.has(vehicle.id) || vehicleCompletions.has(vehicle.id) ? (
+                    <span className="control-vehicle-times">
+                      {vehicleDepartures.has(vehicle.id) ? <small className="control-vehicle-departure">{controlDepartureText(vehicleDepartures.get(vehicle.id))}</small> : null}
+                      {vehicleCompletions.has(vehicle.id) ? (
+                        <small className="control-vehicle-completion"><Check aria-hidden="true" />{formatControlTime(vehicleCompletions.get(vehicle.id) ?? null)} 완료</small>
+                      ) : null}
+                    </span>
+                  ) : null}
                   <em>{(vehicleOrderCounts.get(vehicle.id) ?? 0) > 0 ? `${vehicleOrderCounts.get(vehicle.id)}건` : '주문 없음'}</em>
                   <button className="control-temperature-button" type="button" onClick={() => setTemperatureVehicle(vehicle)}>온도</button>
                 </div>
