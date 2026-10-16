@@ -10,7 +10,7 @@ import { loadControlManagementSnapshot } from '../services/management';
 import type { ManagementData } from '../demo/management';
 import { adminCustomerDeliveryPath } from '../app-routes';
 import { assignControlDestinationProgress } from '../features/control/control-progress';
-import { vehicleRouteCompletions } from '../features/control/control-trail-window';
+import { vehicleRouteCompletions } from '../features/control/control-route-completion';
 import { ServiceDateSelector, todayInSeoul } from '../components/ServiceDateSelector';
 import {
   controlVehicleDisplayColor,

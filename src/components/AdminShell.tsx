@@ -27,7 +27,6 @@ import {
   visibleTrailRawLines,
 } from '../features/control/control-trail-playback';
 import type { ManagementData } from '../demo/management';
-import { centerArrivalMs, lastStopArrivedMs, trimTrailHistory } from '../features/control/control-trail-window';
 import type { DepartureLocation } from './DepartureMarker';
 import type { MapCanvasCenterRequest, MapCanvasPoint, MapCanvasRoute, MapCanvasVehiclePoint } from './MapCanvas';
 import {
@@ -97,7 +96,9 @@ export function AdminShell({
   const [selectedControlDestinationId, setSelectedControlDestinationId] = useState<string>();
   const [controlMapCenterRequest, setControlMapCenterRequest] = useState<MapCanvasCenterRequest>();
   const [controlRouteResults, setControlRouteResults] = useState<ReadonlyMap<string, ControlRouteResult>>(new Map());
-  const [controlVehicleTrailFull, setControlVehicleTrail] = useState<VehicleGpsTrailHistory>();
+  // The server cuts the history to the service window, from the arrival at the center to the arrival at the last stop.
+  // A history with no window is shown whole. The live vehicle position is not affected.
+  const [controlVehicleTrail, setControlVehicleTrail] = useState<VehicleGpsTrailHistory>();
   const [controlVehicleTrailError, setControlVehicleTrailError] = useState('');
   const [controlTrailRefreshKey, setControlTrailRefreshKey] = useState(0);
   const controlVehicleTrailIdentityRef = useRef<string | undefined>(undefined);
@@ -105,20 +106,6 @@ export function AdminShell({
   const [controlTrailCursorMs, setControlTrailCursorMs] = useState<number>();
   const [controlTrailPlaying, setControlTrailPlaying] = useState(false);
   const [controlTrailFollow, setControlTrailFollow] = useState(false);
-  // The trail shows the vehicle's arrival at the center to its arrival at the last stop. A return to the center is
-  // not part of a DSV route. The rest of the day stays on the server, and the live position is not affected.
-  const controlVehicleTrail = useMemo(() => {
-    // The server cuts the history to the service window (an object) or says it has none (null) and sends it whole.
-    // Only a history without the field is cut here. Without a center or an arrival it is shown whole.
-    if (controlVehicleTrailFull === undefined || controlVehicleTrailFull.serviceWindow !== undefined) return controlVehicleTrailFull;
-    if (departureLocation === null) return controlVehicleTrailFull;
-    const startMs = centerArrivalMs(controlVehicleTrailFull, departureLocation);
-    if (startMs === undefined) return controlVehicleTrailFull;
-    const endMs = lastStopArrivedMs(controlOrders.filter((order) => (
-      order.assignmentStatus === 'ASSIGNED' && order.vehicleId === selectedControlVehicleId
-    )));
-    return trimTrailHistory(controlVehicleTrailFull, { endMs, startMs });
-  }, [controlOrders, controlVehicleTrailFull, departureLocation, selectedControlVehicleId]);
   const vehicleColors = useMemo(
     () => controlVehicleColorMap(controlManagement?.vehicles ?? [], controlOrders),
     [controlManagement, controlOrders],
