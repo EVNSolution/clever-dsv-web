@@ -401,6 +401,8 @@ function ControlPanels({
   const selectedVehicleInstructions = selectedVehicle === undefined
     ? []
     : controlVehicleSpecialInstructions(selectedVehicle.id, orders);
+  const selectedVehicleDeparture = selectedVehicleId === undefined ? undefined : vehicleDepartures.get(selectedVehicleId);
+  const selectedVehicleEtaCalculatedAt = controlLatestEtaCalculatedAt(selectedVehicleOrders);
 
   useEffect(() => {
     const compactViewport = window.matchMedia(mobileControlQuery);
@@ -537,7 +539,7 @@ function ControlPanels({
                   >
                     <span><strong>{vehicle.plate || '차량 번호 미등록'}</strong></span>
                   </button>
-                  {vehicleDepartures.has(vehicle.id) ? <small className="control-vehicle-departure">{formatControlTime(vehicleDepartures.get(vehicle.id) ?? null)} 출발</small> : null}
+                  {vehicleDepartures.has(vehicle.id) ? <small className="control-vehicle-departure">{controlDepartureText(vehicleDepartures.get(vehicle.id))}</small> : null}
                   <em>{(vehicleOrderCounts.get(vehicle.id) ?? 0) > 0 ? `${vehicleOrderCounts.get(vehicle.id)}건` : '주문 없음'}</em>
                   <button className="control-temperature-button" type="button" onClick={() => setTemperatureVehicle(vehicle)}>온도</button>
                 </div>
@@ -568,6 +570,12 @@ function ControlPanels({
               >{trailOpen ? '자취 닫기' : '자취 보기'}</button>
               <button aria-label="차량 상세 닫기" className="control-vehicle-summary-close" onClick={() => onVehicleSelect?.(selectedVehicle.id)} type="button"><X aria-hidden="true" /></button>
             </div>
+            {selectedVehicleDeparture || selectedVehicleEtaCalculatedAt ? (
+              <div className="control-vehicle-summary-times">
+                {selectedVehicleDeparture ? <span>{controlDepartureText(selectedVehicleDeparture)}</span> : null}
+                {selectedVehicleEtaCalculatedAt ? <span>ETA 갱신 {formatControlTime(selectedVehicleEtaCalculatedAt)}</span> : null}
+              </div>
+            ) : null}
             {trailError ? <p className="control-trail-error" id="controlTrailError" role="alert">{trailError}</p> : null}
             <details className="control-vehicle-secondary">
               <summary>운송 정보</summary>
@@ -1380,18 +1388,46 @@ function assessTemperatureSample(
   };
 }
 
-// The first ROUTE_STARTED among a vehicle's orders is when it left; vehicles that have not started are absent.
-function controlVehicleDepartures(orders: DispatchListItem[]): Map<string, string> {
-  const departures = new Map<string, string>();
+type ControlDeparture = { at: string; confirmed: boolean };
+
+// A confirmed center departure (actualDepartedAt) wins; otherwise the first ROUTE_STARTED is the departure button press.
+// Vehicles that have not started are absent.
+function controlVehicleDepartures(orders: DispatchListItem[]): Map<string, ControlDeparture> {
+  const departures = new Map<string, ControlDeparture>();
+  const earlier = (candidate: string, current: string) => Date.parse(candidate) < Date.parse(current);
   for (const order of orders) {
     if (order.vehicleId === null) continue;
-    for (const event of order.eventSummary) {
-      if (event.type !== 'ROUTE_STARTED') continue;
+    const candidates: ControlDeparture[] = order.eventSummary
+      .filter((event) => event.type === 'ROUTE_STARTED')
+      .map((event) => ({ at: event.occurredAt, confirmed: false }));
+    if (order.actualDepartedAt !== null) candidates.push({ at: order.actualDepartedAt, confirmed: true });
+    for (const candidate of candidates) {
       const current = departures.get(order.vehicleId);
-      if (current === undefined || Date.parse(event.occurredAt) < Date.parse(current)) departures.set(order.vehicleId, event.occurredAt);
+      if (current === undefined
+        || (candidate.confirmed && !current.confirmed)
+        || (candidate.confirmed === current.confirmed && earlier(candidate.at, current.at))) {
+        departures.set(order.vehicleId, candidate);
+      }
     }
   }
   return departures;
+}
+
+function controlDepartureText(departure: ControlDeparture | undefined): string {
+  if (departure === undefined) return '';
+  const time = formatControlTime(departure.at);
+  return departure.confirmed ? `${time} 출발` : `${time} 출발 버튼 기준`;
+}
+
+// The most recent ETA recalculation among a vehicle's orders; null when none carries one.
+function controlLatestEtaCalculatedAt(orders: DispatchListItem[]): string | null {
+  let latest: string | null = null;
+  for (const order of orders) {
+    const value = order.etaCalculatedAt;
+    if (value === null || Number.isNaN(Date.parse(value))) continue;
+    if (latest === null || Date.parse(value) > Date.parse(latest)) latest = value;
+  }
+  return latest;
 }
 
 function controlVehicleMotionText(vehicle: ManagementData['vehicles'][number]): string {
