@@ -16,3 +16,7 @@ credentials.json
 # notes, plans and vendor specifications. They live in the local main checkout only, and deployment evidence goes under
 # docs/runbooks/.local/. README.md, DESIGN.md and AGENTS.md at the root stay versioned.
 docs/
+
+# Files that tools write for a one-off analysis, such as a spreadsheet of real vehicle GPS routes. They hold production
+# data and must never be added by a blanket `git add .`.
+outputs/
