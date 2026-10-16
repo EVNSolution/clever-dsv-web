@@ -202,6 +202,7 @@ function managementListFixtures(overrides = {}) {
       page: { hasMore: false },
     }, 'g006-customers'),
     'GET /api/dsv/customers/customer-g006/accounts': legacyEnvelope({ accounts: [] }),
+    'GET /api/dsv/customers/customer-g006/accounts/invitations': legacyEnvelope({ invitations: [] }),
     'GET /api/dsv/v1/destinations?limit=100': v1Envelope({
       items: [{ address: 'Seoul Canonical Address 6006', destinationId: 'destination-g006', displayName: 'Canonical Destination G006' }],
       page: { hasMore: false },
@@ -2205,6 +2206,14 @@ test('customer detail manages customer accounts without exposing passwords', asy
   const api = await installApiFixtures(page, adminFixtures({
     ...managementListFixtures(),
     'GET /api/dsv/customers/customer-g006/accounts': legacyEnvelope({ accounts: [activeAccount] }),
+    'GET /api/dsv/customers/customer-g006/accounts/invitations': legacyEnvelope({
+      invitations: [
+        { id: 'invitation-pending', accountId: 'customer-account-invited', inviteeLabel: '김담당 (DSV 물류)', invitedByDisplayName: '관리자 가', purpose: 'SIGNUP', createdAt: '2026-08-03T08:00:00.000Z', expiresAt: '2026-08-10T08:00:00.000Z', status: 'PENDING' },
+        { id: 'invitation-null-label', accountId: 'customer-account-active', inviteeLabel: null, invitedByDisplayName: null, purpose: 'SIGNUP', createdAt: '2026-08-02T08:00:00.000Z', expiresAt: '2026-08-09T08:00:00.000Z', status: 'REVOKED' },
+        { id: 'invitation-consumed', accountId: 'customer-account-active', inviteeLabel: '박담당', invitedByDisplayName: '관리자 나', purpose: 'SIGNUP', createdAt: '2026-08-01T08:00:00.000Z', expiresAt: '2026-08-08T08:00:00.000Z', status: 'CONSUMED' },
+        { id: 'invitation-expired', accountId: 'customer-account-gone', inviteeLabel: '최담당', invitedByDisplayName: '관리자 가', purpose: 'PASSWORD_RESET', createdAt: '2026-07-01T08:00:00.000Z', expiresAt: '2026-07-08T08:00:00.000Z', status: 'EXPIRED' },
+      ],
+    }),
     'POST /api/dsv/customers/customer-g006/accounts/invitations': ({ request }) => {
       inviteBody = request.postDataJSON();
       return { ...legacyEnvelope({ account: invitedAccount, invitation: { expiresAt: '2026-08-10T08:00:00.000Z', setupUrl: 'https://dsv.cleversystem.ai/customer/account/setup#token=signup-token' } }), status: 201 };
@@ -2230,6 +2239,9 @@ test('customer detail manages customer accounts without exposing passwords', asy
 
   await panel.getByRole('button', { name: '계정 발급', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '고객 계정 발급' });
+  await dialog.getByRole('button', { name: '임시 링크 생성', exact: true }).click();
+  await expect(dialog.getByLabel('고객 가입 링크')).toHaveCount(0);
+  await dialog.getByLabel('초대 대상').fill('  이담당 (DSV 운영)  ');
   await expect(dialog).not.toContainText('수신자 이메일');
   await expect(dialog).not.toContainText('로그인 아이디 방식');
   await expect(dialog).not.toContainText('임시 비밀번호');
@@ -2241,9 +2253,17 @@ test('customer detail manages customer accounts without exposing passwords', asy
   await expect(dialog.getByRole('status').filter({ hasText: '초대 링크를 복사했습니다.' })).toBeVisible();
   await dialog.getByRole('button', { name: '닫기', exact: true }).click();
   await expect(panel.getByRole('status').filter({ hasText: '임시 초대 링크를 생성했습니다.' })).toBeVisible();
-  expect(inviteBody).toEqual({});
+  expect(inviteBody).toEqual({ inviteeLabel: '이담당 (DSV 운영)' });
 
-  await panel.getByRole('row').filter({ hasText: '고객 계정' }).getByRole('button', { name: '재초대', exact: true }).click();
+  const history = panel.getByRole('table', { name: '초대 내역' });
+  await expect(history.getByRole('row').filter({ hasText: '김담당 (DSV 물류)' })).toContainText('관리자 가');
+  await expect(history.getByRole('row').filter({ hasText: '김담당 (DSV 물류)' })).toContainText('대기');
+  await expect(history.getByRole('row').filter({ hasText: '미기재' })).toContainText('확인 불가');
+  await expect(history.getByRole('row').filter({ hasText: '미기재' })).toContainText('무효');
+  await expect(history.getByRole('row').filter({ hasText: '박담당' })).toContainText('사용됨');
+  await expect(history.getByRole('row').filter({ hasText: '최담당' })).toContainText('만료');
+  await expect(history.getByRole('row').filter({ hasText: '박담당' }).getByRole('button', { name: '재초대', exact: true })).toBeDisabled();
+  await history.getByRole('row').filter({ hasText: '김담당 (DSV 물류)' }).getByRole('button', { name: '재초대', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '고객 계정 발급' }).getByLabel('고객 가입 링크')).toHaveValue('https://dsv.cleversystem.ai/customer/account/setup#token=reissued-token');
   await page.getByRole('dialog', { name: '고객 계정 발급' }).getByRole('button', { name: '닫기', exact: true }).click();
   await expect(panel.getByRole('status').filter({ hasText: '새 임시 초대 링크를 생성했습니다.' })).toBeVisible();
@@ -2271,6 +2291,8 @@ test('customer switch isolates a delayed invitation response from the newly sele
     }),
     'GET /api/dsv/customers/customer-a/accounts': legacyEnvelope({ accounts: [] }),
     'GET /api/dsv/customers/customer-b/accounts': legacyEnvelope({ accounts: [] }),
+    'GET /api/dsv/customers/customer-a/accounts/invitations': legacyEnvelope({ invitations: [] }),
+    'GET /api/dsv/customers/customer-b/accounts/invitations': legacyEnvelope({ invitations: [] }),
     'POST /api/dsv/customers/customer-a/accounts/invitations': async () => {
       markInvitationStarted();
       await new Promise((resolve) => { releaseInvitation = resolve; });
@@ -2299,6 +2321,7 @@ test('customer switch isolates a delayed invitation response from the newly sele
   const panelA = page.getByLabel('고객 계정 관리');
   await panelA.getByRole('button', { name: '계정 발급', exact: true }).click();
   const invitationResponse = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().includes('/customers/customer-a/accounts/invitations'));
+  await page.getByRole('dialog', { name: '고객 계정 발급' }).getByLabel('초대 대상').fill('가담당');
   await page.getByRole('dialog', { name: '고객 계정 발급' }).getByRole('button', { name: '임시 링크 생성', exact: true }).click();
   await invitationStarted;
   await page.getByRole('button', { name: '고객 계정 발급 닫기' }).click();

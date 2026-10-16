@@ -2077,6 +2077,7 @@ test('edits only customer notification settings in remote master data', async ({
     'GET /api/dsv/v1/destinations?limit=100': emptyV1List(),
     'GET /api/dsv/v1/conditions?limit=100': emptyV1List(),
     'GET /api/dsv/customers/customer-notification-settings/accounts': { data: { accounts: [] }, error: null },
+    'GET /api/dsv/customers/customer-notification-settings/accounts/invitations': { data: { invitations: [] }, error: null },
     'PATCH /api/dsv/v1/customers/customer-notification-settings/notification-settings': ({ request }) => {
       const body = JSON.parse(request.postData() ?? '{}');
       commandBodies.push(body);
@@ -2956,6 +2957,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'POST admin/auth/complete',
     'PATCH auth/credentials',
     'GET customers/[^/]+/accounts',
+    'GET customers/[^/]+/accounts/invitations',
     'POST customers/[^/]+/accounts/invitations',
     'POST customer-accounts/[^/]+/reinvite',
     'POST customer-accounts/[^/]+/password-reset',
