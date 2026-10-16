@@ -2971,6 +2971,7 @@ test('rejects legacy resource snapshots and new legacy read-model endpoints outs
     'GET driver-account-links/pending',
     'POST driver-account-links/[^/]+/approve',
     'POST drivers/[^/]+/password-reset-link',
+    'GET drivers/[^/]+/account',
     'POST drivers',
     'PATCH drivers/[^/]+',
     'DELETE drivers/[^/]+',
