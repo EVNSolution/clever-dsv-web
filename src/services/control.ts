@@ -1,4 +1,5 @@
 import { ApiError, requestV1ReadJson } from '../api/client';
+import { isVehicleGpsServiceWindow, type VehicleGpsServiceWindow } from './control-service-window';
 
 export type ControlSummary = {
   assignedCount: number;
@@ -74,6 +75,8 @@ export type VehicleGpsDailyRoute = {
 export type VehicleGpsTrailHistory = {
   dailyRoute: VehicleGpsDailyRoute | null;
   serviceDate: string;
+  /** An object: the server already cut the history to it. Null: no center arrival was found, so it is whole. Absent: the server did not send it. */
+  serviceWindow?: VehicleGpsServiceWindow | null;
   sessions: Array<{
     completedAt: string | null;
     completionEventId: string | null;
@@ -123,7 +126,7 @@ export async function loadVehicleGpsTrailHistory(
   serviceDate: string,
   signal?: AbortSignal,
 ): Promise<VehicleGpsTrailHistory> {
-  const query = new URLSearchParams({ serviceDate, includeDailyRoute: 'true' });
+  const query = new URLSearchParams({ serviceDate, includeDailyRoute: 'true', window: 'service' });
   return adaptVehicleGpsTrailHistory(await requestV1ReadJson<unknown>(
     `vehicles/${encodeURIComponent(vehicleId)}/gps-trail-history?${query.toString()}`,
     { signal },
@@ -184,10 +187,14 @@ function invalidVehicleTemperatureHistory(body: unknown): ApiError {
   return new ApiError(502, '차량 온도 이력 API 응답 형식이 올바르지 않습니다.', body);
 }
 
+const gpsTrailHistoryKeys = ['dailyRoute', 'serviceDate', 'sessions', 'timezone', 'vehicleId'];
+
 function adaptVehicleGpsTrailHistory(data: unknown): VehicleGpsTrailHistory {
   if (
     !isObject(data)
-    || !hasExactKeys(data, ['dailyRoute', 'serviceDate', 'sessions', 'timezone', 'vehicleId'])
+    || !hasOnlyKeys(data, [...gpsTrailHistoryKeys, 'serviceWindow'])
+    || !gpsTrailHistoryKeys.every((key) => key in data)
+    || (data.serviceWindow !== undefined && data.serviceWindow !== null && !isVehicleGpsServiceWindow(data.serviceWindow))
     || typeof data.serviceDate !== 'string'
     || !/^\d{4}-\d{2}-\d{2}$/u.test(data.serviceDate)
     || !Array.isArray(data.sessions)
@@ -253,6 +260,7 @@ function adaptVehicleGpsTrailHistory(data: unknown): VehicleGpsTrailHistory {
   return {
     dailyRoute: adaptVehicleGpsDailyRoute(data.dailyRoute, data),
     serviceDate: data.serviceDate,
+    ...(data.serviceWindow === undefined ? {} : { serviceWindow: data.serviceWindow }),
     sessions,
     timezone: data.timezone,
     vehicleId: data.vehicleId,

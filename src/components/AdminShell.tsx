@@ -105,11 +105,13 @@ export function AdminShell({
   const [controlTrailCursorMs, setControlTrailCursorMs] = useState<number>();
   const [controlTrailPlaying, setControlTrailPlaying] = useState(false);
   const [controlTrailFollow, setControlTrailFollow] = useState(false);
-  // The web shows the trail from the vehicle's arrival at the center to its arrival at the last stop. A return to the
-  // center is not part of a DSV route. The rest of the day stays on the server, and the live position is not
-  // affected. Without a center or an arrival the whole history is shown as before.
+  // The trail shows the vehicle's arrival at the center to its arrival at the last stop. A return to the center is
+  // not part of a DSV route. The rest of the day stays on the server, and the live position is not affected.
   const controlVehicleTrail = useMemo(() => {
-    if (controlVehicleTrailFull === undefined || departureLocation === null) return controlVehicleTrailFull;
+    // The server cuts the history to the service window (an object) or says it has none (null) and sends it whole.
+    // Only a history without the field is cut here. Without a center or an arrival it is shown whole.
+    if (controlVehicleTrailFull === undefined || controlVehicleTrailFull.serviceWindow !== undefined) return controlVehicleTrailFull;
+    if (departureLocation === null) return controlVehicleTrailFull;
     const startMs = centerArrivalMs(controlVehicleTrailFull, departureLocation);
     if (startMs === undefined) return controlVehicleTrailFull;
     const endMs = lastStopArrivedMs(controlOrders.filter((order) => (

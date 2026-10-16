@@ -3567,7 +3567,23 @@ test('never renders concrete demo identifiers or demo-prefixed map sources in bl
   expect(api.unexpected).toEqual([]);
 });
 
-test('shows the trail only from the center arrival to the arrival at the last stop and keeps the live vehicle', async ({ page }) => {
+// The vehicle trail for a service window. The server sends `serviceWindow`: an object when it cut the history, null
+// when it found no center arrival and sent the history whole. A server that sends neither leaves the cut to the web.
+const serviceWindowFromServer = {
+  endedAt: '2026-09-29T02:00:00.000Z',
+  endSource: 'STOP_ARRIVED',
+  startedAt: '2026-09-28T23:00:00.000Z',
+  startSource: 'CENTER_STAY',
+};
+const centerToStopLine = [[126.9372235, 37.330948], [126.9375, 37.331], [126.96, 37.34], [126.98, 37.35]];
+const wholeDayLine = [[127.2, 37.6], [127.1, 37.55], ...centerToStopLine, [127, 37.36]];
+for (const scenario of [
+  { name: 'no field: the web cuts it', points: [0, 7], expectedLine: centerToStopLine, timeline: ['08:00', '11:00'] },
+  { name: 'window object: not cut again', points: [0, 7], serviceWindow: serviceWindowFromServer, expectedLine: wholeDayLine, timeline: ['07:00', '12:00'] },
+  { name: 'window null: shown whole', points: [0, 7], serviceWindow: null, expectedLine: wholeDayLine, timeline: ['07:00', '12:00'] },
+  { name: 'server cut without a daily route', points: [2, 6], serviceWindow: serviceWindowFromServer, dailyRoute: false, expectedLine: centerToStopLine, timeline: ['08:00', '11:00'] },
+  { name: 'an undocumented end source is rejected', points: [0, 7], serviceWindow: { ...serviceWindowFromServer, endSource: 'ROUTE_COMPLETED' }, rejected: true },
+]) test(`shows the trail from the center arrival to the arrival at the last stop and keeps the live vehicle (${scenario.name})`, async ({ page }) => {
   await page.clock.install({ time: new Date('2026-09-29T08:00:00.000Z') });
   await page.route('**/map/styles/dsv-korea-v1.json', (route) => route.fulfill({
     contentType: 'application/json',
@@ -3587,6 +3603,7 @@ test('shows the trail only from the center arrival to the arrival at the last st
     { at: '2026-09-29T02:00:00.000Z', coordinate: [126.98, 37.35] },
     { at: '2026-09-29T03:00:00.000Z', coordinate: [127.0, 37.36] },
   ];
+  const sentPoints = trailPoints.slice(...scenario.points);
   const api = await installApiFixtures(page, {
     'GET /api/dsv/v1/session': v1Envelope(adminSession),
     'GET /api/dsv/v1/control': v1Envelope({ ...controlSummary, assignedCount: 1, serviceDate, totalDispatchCount: 1, unassignedCount: 0 }),
@@ -3629,14 +3646,15 @@ test('shows the trail only from the center arrival to the arrival at the last st
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/vehicles/vehicle-window/gps-trail-history': v1Envelope({
-      dailyRoute: {
-        anchors: trailPoints.map((point, coordinateIndex) => ({ coordinateIndex, observedAt: point.at })),
+      dailyRoute: scenario.dailyRoute === false ? null : {
+        anchors: sentPoints.map((point, coordinateIndex) => ({ coordinateIndex, observedAt: point.at })),
         bridges: [],
-        coordinates: trailPoints.map((point) => point.coordinate),
-        sourceSampleCount: trailPoints.length,
+        coordinates: sentPoints.map((point) => point.coordinate),
+        sourceSampleCount: sentPoints.length,
         type: 'LineString',
       },
       serviceDate,
+      ...(scenario.serviceWindow === undefined ? {} : { serviceWindow: scenario.serviceWindow }),
       sessions: [{
         completedAt: null,
         completionEventId: null,
@@ -3645,7 +3663,7 @@ test('shows the trail only from the center arrival to the arrival at the last st
         routePlanId,
         segments: [{
           roadMatchedGeometry: null,
-          samples: trailPoints.map((point) => ({
+          samples: sentPoints.map((point) => ({
             distanceTodayKm: 1,
             ignitionOn: true,
             latitude: point.coordinate[1],
@@ -3669,17 +3687,24 @@ test('shows the trail only from the center arrival to the arrival at the last st
   await page.getByRole('button', { name: /경기86아2308/u }).click();
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible', timeout: 15_000 });
   await expect.poll(() => api.calls.filter((call) => call.path.endsWith('/gps-trail-history')).length).toBeGreaterThan(0);
-  await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
+  // The control screen asks the server for the service window.
+  expect(api.calls.filter((call) => call.path.endsWith('/gps-trail-history')).every((call) => call.search.includes('window=service'))).toBe(true);
+  const trailLines = () => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
     .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.routeId.startsWith('vehicle-trail:'))
-    .map((feature) => feature.geometry.coordinates) ?? []))
-    .toEqual([[[126.9372235, 37.330948], [126.9375, 37.331], [126.96, 37.34], [126.98, 37.35]]]);
+    .map((feature) => feature.geometry.coordinates) ?? []);
+  if (scenario.rejected) {
+    await expect(page.getByText('차량 자취를 불러오지 못했습니다.')).toBeVisible();
+    expect(await trailLines()).toEqual([]);
+    return;
+  }
+  await expect.poll(trailLines).toEqual([scenario.expectedLine]);
   // The live vehicle marker does not depend on the trail window.
   await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-vehicles')?.serialize().data.features.length ?? 0))
     .toBeGreaterThan(0);
   await page.getByRole('button', { name: '자취 보기' }).click();
   const timeline = page.getByRole('region', { name: '경기86아2308 자취 타임라인' });
   await expect(timeline).toBeVisible();
-  await expect(timeline.locator('.control-trail-timeline__track > time')).toHaveText(['08:00', '11:00']);
-  await expect(timeline.locator('header time')).toHaveText('11:00');
+  await expect(timeline.locator('.control-trail-timeline__track > time')).toHaveText(scenario.timeline);
+  await expect(timeline.locator('header time')).toHaveText(scenario.timeline[1]);
   expect(api.unexpected).toEqual([]);
 });
