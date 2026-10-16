@@ -717,7 +717,7 @@ test('drops the predicted completed leg once the daily GPS trail covers it', asy
       serviceDate,
     }),
     'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
-      items: [{ displayName: 'Daily Route Truck', driverAssignments: [], status: 'ACTIVE', vehicleId, vehiclePlate: '경기86아2308' }],
+      items: [{ displayName: 'Daily Route Truck', driverAssignments: [], status: 'ACTIVE', vehicleId, vehiclePlate: '경기00가0001' }],
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
@@ -791,7 +791,7 @@ test('drops the predicted completed leg once the daily GPS trail covers it', asy
   });
 
   await page.goto('/control');
-  await page.getByRole('button', { name: /경기86아2308/u }).click();
+  await page.getByRole('button', { name: /경기00가0001/u }).click();
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible', timeout: 15_000 });
   await expect.poll(firstLegFeatures).toEqual([]);
   await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
@@ -881,7 +881,7 @@ for (const tunnel of [
       serviceDate,
     }),
     'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
-      items: [{ displayName: 'Bridge Truck', driverAssignments: [], status: 'ACTIVE', vehicleId, vehiclePlate: '경기86아2308' }],
+      items: [{ displayName: 'Bridge Truck', driverAssignments: [], status: 'ACTIVE', vehicleId, vehiclePlate: '경기00가0001' }],
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
@@ -938,7 +938,7 @@ for (const tunnel of [
     })) ?? []);
 
   await page.goto('/control');
-  await page.getByRole('button', { name: /경기86아2308/u }).click();
+  await page.getByRole('button', { name: /경기00가0001/u }).click();
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible', timeout: 15_000 });
   await expect.poll(trailLines).toEqual([
     { coordinates: coordinates.slice(0, 2), dashed: false },
@@ -972,7 +972,7 @@ for (const tunnel of [
     kind: 'trail',
   }]);
   await page.getByRole('button', { name: '자취 보기' }).click();
-  const cursor = page.getByRole('region', { name: '경기86아2308 자취 타임라인' }).getByRole('slider', { name: '자취 시점' });
+  const cursor = page.getByRole('region', { name: '경기00가0001 자취 타임라인' }).getByRole('slider', { name: '자취 시점' });
   for (const [time, expected] of [
     ['2026-09-28T22:34:00.000Z', [{ coordinates: coordinates.slice(0, 2), dashed: false }]],
     ['2026-09-29T02:31:00.000Z', [{ coordinates: coordinates.slice(0, 2), dashed: false }, { coordinates: coordinates.slice(2, 4), dashed: false }]],
@@ -1022,7 +1022,7 @@ test('keeps September 30 moving NO_MATCH samples visible as dotted GPS trail', a
       serviceDate,
     }),
     'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
-      items: [{ displayName: 'Moving GPS', driverAssignments: [], status: 'ACTIVE', vehicleId, vehiclePlate: '경기88바9580' }],
+      items: [{ displayName: 'Moving GPS', driverAssignments: [], status: 'ACTIVE', vehicleId, vehiclePlate: '경기00가0002' }],
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
@@ -1058,7 +1058,7 @@ test('keeps September 30 moving NO_MATCH samples visible as dotted GPS trail', a
     .map((feature) => ({ coordinates: feature.geometry.coordinates, dashed: feature.properties.dashed, kind: feature.properties.kind })) ?? []);
 
   await page.goto('/control');
-  await page.getByRole('button', { name: /경기88바9580/u }).click();
+  await page.getByRole('button', { name: /경기00가0002/u }).click();
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible', timeout: 15_000 });
   await expect.poll(trailFeatures).toEqual([
     { coordinates: coordinates.slice(0, 2), dashed: false, kind: 'trail' },
@@ -1089,7 +1089,7 @@ test('rejects missing or malformed dailyRoute uncertainty metadata', async ({ pa
     'GET /api/dsv/v1/session': v1Envelope(adminSession),
     'GET /api/dsv/v1/control': v1Envelope(controlSummary),
     'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
-      items: [{ displayName: 'Missing Daily Route', driverAssignments: [], status: 'ACTIVE', vehicleId: 'vehicle-missing-daily-route', vehiclePlate: '경기86아2308' }],
+      items: [{ displayName: 'Missing Daily Route', driverAssignments: [], status: 'ACTIVE', vehicleId: 'vehicle-missing-daily-route', vehiclePlate: '경기00가0001' }],
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
@@ -1144,7 +1144,7 @@ test('rejects missing or malformed dailyRoute uncertainty metadata', async ({ pa
   ]) {
     responseDailyRoute = invalid;
     await page.goto('/control');
-    await page.getByRole('button', { name: /경기86아2308/u }).click();
+    await page.getByRole('button', { name: /경기00가0001/u }).click();
     await expect(page.getByRole('alert')).toHaveText('차량 자취를 불러오지 못했습니다.');
   }
   expect(api.unexpected).toEqual([]);
@@ -2317,7 +2317,7 @@ test('loads the administrator customer map through the customer-scoped contract'
             eventSummary: [],
             latitude: 37.5663,
             longitude: 126.9779,
-            vehicleDisplayName: '서울86바3800',
+            vehicleDisplayName: '서울00가0003',
             vehicleId: 'vehicle-g006-map',
             vehicleLatitude: 37.564,
             vehicleLongitude: 126.982,
@@ -2346,11 +2346,11 @@ test('loads the administrator customer map through the customer-scoped contract'
   await expect(page.getByRole('navigation', { name: '고객사 메뉴' })).toContainText('G006 Healthcare');
   await expect.poll(() => requestedServiceDates[0]).toBe(today);
   await expect(page.getByRole('button', { name: '관제 기준일 날짜 변경' })).toBeVisible();
-  await expect(page.getByLabel('차량 목록')).toContainText('서울86바3800');
+  await expect(page.getByLabel('차량 목록')).toContainText('서울00가0003');
   await expect.poll(() => page.getByLabel('차량 목록').locator('.customer-vehicle-list').evaluate((element) => element.clientHeight)).toBe(56);
   await expect(page.getByLabel('배송지 리스트')).toBeVisible();
   await expect(page.getByText('G006 Customer Destination', { exact: false }).first()).toBeVisible();
-  await expect(page.getByText('서울86바3800', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('서울00가0003', { exact: true }).first()).toBeVisible();
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible' });
   await expect(page.locator('.departure-map-marker')).toHaveAttribute('aria-label', '출발 위치: 물류센터');
   await expect(page.getByLabel('차량 목록')).not.toContainText(/접기|펼치기/u);
@@ -2497,7 +2497,7 @@ test('colors customer destination markers by delivery status like admin control'
         eventSummary: [],
         latitude: 37.5 + index * 0.01,
         longitude: 127.01 + index * 0.01,
-        vehicleDisplayName: '서울86바3800',
+        vehicleDisplayName: '서울00가0003',
         vehicleId: 'vehicle-g006-progress',
         vehicleLatitude: 37.51,
         vehicleLongitude: 127.02,
@@ -2559,7 +2559,7 @@ test('shows a depot-start route when assigned vehicle telemetry is unavailable',
           eventSummary: [],
           latitude: 37.500643,
           longitude: 127.036545,
-          vehicleDisplayName: '서울86바3800',
+          vehicleDisplayName: '서울00가0003',
           vehicleId: 'vehicle-g006-depot-route',
         },
         {
@@ -2576,7 +2576,7 @@ test('shows a depot-start route when assigned vehicle telemetry is unavailable',
           eventSummary: [],
           latitude: 37.5564,
           longitude: 126.9238,
-          vehicleDisplayName: '경기88바9580',
+          vehicleDisplayName: '경기00가0002',
           vehicleId: 'vehicle-g006-other-route',
         },
       ],
@@ -2599,8 +2599,8 @@ test('shows a depot-start route when assigned vehicle telemetry is unavailable',
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries');
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible' });
   await expect(page.locator('.departure-map-marker')).toHaveCount(1);
-  await expect(page.getByLabel('차량 목록')).toContainText('서울86바3800');
-  await page.getByLabel('차량 목록').getByRole('button', { name: /서울86바3800/ }).click();
+  await expect(page.getByLabel('차량 목록')).toContainText('서울00가0003');
+  await page.getByLabel('차량 목록').getByRole('button', { name: /서울00가0003/ }).click();
   await expect(page.getByLabel('배송지 리스트')).toContainText('G006 Depot Route Clinic');
   await expect(page.getByLabel('배송지 리스트')).not.toContainText('G006 Other Route Clinic');
   await expect.poll(() => page.evaluate(() => {
@@ -2636,7 +2636,7 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
           eventSummary: [{ type: 'STOP_DELIVERED', occurredAt: '2026-08-03T04:15:00.000Z' }],
           latitude: 37.500643,
           longitude: 127.036545,
-          vehicleDisplayName: '서울86바3800',
+          vehicleDisplayName: '서울00가0003',
           vehicleId: 'vehicle-g006-shared',
           vehicleLatitude: 37.49,
           vehicleLongitude: 127.02,
@@ -2655,7 +2655,7 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
           eventSummary: [],
           latitude: 37.5663,
           longitude: 126.9779,
-          vehicleDisplayName: '서울86바3800',
+          vehicleDisplayName: '서울00가0003',
           vehicleId: 'vehicle-g006-shared',
           vehicleLatitude: 37.49,
           vehicleLongitude: 127.02,
@@ -2674,7 +2674,7 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
           eventSummary: [{ type: 'STOP_DELIVERED', occurredAt: '2026-08-03T03:40:00.000Z' }],
           latitude: 37.500643,
           longitude: 127.036545,
-          vehicleDisplayName: '서울86바3800',
+          vehicleDisplayName: '서울00가0003',
           vehicleId: 'vehicle-g006-shared',
           vehicleLatitude: 37.49,
           vehicleLongitude: 127.02,
@@ -2707,7 +2707,7 @@ test('groups customer deliveries by destination id with shared ETA and deduped m
   await sharedDestination.click();
   await expect(sharedDestination).toHaveAttribute('aria-expanded', 'true');
   await expect(sharedDestination).toContainText('서울특별시 강남구 테헤란로 152, 5층');
-  await expect(sharedDestination).not.toContainText('서울86바3800');
+  await expect(sharedDestination).not.toContainText('서울00가0003');
   await expect(page.getByText('SELLER-G006-SAME-EARLY', { exact: true })).toBeVisible();
   await expect(sharedDestination.getByText('DELIVERED', { exact: true })).toHaveCount(2);
   await expect(page.getByText('7박스', { exact: true })).toBeVisible();
@@ -3621,7 +3621,7 @@ for (const scenario of [
       serviceDate,
     }),
     'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
-      items: [{ displayName: 'Window Truck', driverAssignments: [], status: 'ACTIVE', vehicleId, vehiclePlate: '경기86아2308' }],
+      items: [{ displayName: 'Window Truck', driverAssignments: [], status: 'ACTIVE', vehicleId, vehiclePlate: '경기00가0001' }],
       page: { hasMore: false },
     }),
     'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
@@ -3687,7 +3687,7 @@ for (const scenario of [
   });
 
   await page.goto('/control');
-  await page.getByRole('button', { name: /경기86아2308/u }).click();
+  await page.getByRole('button', { name: /경기00가0001/u }).click();
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible', timeout: 15_000 });
   await expect.poll(() => api.calls.filter((call) => call.path.endsWith('/gps-trail-history')).length).toBeGreaterThan(0);
   // The control screen asks the server for the service window.
@@ -3705,7 +3705,7 @@ for (const scenario of [
   await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-vehicles')?.serialize().data.features.length ?? 0))
     .toBeGreaterThan(0);
   await page.getByRole('button', { name: '자취 보기' }).click();
-  const timeline = page.getByRole('region', { name: '경기86아2308 자취 타임라인' });
+  const timeline = page.getByRole('region', { name: '경기00가0001 자취 타임라인' });
   await expect(timeline).toBeVisible();
   await expect(timeline.locator('.control-trail-timeline__track > time')).toHaveText(scenario.timeline);
   await expect(timeline.locator('header time')).toHaveText(scenario.timeline[1]);
