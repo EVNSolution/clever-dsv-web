@@ -3570,7 +3570,7 @@ test('never renders concrete demo identifiers or demo-prefixed map sources in bl
 });
 
 // The vehicle trail for a service window. The server sends `serviceWindow`: an object when it cut the history, null
-// when it found no center arrival and sent the history whole. A server that sends neither leaves the cut to the web.
+// when it found no center arrival and sent the history whole. The web never cuts a history itself.
 const serviceWindowFromServer = {
   endedAt: '2026-09-29T02:00:00.000Z',
   endSource: 'STOP_ARRIVED',
@@ -3580,7 +3580,7 @@ const serviceWindowFromServer = {
 const centerToStopLine = [[126.9372235, 37.330948], [126.9375, 37.331], [126.96, 37.34], [126.98, 37.35]];
 const wholeDayLine = [[127.2, 37.6], [127.1, 37.55], ...centerToStopLine, [127, 37.36]];
 for (const scenario of [
-  { name: 'no field: the web cuts it', points: [0, 7], expectedLine: centerToStopLine, timeline: ['08:00', '11:00'] },
+  { name: 'no field: shown as received', points: [0, 7], expectedLine: wholeDayLine, timeline: ['07:00', '12:00'] },
   { name: 'window object: not cut again', points: [0, 7], serviceWindow: serviceWindowFromServer, expectedLine: wholeDayLine, timeline: ['07:00', '12:00'] },
   { name: 'window null: shown whole', points: [0, 7], serviceWindow: null, expectedLine: wholeDayLine, timeline: ['07:00', '12:00'] },
   { name: 'server cut without a daily route', points: [2, 6], serviceWindow: serviceWindowFromServer, dailyRoute: false, expectedLine: centerToStopLine, timeline: ['08:00', '11:00'] },
