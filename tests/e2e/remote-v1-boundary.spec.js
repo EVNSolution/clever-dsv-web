@@ -3650,16 +3650,16 @@ test('shows confirmed center departure and the latest ETA recalculation only whe
         order('vehicle-confirmed', 1, {
           actualDepartedAt: '2026-08-05T00:40:00.000Z',
           etaCalculatedAt: '2026-08-05T00:50:00.000Z',
-          eventSummary: [{ type: 'ROUTE_STARTED', occurredAt: '2026-08-05T00:30:00.000Z' }],
+          routeStartedAt: '2026-08-05T00:30:00.000Z',
         }),
         order('vehicle-confirmed', 2, {
           actualDepartedAt: '2026-08-05T00:40:00.000Z',
           etaCalculatedAt: '2026-08-05T01:05:00.000Z',
-          eventSummary: [{ type: 'ROUTE_STARTED', occurredAt: '2026-08-05T00:30:00.000Z' }],
+          routeStartedAt: '2026-08-05T00:30:00.000Z',
         }),
         // New fields absent: the existing button-press departure stays and no ETA recalculation is shown.
         order('vehicle-button', 1, {
-          eventSummary: [{ type: 'ROUTE_STARTED', occurredAt: '2026-08-05T00:35:00.000Z' }],
+          routeStartedAt: '2026-08-05T00:35:00.000Z',
         }),
       ],
       page: { hasMore: false },

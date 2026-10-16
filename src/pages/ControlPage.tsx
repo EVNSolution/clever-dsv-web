@@ -1390,16 +1390,15 @@ function assessTemperatureSample(
 
 type ControlDeparture = { at: string; confirmed: boolean };
 
-// A confirmed center departure (actualDepartedAt) wins; otherwise the first ROUTE_STARTED is the departure button press.
+// A confirmed center departure (actualDepartedAt) wins; otherwise the start button press (routeStartedAt).
 // Vehicles that have not started are absent.
 function controlVehicleDepartures(orders: DispatchListItem[]): Map<string, ControlDeparture> {
   const departures = new Map<string, ControlDeparture>();
   const earlier = (candidate: string, current: string) => Date.parse(candidate) < Date.parse(current);
   for (const order of orders) {
     if (order.vehicleId === null) continue;
-    const candidates: ControlDeparture[] = order.eventSummary
-      .filter((event) => event.type === 'ROUTE_STARTED')
-      .map((event) => ({ at: event.occurredAt, confirmed: false }));
+    const candidates: ControlDeparture[] = [];
+    if (order.routeStartedAt !== null) candidates.push({ at: order.routeStartedAt, confirmed: false });
     if (order.actualDepartedAt !== null) candidates.push({ at: order.actualDepartedAt, confirmed: true });
     for (const candidate of candidates) {
       const current = departures.get(order.vehicleId);
