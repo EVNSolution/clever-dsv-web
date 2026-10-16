@@ -2,6 +2,8 @@ import type { FeatureCollection, Point } from 'geojson';
 import * as maplibregl from 'maplibre-gl';
 import type { MapCanvasPoint } from '../MapCanvas';
 
+type PinStatus = NonNullable<MapCanvasPoint['status']> | '';
+
 const sourceId = 'operational-destinations';
 const markerLayerId = 'operational-destination-markers';
 // lucide MapPin outline (24x24 viewBox), without its inner circle so the stop number can sit in the head.
@@ -62,12 +64,13 @@ function destinationFeatures(
       const sortOrder = point.sortOrder ?? Number.MAX_SAFE_INTEGER;
       const color = point.color ?? (point.tone === 'assigned' ? '#0066cc' : '#8e8e93');
       const label = point.label ?? '';
+      const status = point.status ?? '';
       return {
         type: 'Feature',
         properties: {
           color,
           label,
-          pinImage: markerImageId(color, label),
+          pinImage: markerImageId(color, label, status),
           pointId: point.id,
           // With overlap enabled, higher sort keys render on top. Negating the
           // stop sequence therefore draws later stops first and stop 1 last.
@@ -83,24 +86,25 @@ function destinationFeatures(
 }
 
 function registerMarkerImages(map: maplibregl.Map, points: MapCanvasPoint[]): void {
-  const markers = new Map<string, { color: string; label: string }>();
+  const markers = new Map<string, { color: string; label: string; status: PinStatus }>();
   for (const point of points) {
     const color = point.color ?? (point.tone === 'assigned' ? '#0066cc' : '#8e8e93');
     const label = point.label ?? '';
-    markers.set(markerImageId(color, label), { color, label });
+    const status = point.status ?? '';
+    markers.set(markerImageId(color, label, status), { color, label, status });
   }
   for (const [id, marker] of markers) {
     if (!map.hasImage(id)) {
-      map.addImage(id, createStopPinImage(marker.color, marker.label), { pixelRatio: 2 });
+      map.addImage(id, createStopPinImage(marker.color, marker.label, marker.status), { pixelRatio: 2 });
     }
   }
 }
 
-function markerImageId(color: string, label: string): string {
-  return `stop-pin-${color.replace('#', '').toLowerCase()}-${label || 'blank'}`;
+function markerImageId(color: string, label: string, status: PinStatus): string {
+  return `stop-pin-${color.replace('#', '').toLowerCase()}-${label || 'blank'}-${status || 'none'}`;
 }
 
-function createStopPinImage(color: string, label: string): ImageData {
+function createStopPinImage(color: string, label: string, status: PinStatus): ImageData {
   const canvas = document.createElement('canvas');
   canvas.width = 80;
   canvas.height = 104;
@@ -131,5 +135,38 @@ function createStopPinImage(color: string, label: string): ImageData {
     context.strokeText(label, 20, 24);
     context.fillText(label, 20, 24);
   }
+  if (status !== '') drawStatusBadge(context, color, status);
   return context.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+// A white disc at the pin's lower right with a check (completed) or an x (failed), like lucide map-pin-check and
+// map-pin-x. The shape tells the status when the color is a vehicle color.
+function drawStatusBadge(context: CanvasRenderingContext2D, color: string, status: 'completed' | 'failed'): void {
+  const x = 32.5;
+  const y = 40;
+  context.save();
+  context.shadowBlur = 3;
+  context.shadowColor = 'rgba(0, 0, 0, 0.25)';
+  context.fillStyle = '#ffffff';
+  context.beginPath();
+  context.arc(x, y, 6.5, 0, Math.PI * 2);
+  context.fill();
+  context.shadowColor = 'transparent';
+  context.strokeStyle = color;
+  context.lineWidth = 2.2;
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  context.beginPath();
+  if (status === 'completed') {
+    context.moveTo(x - 3, y + 0.3);
+    context.lineTo(x - 0.8, y + 2.5);
+    context.lineTo(x + 3.2, y - 2.2);
+  } else {
+    context.moveTo(x - 2.5, y - 2.5);
+    context.lineTo(x + 2.5, y + 2.5);
+    context.moveTo(x + 2.5, y - 2.5);
+    context.lineTo(x - 2.5, y + 2.5);
+  }
+  context.stroke();
+  context.restore();
 }

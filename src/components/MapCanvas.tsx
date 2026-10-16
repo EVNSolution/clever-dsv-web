@@ -51,6 +51,8 @@ export type MapCanvasPoint = {
   latitude: number;
   longitude: number;
   sortOrder?: number;
+  /** A finished stop gets a check, a failed one an x, on the pin's lower right. */
+  status?: 'completed' | 'failed';
   tone?: 'assigned' | 'unassigned';
 };
 

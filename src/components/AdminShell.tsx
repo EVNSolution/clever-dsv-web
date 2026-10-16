@@ -32,6 +32,7 @@ import type { MapCanvasCenterRequest, MapCanvasPoint, MapCanvasRoute, MapCanvasV
 import {
   assignControlDestinationProgress,
   CONTROL_PROGRESS_COLORS,
+  controlPinStatus,
   splitControlRouteByProgress,
 } from '../features/control/control-progress';
 import {
@@ -549,6 +550,7 @@ function assignedControlMapPoints(
       latitude: anchor.latitude,
       longitude: anchor.longitude,
       sortOrder: sequence,
+      status: controlPinStatus(progressStatus),
       tone: 'assigned' as const,
     }];
   });

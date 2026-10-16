@@ -359,7 +359,7 @@
 .control-destination-row.progress-completed .control-order-sequence { background:#8e8e93; }
 .control-destination-row.progress-current .control-order-sequence { background:#1f8b4c; }
 .control-destination-row.progress-planned .control-order-sequence { background:#0066cc; }
-.control-destination-row.progress-failed .control-order-sequence { background:#e87514; }
+.control-destination-row.progress-failed .control-order-sequence { background:var(--color-risk); }
 .control-destination-list { display:grid; grid-auto-rows:max-content; align-content:start; }
 .control-destination-columns {
   position:sticky; top:0; z-index:1; display:grid; grid-template-columns:minmax(0, 1fr) 48px 58px 58px;
