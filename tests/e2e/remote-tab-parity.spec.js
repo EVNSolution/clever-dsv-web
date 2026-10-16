@@ -2219,7 +2219,7 @@ test('customer detail manages customer accounts without exposing passwords', asy
       return { ...legacyEnvelope({ account: invitedAccount, invitation: { expiresAt: '2026-08-10T08:00:00.000Z', setupUrl: 'https://dsv.cleversystem.ai/customer/account/setup#token=signup-token' } }), status: 201 };
     },
     'POST /api/dsv/customer-accounts/customer-account-invited/reinvite': legacyEnvelope({ account: { ...invitedAccount, inviteExpiresAt: '2026-08-11T08:00:00.000Z' }, invitation: { expiresAt: '2026-08-11T08:00:00.000Z', setupUrl: 'https://dsv.cleversystem.ai/customer/account/setup#token=reissued-token' } }),
-    'POST /api/dsv/customer-accounts/customer-account-active/password-reset': legacyEnvelope({ account: activeAccount }),
+    'POST /api/dsv/customer-accounts/customer-account-active/password-reset': legacyEnvelope({ account: activeAccount, invitation: { expiresAt: '2026-08-11T08:00:00.000Z', setupUrl: 'https://dsv.cleversystem.ai/customer/account/setup#token=reset-token' } }),
     'PATCH /api/dsv/customer-accounts/customer-account-active/status': ({ request }) => {
       statusBody = request.postDataJSON();
       return legacyEnvelope({ account: { ...activeAccount, status: 'DISABLED' } });
@@ -2269,7 +2269,10 @@ test('customer detail manages customer accounts without exposing passwords', asy
   await expect(panel.getByRole('status').filter({ hasText: '새 임시 초대 링크를 생성했습니다.' })).toBeVisible();
 
   await panel.getByRole('row').filter({ hasText: '기존 담당자' }).getByRole('button', { name: '재설정', exact: true }).click();
-  await expect(panel.getByRole('status').filter({ hasText: '비밀번호 재설정 이메일 발송을 요청했습니다.' })).toBeVisible();
+  const resetDialog = page.getByRole('dialog', { name: '고객 계정 비밀번호 재설정' });
+  await expect(resetDialog.getByLabel('고객 비밀번호 재설정 링크')).toHaveValue('https://dsv.cleversystem.ai/customer/account/setup#token=reset-token');
+  await resetDialog.getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(panel.getByRole('status').filter({ hasText: '임시 비밀번호 재설정 링크를 생성했습니다.' })).toBeVisible();
 
   await panel.getByRole('row').filter({ hasText: '기존 담당자' }).getByRole('button', { name: '비활성화', exact: true }).click();
   await expect(panel.getByRole('row').filter({ hasText: '기존 담당자' }).getByText('비활성', { exact: true })).toBeVisible();
