@@ -3827,3 +3827,57 @@ test('shows confirmed center departure and the latest ETA recalculation only whe
   await expect(summary).not.toContainText('ETA 갱신');
   expect(api.unexpected).toEqual([]);
 });
+
+test('lists a vehicle as finished with its time only when every one of its stops was reached', async ({ page }) => {
+  const serviceDate = '2026-08-05';
+  const order = (vehicleId, index, eventSummary) => ({
+    assignmentStatus: 'ASSIGNED', customerId: `customer-${vehicleId}`, destinationDisplayName: `${vehicleId} 배송지 ${index}`,
+    destinationId: `destination-${vehicleId}-${index}`, driverId: `driver-${vehicleId}`, etaStatus: 'READY', eventSummary,
+    latitude: 37.5, longitude: 127 + index / 100, routePlanId: `route-${vehicleId}`, routeStopSequence: index,
+    sellerOrderId: `order-${vehicleId}-${index}`, sellerOrderKey: `${vehicleId}-${index}`, vehicleId,
+  });
+  const reached = (arrivedAt, deliveredAt) => [
+    { occurredAt: arrivedAt, type: 'STOP_ARRIVED' },
+    { occurredAt: deliveredAt, type: 'STOP_DELIVERED' },
+  ];
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Envelope({ ...controlSummary, assignedCount: 4, serviceDate, totalDispatchCount: 4, unassignedCount: 0 }),
+    'GET /api/dsv/v1/control/routes': v1Envelope({
+      routes: ['vehicle-done', 'vehicle-going'].map((id) => ({
+        coordinates: [[127.01, 37.5], [127.02, 37.5]], generatedAt: '2026-08-05T00:00:00.000Z', geometryStatus: 'fresh',
+        legDurationsSeconds: [600], routePlanId: `route-${id}`,
+      })),
+      serviceDate,
+    }),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
+      items: [
+        { displayName: 'Done Truck', driverAssignments: [], status: 'ACTIVE', vehicleId: 'vehicle-done', vehiclePlate: '완료12가1111' },
+        { displayName: 'Going Truck', driverAssignments: [], status: 'ACTIVE', vehicleId: 'vehicle-going', vehiclePlate: '진행12가2222' },
+      ],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/dispatches': v1Envelope({
+      items: [
+        // Both stops reached: the vehicle finished when it arrived at the last one, 11:30 KST, not when it delivered.
+        order('vehicle-done', 1, reached('2026-08-05T01:50:00.000Z', '2026-08-05T02:00:00.000Z')),
+        order('vehicle-done', 2, reached('2026-08-05T02:30:00.000Z', '2026-08-05T02:40:00.000Z')),
+        // One stop is reached and one is not: still on its way.
+        order('vehicle-going', 1, reached('2026-08-05T01:50:00.000Z', '2026-08-05T02:00:00.000Z')),
+        order('vehicle-going', 2, []),
+      ],
+      page: { hasMore: false },
+    }),
+  });
+
+  await page.goto('/control');
+  const doneRow = page.locator('.control-vehicle-row', { hasText: '완료12가1111' });
+  const goingRow = page.locator('.control-vehicle-row', { hasText: '진행12가2222' });
+  await expect(doneRow).toHaveClass(/completed/u);
+  await expect(doneRow.locator('.control-vehicle-completion')).toHaveText('11:30 완료');
+  await expect(doneRow).toHaveCSS('background-color', 'rgb(233, 247, 239)');
+  await expect(goingRow).not.toHaveClass(/completed/u);
+  await expect(goingRow.locator('.control-vehicle-completion')).toHaveCount(0);
+  expect(api.unexpected).toEqual([]);
+});
