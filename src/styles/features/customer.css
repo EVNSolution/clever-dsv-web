@@ -131,7 +131,7 @@
 .customer-destination-card.progress-completed .customer-destination-card-summary > i { background:#8e8e93; }
 .customer-destination-card.progress-current .customer-destination-card-summary > i { background:#1f8b4c; }
 .customer-destination-card.progress-planned .customer-destination-card-summary > i { background:#0066cc; }
-.customer-destination-card.progress-failed .customer-destination-card-summary > i { background:#e87514; }
+.customer-destination-card.progress-failed .customer-destination-card-summary > i { background:var(--color-risk); }
 .customer-destination-card-copy { min-width:0; display:grid; }
 .customer-destination-card-copy strong {
   min-width:0; overflow:hidden; color:var(--color-ink); font-size:13px; font-weight:900;

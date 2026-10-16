@@ -6,9 +6,14 @@ export type ControlProgressStatus = 'completed' | 'current' | 'failed' | 'planne
 export const CONTROL_PROGRESS_COLORS: Record<ControlProgressStatus, string> = {
   completed: '#8e8e93',
   current: '#1f8b4c',
-  failed: '#e87514',
+  failed: '#d92d20',
   planned: '#0066cc',
 };
+
+/** The map pin's badge: a check for a finished stop, an x for a failed one, none while it is still ahead. */
+export function controlPinStatus(status: ControlProgressStatus): 'completed' | 'failed' | undefined {
+  return status === 'completed' || status === 'failed' ? status : undefined;
+}
 
 export type ControlProgressDestination<T> = T & {
   progressStatus: ControlProgressStatus;

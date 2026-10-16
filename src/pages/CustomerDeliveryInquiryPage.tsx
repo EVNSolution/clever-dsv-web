@@ -9,7 +9,7 @@ import { loadRemoteCustomerDeliveries } from '../services/customer-deliveries';
 import type { CustomerDeliveryItem, RemoteCustomerDeliveries } from '../services/customer-deliveries';
 import type { MapCanvasPoint, MapCanvasRoute } from '../components/MapCanvas';
 import { ServiceDateSelector, todayInSeoul } from '../components/ServiceDateSelector';
-import { CONTROL_PROGRESS_COLORS, splitControlRouteByProgress } from '../features/control/control-progress';
+import { CONTROL_PROGRESS_COLORS, controlPinStatus, splitControlRouteByProgress } from '../features/control/control-progress';
 import type { ControlProgressStatus } from '../features/control/control-progress';
 
 const MapCanvas = lazy(() => import('../components/MapCanvas').then((module) => ({ default: module.MapCanvas })));
@@ -764,6 +764,7 @@ function customerMapPoints(groups: CustomerDestinationGroup[]): MapCanvasPoint[]
           latitude: group.latitude,
           longitude: group.longitude,
           sortOrder: group.destinationSequence,
+          status: controlPinStatus(group.progressStatus),
           tone: 'assigned' as const,
         }]
       : []
