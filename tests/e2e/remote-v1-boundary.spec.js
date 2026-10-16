@@ -440,7 +440,7 @@ test('separates control progress state from selection and splits a selected rout
   expect(progress.CONTROL_PROGRESS_COLORS).toEqual({
     completed: '#8e8e93',
     current: '#1f8b4c',
-    failed: '#e87514',
+    failed: '#d92d20',
     planned: '#0066cc',
   });
 });
@@ -587,7 +587,7 @@ test('renders selected control progress without letting a future destination cli
   await expect(rows.nth(0)).not.toContainText('08:31');
   const expectedColors = [
     'rgb(142, 142, 147)',
-    'rgb(232, 117, 20)',
+    'rgb(217, 45, 32)',
     'rgb(31, 139, 76)',
     'rgb(0, 102, 204)',
   ];
@@ -597,8 +597,9 @@ test('renders selected control progress without letting a future destination cli
   await page.getByRole('button', { name: '자취 보기' }).click();
   const timeline = page.getByRole('region', { name: '진행12가3456 자취 타임라인' });
   await expect(timeline).toBeVisible();
-  await expect(timeline.locator('header time')).toHaveText('24:00');
-  await expect(timeline.locator('.control-trail-timeline__track > time')).toHaveText(['00:00', '24:00']);
+  // The range is the first to the last GPS point, not the whole day: 09:00 to 09:15 KST here.
+  await expect(timeline.locator('header time')).toHaveText('09:15');
+  await expect(timeline.locator('.control-trail-timeline__track > time')).toHaveText(['09:00', '09:15']);
   await page.locator('.map-canvas.ready').waitFor({ state: 'visible', timeout: 15_000 });
   await expect.poll(() => page.evaluate(() => {
     const routes = window.dsvMap?.getSource('operational-routes');
@@ -667,7 +668,7 @@ test('renders selected control progress without letting a future destination cli
         .map((feature) => feature.geometry.coordinates),
     };
   })).toEqual({
-    destinations: ['#8e8e93', '#e87514', '#1f8b4c', '#0066cc'],
+    destinations: ['#8e8e93', '#d92d20', '#1f8b4c', '#0066cc'],
     routes: [
       { casingColor: '#ffffff', color: '#1f8b4c' },
       { casingColor: '#ffffff', color: '#0066cc' },
@@ -976,6 +977,7 @@ for (const tunnel of [
     ['2026-09-28T22:34:00.000Z', [{ coordinates: coordinates.slice(0, 2), dashed: false }]],
     ['2026-09-29T02:31:00.000Z', [{ coordinates: coordinates.slice(0, 2), dashed: false }, { coordinates: coordinates.slice(2, 4), dashed: false }]],
     ['2026-09-29T03:10:00.000Z', [{ coordinates: coordinates.slice(0, 2), dashed: false }, { coordinates: coordinates.slice(2, 4), dashed: false }, { coordinates: coordinates.slice(4, 7), dashed: true }]],
+    // The timeline now ends at the minute after the last GPS point, 12:12 KST here.
     ['2026-09-29T03:12:00.000Z', [{ coordinates: coordinates.slice(0, 2), dashed: false }, { coordinates: coordinates.slice(2, 4), dashed: false }, { coordinates: coordinates.slice(4, 7), dashed: true }, { coordinates: coordinates.slice(9, 11), dashed: false }]],
   ]) {
     await cursor.fill(String(Date.parse(time)));
@@ -1656,8 +1658,8 @@ test('shows all vehicles by default and filters the fleet and map to vehicles wi
     };
   })).toMatchObject({
     destinations: [
-      { label: '1', pinImage: expect.stringMatching(/-1$/), pointId: 'destination-g006-control' },
-      { label: '1', pinImage: expect.stringMatching(/-1$/), pointId: 'destination-g006-second' },
+      { label: '1', pinImage: expect.stringMatching(/-1-none$/), pointId: 'destination-g006-control' },
+      { label: '1', pinImage: expect.stringMatching(/-1-none$/), pointId: 'destination-g006-second' },
     ],
     destinationSymbol: {
       hasTextField: false,
@@ -2510,7 +2512,7 @@ test('colors customer destination markers by delivery status like admin control'
   await waitForApiCall(api, (call) => call.method === 'GET' && call.path === '/api/dsv/v1/customer/deliveries');
   const sequences = page.getByLabel('배송지 리스트').locator('.customer-destination-card-summary > i');
   await expect(sequences).toHaveCount(4);
-  const expectedColors = ['rgb(142, 142, 147)', 'rgb(232, 117, 20)', 'rgb(31, 139, 76)', 'rgb(0, 102, 204)'];
+  const expectedColors = ['rgb(142, 142, 147)', 'rgb(217, 45, 32)', 'rgb(31, 139, 76)', 'rgb(0, 102, 204)'];
   for (const [index, color] of expectedColors.entries()) {
     await expect(sequences.nth(index)).toHaveCSS('background-color', color);
   }
@@ -2520,7 +2522,7 @@ test('colors customer destination markers by delivery status like admin control'
       .map((feature) => [feature.properties.pointId, feature.properties.color]) ?? [],
   ))).toEqual({
     'destination-g006-progress-1': '#8e8e93',
-    'destination-g006-progress-2': '#e87514',
+    'destination-g006-progress-2': '#d92d20',
     'destination-g006-progress-3': '#1f8b4c',
     'destination-g006-progress-4': '#0066cc',
   });
@@ -3564,6 +3566,148 @@ test('never renders concrete demo identifiers or demo-prefixed map sources in bl
 
   await expectNoDemoVisible(page);
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session')).toBe(true);
+  expect(api.unexpected).toEqual([]);
+});
+
+// The vehicle trail for a service window. The server sends `serviceWindow`: an object when it cut the history, null
+// when it found no center arrival and sent the history whole. A server that sends neither leaves the cut to the web.
+const serviceWindowFromServer = {
+  endedAt: '2026-09-29T02:00:00.000Z',
+  endSource: 'STOP_ARRIVED',
+  startedAt: '2026-09-28T23:00:00.000Z',
+  startSource: 'CENTER_STAY',
+};
+const centerToStopLine = [[126.9372235, 37.330948], [126.9375, 37.331], [126.96, 37.34], [126.98, 37.35]];
+const wholeDayLine = [[127.2, 37.6], [127.1, 37.55], ...centerToStopLine, [127, 37.36]];
+for (const scenario of [
+  { name: 'no field: the web cuts it', points: [0, 7], expectedLine: centerToStopLine, timeline: ['08:00', '11:00'] },
+  { name: 'window object: not cut again', points: [0, 7], serviceWindow: serviceWindowFromServer, expectedLine: wholeDayLine, timeline: ['07:00', '12:00'] },
+  { name: 'window null: shown whole', points: [0, 7], serviceWindow: null, expectedLine: wholeDayLine, timeline: ['07:00', '12:00'] },
+  { name: 'server cut without a daily route', points: [2, 6], serviceWindow: serviceWindowFromServer, dailyRoute: false, expectedLine: centerToStopLine, timeline: ['08:00', '11:00'] },
+  { name: 'an undocumented end source is rejected', points: [0, 7], serviceWindow: { ...serviceWindowFromServer, endSource: 'ROUTE_COMPLETED' }, rejected: true },
+]) test(`shows the trail from the center arrival to the arrival at the last stop and keeps the live vehicle (${scenario.name})`, async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-09-29T08:00:00.000Z') });
+  await page.route('**/map/styles/dsv-korea-v1.json', (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#ffffff' } }] }),
+  }));
+  const serviceDate = '2026-09-29';
+  const vehicleId = 'vehicle-window';
+  const routePlanId = 'route-window';
+  // The settings departure location is 37.330948, 126.9372235. The vehicle drives from far away, waits at the center
+  // from 08:00 to 08:20 KST, delivers its one stop at 11:00 KST and drives on.
+  const trailPoints = [
+    { at: '2026-09-28T22:00:00.000Z', coordinate: [127.2, 37.6] },
+    { at: '2026-09-28T22:30:00.000Z', coordinate: [127.1, 37.55] },
+    { at: '2026-09-28T23:00:00.000Z', coordinate: [126.9372235, 37.330948] },
+    { at: '2026-09-28T23:20:00.000Z', coordinate: [126.9375, 37.331] },
+    { at: '2026-09-28T23:40:00.000Z', coordinate: [126.96, 37.34] },
+    { at: '2026-09-29T02:00:00.000Z', coordinate: [126.98, 37.35] },
+    { at: '2026-09-29T03:00:00.000Z', coordinate: [127.0, 37.36] },
+  ];
+  const sentPoints = trailPoints.slice(...scenario.points);
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Envelope({ ...controlSummary, assignedCount: 1, serviceDate, totalDispatchCount: 1, unassignedCount: 0 }),
+    'GET /api/dsv/v1/control/routes': v1Envelope({
+      routes: [{
+        coordinates: [[126.9372235, 37.330948], [126.98, 37.35]],
+        generatedAt: '2026-09-28T22:00:00.000Z',
+        geometryStatus: 'fresh',
+        legDurationsSeconds: [600],
+        routePlanId,
+      }],
+      serviceDate,
+    }),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
+      items: [{ displayName: 'Window Truck', driverAssignments: [], status: 'ACTIVE', vehicleId, vehiclePlate: '경기86아2308' }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/dispatches': v1Envelope({
+      items: [{
+        assignmentStatus: 'ASSIGNED',
+        customerId: 'customer-window',
+        destinationDisplayName: '배송지 1',
+        destinationId: 'destination-window-1',
+        driverId: 'driver-window',
+        etaStatus: 'PENDING',
+        // The route ends at the arrival, 11:00 KST, not at the delivery ten minutes later.
+        eventSummary: [
+          { occurredAt: '2026-09-29T02:00:00.000Z', type: 'STOP_ARRIVED' },
+          { occurredAt: '2026-09-29T02:10:00.000Z', type: 'STOP_DELIVERED' },
+        ],
+        latitude: 37.35,
+        longitude: 126.98,
+        routePlanId,
+        routeStopSequence: 1,
+        sellerOrderId: 'order-window-1',
+        sellerOrderKey: 'WINDOW-1',
+        vehicleId,
+      }],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/vehicles/vehicle-window/gps-trail-history': v1Envelope({
+      dailyRoute: scenario.dailyRoute === false ? null : {
+        anchors: sentPoints.map((point, coordinateIndex) => ({ coordinateIndex, observedAt: point.at })),
+        bridges: [],
+        coordinates: sentPoints.map((point) => point.coordinate),
+        sourceSampleCount: sentPoints.length,
+        type: 'LineString',
+      },
+      serviceDate,
+      ...(scenario.serviceWindow === undefined ? {} : { serviceWindow: scenario.serviceWindow }),
+      sessions: [{
+        completedAt: null,
+        completionEventId: null,
+        endpoint: { endedAt: null, reason: 'LAST_VALID_SAMPLE' },
+        restart: null,
+        routePlanId,
+        segments: [{
+          roadMatchedGeometry: null,
+          samples: sentPoints.map((point) => ({
+            distanceTodayKm: 1,
+            ignitionOn: true,
+            latitude: point.coordinate[1],
+            longitude: point.coordinate[0],
+            observedAt: point.at,
+            speedKph: 20,
+          })),
+          trailMarker: null,
+        }],
+        sessionIndex: 0,
+        startedAt: '2026-09-28T22:00:00.000Z',
+        startEventId: 'start-window',
+        startSource: 'ROUTE_STARTED',
+      }],
+      timezone: 'Asia/Seoul',
+      vehicleId,
+    }),
+  });
+
+  await page.goto('/control');
+  await page.getByRole('button', { name: /경기86아2308/u }).click();
+  await page.locator('.map-canvas.ready').waitFor({ state: 'visible', timeout: 15_000 });
+  await expect.poll(() => api.calls.filter((call) => call.path.endsWith('/gps-trail-history')).length).toBeGreaterThan(0);
+  // The control screen asks the server for the service window.
+  expect(api.calls.filter((call) => call.path.endsWith('/gps-trail-history')).every((call) => call.search.includes('window=service'))).toBe(true);
+  const trailLines = () => page.evaluate(() => window.dsvMap?.getSource('operational-routes')?.serialize().data.features
+    .filter((feature) => feature.geometry.type === 'LineString' && feature.properties.routeId.startsWith('vehicle-trail:'))
+    .map((feature) => feature.geometry.coordinates) ?? []);
+  if (scenario.rejected) {
+    await expect(page.getByText('차량 자취를 불러오지 못했습니다.')).toBeVisible();
+    expect(await trailLines()).toEqual([]);
+    return;
+  }
+  await expect.poll(trailLines).toEqual([scenario.expectedLine]);
+  // The live vehicle marker does not depend on the trail window.
+  await expect.poll(() => page.evaluate(() => window.dsvMap?.getSource('operational-vehicles')?.serialize().data.features.length ?? 0))
+    .toBeGreaterThan(0);
+  await page.getByRole('button', { name: '자취 보기' }).click();
+  const timeline = page.getByRole('region', { name: '경기86아2308 자취 타임라인' });
+  await expect(timeline).toBeVisible();
+  await expect(timeline.locator('.control-trail-timeline__track > time')).toHaveText(scenario.timeline);
+  await expect(timeline.locator('header time')).toHaveText(scenario.timeline[1]);
   expect(api.unexpected).toEqual([]);
 });
 
