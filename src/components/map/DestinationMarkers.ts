@@ -4,7 +4,10 @@ import type { MapCanvasPoint } from '../MapCanvas';
 
 const sourceId = 'operational-destinations';
 const markerLayerId = 'operational-destination-markers';
-const stopPinPath = 'M20 50C20 50 4 31.5 4 18C4 9.16 11.16 2 20 2s16 7.16 16 16c0 13.5-16 32-16 32Z';
+// lucide MapPin outline (24x24 viewBox), without its inner circle so the stop number can sit in the head.
+const mapPinPath = 'M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0Z';
+// Scale 2.2 centers the pin in the 40x52 canvas and puts its tip at y=50, where the icon anchor sits.
+const mapPinTransform = [2.2, 0, 0, 2.2, -6.4, 2.04] as const;
 
 export function updateDestinationMarkers(
   map: maplibregl.Map,
@@ -104,7 +107,8 @@ function createStopPinImage(color: string, label: string): ImageData {
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Canvas 2D context unavailable');
   context.scale(2, 2);
-  const path = new Path2D(stopPinPath);
+  const path = new Path2D();
+  path.addPath(new Path2D(mapPinPath), new DOMMatrix([...mapPinTransform]));
   context.fillStyle = color;
   context.strokeStyle = '#ffffff';
   context.lineJoin = 'round';
@@ -124,8 +128,8 @@ function createStopPinImage(color: string, label: string): ImageData {
     context.strokeStyle = 'rgba(0, 0, 0, 0.32)';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
-    context.strokeText(label, 20, 18.5);
-    context.fillText(label, 20, 18.5);
+    context.strokeText(label, 20, 24);
+    context.fillText(label, 20, 24);
   }
   return context.getImageData(0, 0, canvas.width, canvas.height);
 }
