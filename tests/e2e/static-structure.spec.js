@@ -6,6 +6,8 @@ const repoUrl = (path) => new URL(`../../${path}`, import.meta.url);
 const exists = (path) => existsSync(srcUrl(path));
 const readSrc = (path) => readFileSync(srcUrl(path), 'utf8');
 const readRepo = (path) => readFileSync(repoUrl(path), 'utf8');
+// Internal documents are not versioned (.gitignore). Checks on them run only where the files exist.
+const docsPresent = (...paths) => paths.every((path) => existsSync(repoUrl(path)));
 
 function listFiles(root, predicate = () => true) {
   const rootUrl = repoUrl(`${root}/`);
@@ -158,8 +160,10 @@ test('vehicle trail playback uses raw sample timestamps and a native timeline co
   expect(controlPage).toContain('type="range"');
   expect(playback).toContain('Date.parse(sample.observedAt) <= cursorMs');
   expect(playback).toContain('Date.parse(anchor.observedAt) <= cursorMs');
-  expect(playback).toContain("Date.parse(`${history.serviceDate}T00:00:00+09:00`)");
-  expect(controlPage).toContain("if (value === endMs) return '24:00'");
+  // The range is the first to the last shown point, on whole minutes, not the whole day.
+  expect(playback).toContain('Math.floor(Math.min(...times) / minuteMs) * minuteMs');
+  expect(playback).toContain('Math.ceil(Math.max(...times) / minuteMs) * minuteMs');
+  expect(controlPage).not.toContain("return '24:00'");
   expect(playback).not.toContain('Date.parse(session.startedAt)');
 });
 
@@ -247,7 +251,7 @@ test('public driver app page uses the production store links and direct signup',
   const config = readSrc('config/driver-app.ts');
   const page = readSrc('pages/DriverAppInstallPage.tsx');
   const settings = readSrc('pages/SettingsPage.tsx');
-  const onboarding = readRepo('docs/driver-app-onboarding.md');
+  const onboarding = docsPresent('docs/driver-app-onboarding.md') ? readRepo('docs/driver-app-onboarding.md') : undefined;
 
   expect(app).toContain('path === driverAppPath');
   expect(config).toContain("DRIVER_APP_INSTALL_PAGE_URL = 'https://dsv.cleversystem.ai/driver-app'");
@@ -269,11 +273,13 @@ test('public driver app page uses the production store links and direct signup',
   expect(settings).toContain('href={driverAppPath}');
   expect(settings).not.toContain("setActiveGuide('driver')");
   expect(settings).not.toContain('/api/dsv/guides/driver');
-  expect(onboarding).toContain('`/driver-app`');
-  expect(onboarding).toContain('https://play.google.com/store/apps/details?id=com.evnsolution.clever.driver');
-  expect(onboarding).toContain('https://apps.apple.com/kr/app/clever-driver/id6806955523');
-  expect(onboarding).toContain('PDF 가이드 다운로드');
-  expect(onboarding).toContain('일회용 초대 링크나 QR 코드를 생성하지 않는다.');
+  if (onboarding !== undefined) {
+    expect(onboarding).toContain('`/driver-app`');
+    expect(onboarding).toContain('https://play.google.com/store/apps/details?id=com.evnsolution.clever.driver');
+    expect(onboarding).toContain('https://apps.apple.com/kr/app/clever-driver/id6806955523');
+    expect(onboarding).toContain('PDF 가이드 다운로드');
+    expect(onboarding).toContain('일회용 초대 링크나 QR 코드를 생성하지 않는다.');
+  }
 });
 
 test('single-concept labels remain', () => {
@@ -458,6 +464,7 @@ test('application CSS consumes shared palette and typography tokens', () => {
 });
 
 test('documentation names and boundaries', () => {
+  test.skip(!docsPresent('docs/backend-api.md'), 'The internal documents are not versioned.');
   const backendApi = readRepo('docs/backend-api.md');
   const docs = ['README.md', 'DESIGN.md', 'docs/backend-api.md'].map(readRepo).join('\n');
   for (const value of ['/control', '/dispatch', '/records', '/master-data', '/settings', '/customer/delivery-inquiry', '관제', '배차', '이력', '관리', '설정']) {

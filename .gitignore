@@ -12,18 +12,7 @@ credentials.json
 *.credentials.json
 .DS_Store
 
-# Agent-only deployment evidence and temporary release artifacts.
-# The canonical procedure is versioned in docs/runbooks/dsv-production-deploy.md.
-docs/runbooks/.local/
-docs/runbooks/*.local.md
-docs/runbooks/*.log
-docs/runbooks/*.tgz
-
-# Local copies of third-party manuals are archived by location only.
-# They were never repository source and should not add large binaries to Git.
-docs/archive/external-manuals/
-
-# Secret-bearing vendor specifications must remain outside the repository.
-docs/private/
-docs/171. 인터페이스사양서_이브이앤솔루션_20260804.pdf
-docs/**/*인터페이스사양서*.pdf
+# Internal documents stay out of the repository. The runbooks hold production identifiers and the rest are working
+# notes, plans and vendor specifications. They live in the local main checkout only, and deployment evidence goes under
+# docs/runbooks/.local/. README.md, DESIGN.md and AGENTS.md at the root stay versioned.
+docs/
