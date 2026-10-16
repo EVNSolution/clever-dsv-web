@@ -3564,3 +3564,120 @@ test('never renders concrete demo identifiers or demo-prefixed map sources in bl
   expect(api.calls.some((call) => call.method === 'GET' && call.path === '/api/dsv/v1/session')).toBe(true);
   expect(api.unexpected).toEqual([]);
 });
+
+test('shows confirmed center departure and the latest ETA recalculation only when the server sends them', async ({ page }) => {
+  const serviceDate = '2026-08-05';
+  const order = (vehicleId, index, extra) => ({
+    assignmentStatus: 'ASSIGNED', customerId: `customer-${vehicleId}`, destinationDisplayName: `${vehicleId} 배송지 ${index}`,
+    destinationId: `destination-${vehicleId}-${index}`, driverId: `driver-${vehicleId}`, etaStatus: 'READY',
+    latitude: 37.5, longitude: 127 + index / 100, routePlanId: `route-${vehicleId}`, routeStopSequence: index,
+    sellerOrderId: `order-${vehicleId}-${index}`, sellerOrderKey: `${vehicleId}-${index}`, vehicleId,
+    ...extra,
+  });
+  const api = await installApiFixtures(page, {
+    'GET /api/dsv/v1/session': v1Envelope(adminSession),
+    'GET /api/dsv/v1/control': v1Envelope({ ...controlSummary, assignedCount: 3, serviceDate, totalDispatchCount: 3, unassignedCount: 0 }),
+    'GET /api/dsv/v1/control/routes': v1Envelope({
+      routes: ['vehicle-confirmed', 'vehicle-button'].map((id) => ({
+        coordinates: [[127.01, 37.5], [127.02, 37.5]], generatedAt: '2026-08-05T00:00:00.000Z', geometryStatus: 'fresh',
+        legDurationsSeconds: [600], routePlanId: `route-${id}`,
+      })),
+      serviceDate,
+    }),
+    'GET /api/dsv/v1/vehicles?limit=100': v1Envelope({
+      items: [
+        { displayName: 'Confirmed Truck', driverAssignments: [], status: 'ACTIVE', vehicleId: 'vehicle-confirmed', vehiclePlate: '보정12가1111' },
+        { displayName: 'Button Truck', driverAssignments: [], status: 'ACTIVE', vehicleId: 'vehicle-button', vehiclePlate: '버튼12가2222' },
+      ],
+      page: { hasMore: false },
+    }),
+    'GET /api/dsv/v1/vehicles/vehicle-confirmed/gps-trail-history': v1Envelope({
+      dailyRoute: null,
+      serviceDate,
+      sessions: [{
+        completedAt: null,
+        completionEventId: null,
+        endpoint: { endedAt: null, reason: 'LAST_VALID_SAMPLE' },
+        restart: null,
+        routePlanId: 'route-vehicle-confirmed',
+        segments: [{
+          roadMatchedGeometry: null,
+          samples: [
+            { distanceTodayKm: 1, ignitionOn: true, latitude: 37.5, longitude: 127.01, observedAt: '2026-08-05T00:40:00.000Z', speedKph: 20 },
+            { distanceTodayKm: 2, ignitionOn: true, latitude: 37.5, longitude: 127.015, observedAt: '2026-08-05T00:45:00.000Z', speedKph: 22 },
+          ],
+          trailMarker: null,
+        }],
+        sessionIndex: 0,
+        startedAt: '2026-08-05T00:20:00.000Z',
+        startEventId: null,
+        startSource: 'DEPOT_ARRIVAL',
+      }],
+      timezone: 'Asia/Seoul',
+      vehicleId: 'vehicle-confirmed',
+    }),
+    'GET /api/dsv/v1/vehicles/vehicle-button/gps-trail-history': v1Envelope({
+      dailyRoute: null,
+      serviceDate,
+      sessions: [{
+        completedAt: null,
+        completionEventId: null,
+        endpoint: { endedAt: null, reason: 'LAST_VALID_SAMPLE' },
+        restart: null,
+        routePlanId: 'route-vehicle-button',
+        segments: [{
+          roadMatchedGeometry: null,
+          samples: [
+            { distanceTodayKm: 1, ignitionOn: true, latitude: 37.5, longitude: 127.01, observedAt: '2026-08-05T00:40:00.000Z', speedKph: 20 },
+            { distanceTodayKm: 2, ignitionOn: true, latitude: 37.5, longitude: 127.015, observedAt: '2026-08-05T00:45:00.000Z', speedKph: 22 },
+          ],
+          trailMarker: null,
+        }],
+        sessionIndex: 0,
+        startedAt: '2026-08-05T00:20:00.000Z',
+        startEventId: null,
+        startSource: 'ROUTE_STARTED',
+      }],
+      timezone: 'Asia/Seoul',
+      vehicleId: 'vehicle-button',
+    }),
+    'GET /api/dsv/v1/customers?limit=100': emptyV1List(),
+    'GET /api/dsv/v1/dispatches': v1Envelope({
+      items: [
+        // New fields present: confirmed departure 09:40 beats the 09:30 button press; latest ETA recalculation is 10:05.
+        order('vehicle-confirmed', 1, {
+          actualDepartedAt: '2026-08-05T00:40:00.000Z',
+          etaCalculatedAt: '2026-08-05T00:50:00.000Z',
+          eventSummary: [{ type: 'ROUTE_STARTED', occurredAt: '2026-08-05T00:30:00.000Z' }],
+        }),
+        order('vehicle-confirmed', 2, {
+          actualDepartedAt: '2026-08-05T00:40:00.000Z',
+          etaCalculatedAt: '2026-08-05T01:05:00.000Z',
+          eventSummary: [{ type: 'ROUTE_STARTED', occurredAt: '2026-08-05T00:30:00.000Z' }],
+        }),
+        // New fields absent: the existing button-press departure stays and no ETA recalculation is shown.
+        order('vehicle-button', 1, {
+          eventSummary: [{ type: 'ROUTE_STARTED', occurredAt: '2026-08-05T00:35:00.000Z' }],
+        }),
+      ],
+      page: { hasMore: false },
+    }),
+  });
+
+  await page.goto('/control');
+  const confirmedRow = page.locator('.control-vehicle-row', { hasText: '보정12가1111' });
+  const buttonRow = page.locator('.control-vehicle-row', { hasText: '버튼12가2222' });
+  await expect(confirmedRow.locator('.control-vehicle-departure')).toHaveText('09:40 출발');
+  await expect(buttonRow.locator('.control-vehicle-departure')).toHaveText('09:35 출발 버튼 기준');
+
+  await confirmedRow.getByRole('button', { name: /보정12가1111/u }).click();
+  const summary = page.getByRole('region', { name: '차량 상세' });
+  await expect(summary.locator('.control-vehicle-summary-times')).toHaveText('09:40 출발ETA 갱신 10:05');
+  await page.getByRole('button', { name: '자취 보기' }).click();
+  await expect(page.getByRole('region', { name: '보정12가1111 자취 타임라인' })).toBeVisible();
+
+  await buttonRow.getByRole('button', { name: /버튼12가2222/u }).click();
+  await expect(summary.locator('.control-vehicle-summary-times')).toHaveText('09:35 출발 버튼 기준');
+  await expect(summary).not.toContainText('ETA 갱신');
+  expect(api.unexpected).toEqual([]);
+});

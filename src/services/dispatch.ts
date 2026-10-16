@@ -72,6 +72,7 @@ export type DispatchTimeConstraintCommandResult = {
 
 export type DispatchListItem = {
   actualCompletedAt: string | null;
+  actualDepartedAt: string | null;
   assignmentStatus: DispatchAssignmentStatus;
   changeRequest: DispatchChangeRequest | null;
   conditionCode: string | null;
@@ -84,6 +85,7 @@ export type DispatchListItem = {
   latestDriverMessage: DispatchOrderMessageSummary | null;
   driverId: string | null;
   estimatedArrivalAt: string | null;
+  etaCalculatedAt: string | null;
   etaStatus: DispatchEtaStatus;
   eventSummary: DispatchEventSummary[];
   latitude: number | null;
@@ -125,6 +127,7 @@ export type DispatchSearch = {
 
 type RawDispatch = {
   actualCompletedAt?: string;
+  actualDepartedAt?: string;
   assignmentStatus: DispatchAssignmentStatus;
   changeRequest?: DispatchChangeRequest;
   conditionCode?: string;
@@ -139,6 +142,7 @@ type RawDispatch = {
   latestDriverMessage?: DispatchOrderMessageSummary;
   driverId?: string;
   estimatedArrivalAt?: string;
+  etaCalculatedAt?: string;
   etaStatus: DispatchEtaStatus;
   eventSummary?: DispatchEventSummary[];
   latitude?: number;
@@ -455,6 +459,7 @@ function toDispatchListItem(raw: unknown): DispatchListItem {
   const dispatch = rawDispatch(raw);
   return {
     actualCompletedAt: dispatch.actualCompletedAt ?? null,
+    actualDepartedAt: dispatch.actualDepartedAt ?? null,
     assignmentStatus: dispatch.assignmentStatus,
     changeRequest: dispatch.changeRequest ?? null,
     conditionCode: dispatch.conditionCode ?? null,
@@ -467,6 +472,7 @@ function toDispatchListItem(raw: unknown): DispatchListItem {
     latestDriverMessage: dispatch.latestDriverMessage ?? null,
     driverId: dispatch.driverId ?? null,
     estimatedArrivalAt: dispatch.estimatedArrivalAt ?? null,
+    etaCalculatedAt: dispatch.etaCalculatedAt ?? null,
     etaStatus: dispatch.etaStatus,
     eventSummary: dispatch.eventSummary ?? [],
     latitude: dispatch.latitude ?? null,
@@ -489,6 +495,7 @@ function toDispatchListItem(raw: unknown): DispatchListItem {
 function rawDispatch(value: unknown): RawDispatch {
   if (!hasOnlyKeys(value, [
     'actualCompletedAt',
+    'actualDepartedAt',
     'changeRequest',
     'conditionCode',
     'customerNotificationEmailEnabled',
@@ -514,6 +521,7 @@ function rawDispatch(value: unknown): RawDispatch {
     'etaStatus',
     'eventSummary',
     'estimatedArrivalAt',
+    'etaCalculatedAt',
     'routePlanId',
     'routeConstraintStatus',
     'routeStopSequence',
@@ -529,7 +537,7 @@ function rawDispatch(value: unknown): RawDispatch {
   if (value.operationStatus !== undefined && !isOperationStatus(value.operationStatus)) throw new Error('배차 항목의 operationStatus 필드가 올바르지 않습니다.');
   if (!['FAILED', 'NOT_REQUIRED', 'PENDING', 'READY', 'STALE'].includes(value.etaStatus as string)) throw new Error('배차 항목의 etaStatus 필드가 올바르지 않습니다.');
   if (value.eventSummary !== undefined) parseEventSummary(value.eventSummary);
-  for (const field of ['actualCompletedAt', 'deliveryStopId', 'destinationDisplayName', 'destinationAddress', 'driverId', 'vehicleId', 'estimatedArrivalAt', 'routePlanId', 'rawNote', 'routeVersionId'] as const) {
+  for (const field of ['actualCompletedAt', 'actualDepartedAt', 'etaCalculatedAt', 'deliveryStopId', 'destinationDisplayName', 'destinationAddress', 'driverId', 'vehicleId', 'estimatedArrivalAt', 'routePlanId', 'rawNote', 'routeVersionId'] as const) {
     if (value[field] !== undefined && typeof value[field] !== 'string') throw new Error(`배차 항목의 ${field} 필드가 올바르지 않습니다.`);
   }
   if (value.changeRequest !== undefined) parseChangeRequest(value.changeRequest);
