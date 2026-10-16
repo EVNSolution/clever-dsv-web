@@ -1,10 +1,15 @@
 name: CI
 
-# Runs on every pull request and every push to main. It reads the code only: no secrets, no deploy.
+# The type check and the unit and static tests run on every pull request and every push to main. They take under a
+# minute. The browser specs take about four minutes, so they are opt-in: add the `e2e` label to a pull request, or run
+# this workflow by hand from the Actions tab. A push to main never runs them.
+# It reads the code only: no secrets, no deploy.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -28,10 +33,15 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test:unit
+      - run: npm run test:static
 
   # The remote-mode browser specs from `npm run test:e2e:remote`, in three shards that run side by side.
   # Each shard builds the app and serves it through the Playwright config.
+  # Opt-in: only a manual run, or a pull request that carries the `e2e` label. Never on a push to main.
   e2e:
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'e2e'))
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
