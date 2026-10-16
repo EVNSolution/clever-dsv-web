@@ -15,8 +15,8 @@ import {
 import type { ManagementData } from '../demo/management';
 import { addressSimilarity, loadManagementData, managementId } from '../demo/management';
 import { getCustomerOrders } from '../demo/selectors/customer';
-import type { CustomerAccount, CustomerAccountInvitationIssue, CustomerAccountInvitePurpose, CustomerAccountStatus } from '../services/customer-accounts';
-import { discardCustomerAccount, inviteCustomerAccount, loadCustomerAccounts, reinviteCustomerAccount, sendCustomerAccountPasswordReset, setCustomerAccountStatus } from '../services/customer-accounts';
+import type { CustomerAccount, CustomerAccountInvitationIssue, CustomerAccountInvitePurpose, CustomerAccountStatus, CustomerInvitationRecord, CustomerInvitationStatus } from '../services/customer-accounts';
+import { discardCustomerAccount, inviteCustomerAccount, loadCustomerAccounts, loadCustomerInvitations, reinviteCustomerAccount, sendCustomerAccountPasswordReset, setCustomerAccountStatus } from '../services/customer-accounts';
 import { emptyManagementData, loadManagementSnapshot, persistManagementChange } from '../services/management';
 import { ResourcesPage } from './ResourcesPage';
 
@@ -220,6 +220,7 @@ function NetworkMaster({ data, onChange }: { data: ManagementData; onChange: (da
 
 function CustomerAccountPanel({ customerId }: { customerId: string }): ReactElement {
   const [accounts, setAccounts] = useState<CustomerAccount[]>([]);
+  const [invitations, setInvitations] = useState<CustomerInvitationRecord[]>([]);
   const [state, setState] = useState<{ busyId: string | null; error: string | null; loading: boolean; message: string | null }>({ busyId: null, error: null, loading: true, message: null });
   const [inviteOpen, setInviteOpen] = useState(false);
   const [invitationIssue, setInvitationIssue] = useState<CustomerAccountInvitationIssue | null>(null);
@@ -228,13 +229,15 @@ function CustomerAccountPanel({ customerId }: { customerId: string }): ReactElem
   const refresh = () => {
     if (apiConfig.mode === 'mock') {
       setAccounts([]);
+      setInvitations([]);
       setState({ busyId: null, error: null, loading: false, message: null });
       return;
     }
     setState({ busyId: null, error: null, loading: true, message: null });
-    loadCustomerAccounts(customerId)
-      .then((items) => {
+    Promise.all([loadCustomerAccounts(customerId), loadCustomerInvitations(customerId)])
+      .then(([items, records]) => {
         setAccounts(items);
+        setInvitations(records);
         setState({ busyId: null, error: null, loading: false, message: null });
       })
       .catch((error) => setState({ busyId: null, error: errorMessage(error), loading: false, message: null }));
@@ -242,10 +245,17 @@ function CustomerAccountPanel({ customerId }: { customerId: string }): ReactElem
 
   useEffect(refresh, [customerId]);
 
-  const submitInvite = async () => {
+  const refreshInvitations = () => {
+    loadCustomerInvitations(customerId)
+      .then(setInvitations)
+      .catch((error) => setState((current) => ({ ...current, error: errorMessage(error) })));
+  };
+
+  const submitInvite = async (inviteeLabel: string) => {
     setState({ busyId: 'invite', error: null, loading: false, message: null });
     try {
-      const issue = await inviteCustomerAccount(customerId);
+      const issue = await inviteCustomerAccount(customerId, inviteeLabel);
+      refreshInvitations();
       setAccounts((current) => upsertAccount(current, issue.account));
       setInvitationPurpose('SIGNUP');
       setInvitationIssue(issue);
@@ -265,12 +275,14 @@ function CustomerAccountPanel({ customerId }: { customerId: string }): ReactElem
         setInvitationPurpose(action === 'reinvite' ? 'SIGNUP' : 'PASSWORD_RESET');
         setInvitationIssue(issue);
         setInviteOpen(true);
+        refreshInvitations();
         setState({ busyId: null, error: null, loading: false, message: customerAccountActionMessage(action) });
         return;
       }
       if (action === 'discard') {
         const accountId = await discardCustomerAccount(account.id);
         setAccounts((current) => current.filter((item) => item.id !== accountId));
+        refreshInvitations();
         setState({ busyId: null, error: null, loading: false, message: customerAccountActionMessage(action) });
         return;
       }
@@ -314,6 +326,29 @@ function CustomerAccountPanel({ customerId }: { customerId: string }): ReactElem
         })}</tbody>
       </table>
     </AdminTableFrame> : null}
+    <div className="customer-account-heading">
+      <span><strong>초대 내역</strong><small>{invitations.length}건</small></span>
+    </div>
+    {!state.loading && !invitations.length ? <p className="customer-account-status" role="status">초대 내역이 없습니다.</p> : null}
+    {invitations.length ? <AdminTableFrame>
+      <table className="page-table customer-account-table" aria-label="초대 내역">
+        <thead><tr><th>초대 대상</th><th>초대인</th><th>생성 시각</th><th>만료 시각</th><th>상태</th><th>작업</th></tr></thead>
+        <tbody>{invitations.map((invitation) => {
+          const account = accounts.find((item) => item.id === invitation.accountId);
+          const canReinvite = account?.status === 'INVITED' || account?.status === 'EXPIRED';
+          return <tr key={invitation.id}>
+            <td>{invitation.inviteeLabel ?? '미기재'}</td>
+            <td>{invitation.invitedByDisplayName ?? '확인 불가'}</td>
+            <td>{formatDate(invitation.createdAt)}</td>
+            <td>{formatDate(invitation.expiresAt)}</td>
+            <td><span className={`customer-account-status-pill ${invitationStatusPillClass[invitation.status]}`}>{invitationStatusLabel[invitation.status]}</span></td>
+            <td><span className="management-actions">
+              <button type="button" disabled={!account || !canReinvite || state.busyId !== null} onClick={() => account && void accountAction(account, 'reinvite')}>재초대</button>
+            </span></td>
+          </tr>;
+        })}</tbody>
+      </table>
+    </AdminTableFrame> : null}
     {state.message ? <p className="customer-account-status success" role="status">{state.message}</p> : null}
     {state.error ? <p className="customer-account-status error" role="alert">{state.error}</p> : null}
   </section>;
@@ -330,10 +365,11 @@ function CustomerAccountInviteDialog({
   issue: CustomerAccountInvitationIssue | null;
   onClose: () => void;
   purpose: CustomerAccountInvitePurpose;
-  onSubmit: () => Promise<void>;
+  onSubmit: (inviteeLabel: string) => Promise<void>;
 }): ReactElement {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [copyState, setCopyState] = useState<'copied' | 'error' | 'idle'>('idle');
+  const [inviteeLabel, setInviteeLabel] = useState('');
   const linkName = purpose === 'SIGNUP' ? '초대 링크' : '재설정 링크';
 
   useEffect(() => {
@@ -346,7 +382,7 @@ function CustomerAccountInviteDialog({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void onSubmit();
+    void onSubmit(inviteeLabel.trim());
   };
 
   const copyInvitationLink = async () => {
@@ -379,6 +415,9 @@ function CustomerAccountInviteDialog({
       </header>
       {!issue ? <form className="customer-account-invite-form" id="customer-account-invite-form" aria-label="고객 계정 발급" onSubmit={submit}>
         <p className="customer-account-invite-message">링크를 전달받은 고객 담당자가 이름, 로그인 아이디, 비밀번호를 직접 설정합니다. 링크는 만료 전까지 한 번만 사용할 수 있습니다.</p>
+        <label className="customer-account-invite-message">초대 대상
+          <input maxLength={100} name="inviteeLabel" pattern=".*\S.*" placeholder="예: 홍길동 담당자" required value={inviteeLabel} onChange={(event) => setInviteeLabel(event.target.value)} />
+        </label>
       </form> : null}
       {issue ? <section className="customer-account-invite-preview" id="customer-account-invite-preview" aria-label={`임시 ${linkName}`}>
         <strong>임시 {linkName}</strong>
@@ -412,6 +451,9 @@ function customerAccountStatusLabel(status: CustomerAccountStatus): string {
   if (status === 'DISABLED') return '비활성';
   return '만료';
 }
+
+const invitationStatusLabel: Record<CustomerInvitationStatus, string> = { PENDING: '대기', CONSUMED: '사용됨', REVOKED: '무효', EXPIRED: '만료' };
+const invitationStatusPillClass: Record<CustomerInvitationStatus, string> = { PENDING: 'invited', CONSUMED: 'active', REVOKED: 'disabled', EXPIRED: 'expired' };
 
 function customerAccountActionMessage(action: 'reinvite' | 'password-reset' | 'disable' | 'enable' | 'discard'): string {
   if (action === 'reinvite') return '새 임시 초대 링크를 생성했습니다. 이전 링크는 사용할 수 없습니다.';

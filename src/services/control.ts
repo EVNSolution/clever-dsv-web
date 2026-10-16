@@ -94,7 +94,7 @@ export type VehicleGpsTrailHistory = {
     sessionIndex: number;
     startedAt: string;
     startEventId: string | null;
-    startSource: 'PLANNED_DEPARTURE' | 'ROUTE_STARTED';
+    startSource: 'DEPOT_ARRIVAL' | 'PLANNED_DEPARTURE' | 'ROUTE_STARTED';
   }>;
   timezone: string;
   vehicleId: string;
@@ -224,7 +224,7 @@ function adaptVehicleGpsTrailHistory(data: unknown): VehicleGpsTrailHistory {
       || !isNonNegativeInteger(session.sessionIndex)
       || !isDateTime(session.startedAt)
       || !isNullableString(session.startEventId)
-      || (session.startSource !== 'PLANNED_DEPARTURE' && session.startSource !== 'ROUTE_STARTED')
+      || (session.startSource !== 'DEPOT_ARRIVAL' && session.startSource !== 'PLANNED_DEPARTURE' && session.startSource !== 'ROUTE_STARTED')
     ) throw invalidVehicleGpsTrailHistory(data);
     return {
       completedAt: session.completedAt,
@@ -254,7 +254,7 @@ function adaptVehicleGpsTrailHistory(data: unknown): VehicleGpsTrailHistory {
       sessionIndex: session.sessionIndex,
       startedAt: session.startedAt,
       startEventId: session.startEventId,
-      startSource: session.startSource as 'PLANNED_DEPARTURE' | 'ROUTE_STARTED',
+      startSource: session.startSource as 'DEPOT_ARRIVAL' | 'PLANNED_DEPARTURE' | 'ROUTE_STARTED',
     };
   });
   return {

@@ -33,6 +33,19 @@ export type CustomerAccountInvitationIssue = {
   };
 };
 
+export type CustomerInvitationStatus = 'PENDING' | 'CONSUMED' | 'REVOKED' | 'EXPIRED';
+
+export type CustomerInvitationRecord = {
+  accountId: string;
+  createdAt: string;
+  expiresAt: string;
+  id: string;
+  inviteeLabel: string | null;
+  invitedByDisplayName: string | null;
+  purpose: CustomerAccountInvitePurpose;
+  status: CustomerInvitationStatus;
+};
+
 type SessionTokens = { accessToken?: string; csrfToken?: string };
 
 export async function loadCustomerAccounts(customerId: string): Promise<CustomerAccount[]> {
@@ -43,10 +56,17 @@ export async function loadCustomerAccounts(customerId: string): Promise<Customer
   return accounts.map(parseCustomerAccount);
 }
 
-export async function inviteCustomerAccount(customerId: string): Promise<CustomerAccountInvitationIssue> {
+export async function loadCustomerInvitations(customerId: string): Promise<CustomerInvitationRecord[]> {
+  const response = await requestLegacyJson<unknown>(`customers/${encodeURIComponent(customerId)}/accounts/invitations`);
+  const invitations = objectField(response, 'invitations');
+  if (!Array.isArray(invitations)) throw new Error('고객 초대 내역 응답 형식이 올바르지 않습니다.');
+  return invitations.map(parseInvitationRecord);
+}
+
+export async function inviteCustomerAccount(customerId: string, inviteeLabel: string): Promise<CustomerAccountInvitationIssue> {
   const response = await requestLegacyJson<unknown>(`customers/${encodeURIComponent(customerId)}/accounts/invitations`, {
     method: 'POST',
-    json: {},
+    json: { inviteeLabel },
   });
   return parseInvitationIssue(response);
 }
@@ -153,6 +173,22 @@ function parseCustomerAccount(value: unknown): CustomerAccount {
     lastAuthenticatedAt: nullableString(value.lastAuthenticatedAt),
     loginId: nullableString(value.loginId),
     status: accountStatus(value.status),
+  };
+}
+
+function parseInvitationRecord(value: unknown): CustomerInvitationRecord {
+  if (!isObject(value)) throw new Error('고객 초대 내역 응답 형식이 올바르지 않습니다.');
+  const status = value.status;
+  if (status !== 'PENDING' && status !== 'CONSUMED' && status !== 'REVOKED' && status !== 'EXPIRED') throw new Error('고객 초대 내역 응답 형식이 올바르지 않습니다.');
+  return {
+    accountId: requiredString(value.accountId),
+    createdAt: requiredString(value.createdAt),
+    expiresAt: requiredString(value.expiresAt),
+    id: requiredString(value.id),
+    inviteeLabel: nullableString(value.inviteeLabel),
+    invitedByDisplayName: nullableString(value.invitedByDisplayName),
+    purpose: invitePurpose(value.purpose),
+    status,
   };
 }
 

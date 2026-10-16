@@ -73,6 +73,8 @@ async function installRemoteFixtures(page, { customer = false } = {}) {
       data = { data: { reviews: [] }, error: null };
     } else if (path === '/api/dsv/customers/customer-layout/accounts') {
       data = { data: { accounts: [] }, error: null };
+    } else if (path === '/api/dsv/customers/customer-layout/accounts/invitations') {
+      data = { data: { invitations: [] }, error: null };
     } else if (path === '/api/dsv/v1/operational-notifications') {
       data = envelope({ items: [] });
     } else if (path === '/api/dsv/v1/map/profile') {
