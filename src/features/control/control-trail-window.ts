@@ -105,6 +105,30 @@ export function lastStopArrivedMs(
   return last;
 }
 
+/**
+ * When each vehicle finished its route, as an ISO time: the arrival at its last stop. A vehicle with a stop not
+ * reached yet is absent, so a vehicle on its way is never listed as finished.
+ */
+export function vehicleRouteCompletions(
+  orders: ReadonlyArray<{
+    assignmentStatus: string;
+    eventSummary: ReadonlyArray<{ occurredAt: string; type: string }>;
+    vehicleId: string | null;
+  }>,
+): Map<string, string> {
+  const byVehicle = new Map<string, typeof orders[number][]>();
+  for (const order of orders) {
+    if (order.assignmentStatus !== 'ASSIGNED' || order.vehicleId === null) continue;
+    byVehicle.set(order.vehicleId, [...(byVehicle.get(order.vehicleId) ?? []), order]);
+  }
+  const completions = new Map<string, string>();
+  for (const [vehicleId, vehicleOrders] of byVehicle) {
+    const finishedMs = lastStopArrivedMs(vehicleOrders);
+    if (finishedMs !== undefined) completions.set(vehicleId, new Date(finishedMs).toISOString());
+  }
+  return completions;
+}
+
 /** A copy of the history with only the points inside the window. The rest stays on the server and is not shown. */
 export function trimTrailHistory(history: VehicleGpsTrailHistory, window: ControlTrailWindow): VehicleGpsTrailHistory {
   const inside = (observedAt: string): boolean => {

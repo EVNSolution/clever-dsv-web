@@ -11,7 +11,7 @@ const compiled = transpileModule(source, {
   compilerOptions: { module: ModuleKind.ES2022, target: ScriptTarget.ES2022 },
 }).outputText;
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`;
-const { centerArrivalMs, lastStopArrivedMs, trimTrailHistory } = await import(moduleUrl);
+const { centerArrivalMs, lastStopArrivedMs, trimTrailHistory, vehicleRouteCompletions } = await import(moduleUrl);
 
 const center = { latitude: 37.3329463, longitude: 126.9381069 };
 // 0.0027 degrees of latitude is about 300 m.
@@ -102,6 +102,20 @@ test('the route ends at the arrival at the last stop and stays open while a stop
   // A stop with no event at all is not reached yet.
   assert.equal(lastStopArrivedMs([stop(event(times[2], 'STOP_ARRIVED')), stop(event(times[3], 'ROUTE_STARTED'))]), undefined);
   assert.equal(lastStopArrivedMs([]), undefined);
+});
+
+test('a vehicle is listed as finished only when every stop of it was reached', () => {
+  const order = (vehicleId, assignmentStatus, ...events) => ({ assignmentStatus, eventSummary: events, vehicleId });
+  const arrived = (occurredAt) => ({ occurredAt, type: 'STOP_ARRIVED' });
+  const completions = vehicleRouteCompletions([
+    order('v-done', 'ASSIGNED', arrived(times[2])),
+    order('v-done', 'ASSIGNED', arrived(times[4])),
+    order('v-going', 'ASSIGNED', arrived(times[2])),
+    order('v-going', 'ASSIGNED'),
+    order('v-unassigned', 'UNASSIGNED', arrived(times[2])),
+    order(null, 'ASSIGNED', arrived(times[2])),
+  ]);
+  assert.deepEqual([...completions], [['v-done', new Date(at(4)).toISOString()]]);
 });
 
 test('a drive past the center is not an arrival until the vehicle waits there', () => {
