@@ -11,7 +11,7 @@ const compiled = transpileModule(source, {
   compilerOptions: { module: ModuleKind.ES2022, target: ScriptTarget.ES2022 },
 }).outputText;
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`;
-const { centerArrivalMs, lastDeliveryFinishedMs, trimTrailHistory } = await import(moduleUrl);
+const { centerArrivalMs, lastStopArrivedMs, trimTrailHistory } = await import(moduleUrl);
 
 const center = { latitude: 37.3329463, longitude: 126.9381069 };
 // 0.0027 degrees of latitude is about 300 m.
@@ -83,15 +83,36 @@ test('a window with no points empties the history', () => {
   assert.equal(trimmed.dailyRoute, null);
 });
 
-test('the last finished stop is open while any stop is pending', () => {
-  const delivered = (occurredAt) => ({ eventSummary: [{ occurredAt, type: 'STOP_DELIVERED' }] });
+test('the route ends at the arrival at the last stop and stays open while a stop is not reached', () => {
+  const event = (occurredAt, type) => ({ occurredAt, type });
+  const stop = (...events) => ({ eventSummary: events });
+  // The arrival ends the route, not the later delivery.
   assert.equal(
-    lastDeliveryFinishedMs([delivered(times[3]), delivered(times[4])]),
+    lastStopArrivedMs([
+      stop(event(times[2], 'STOP_ARRIVED'), event(times[3], 'STOP_DELIVERED')),
+      stop(event(times[3], 'STOP_ARRIVED'), event(times[5], 'STOP_DELIVERED')),
+    ]),
+    at(3),
+  );
+  // Without an arrival event, a delivered or failed event stands in for it.
+  assert.equal(
+    lastStopArrivedMs([stop(event(times[2], 'STOP_DELIVERED')), stop(event(times[4], 'STOP_FAILED'))]),
     at(4),
   );
-  assert.equal(
-    lastDeliveryFinishedMs([delivered(times[3]), { eventSummary: [{ occurredAt: times[2], type: 'STOP_ARRIVED' }] }]),
-    undefined,
-  );
-  assert.equal(lastDeliveryFinishedMs([]), undefined);
+  // A stop with no event at all is not reached yet.
+  assert.equal(lastStopArrivedMs([stop(event(times[2], 'STOP_ARRIVED')), stop(event(times[3], 'ROUTE_STARTED'))]), undefined);
+  assert.equal(lastStopArrivedMs([]), undefined);
+});
+
+test('a drive past the center is not an arrival until the vehicle waits there', () => {
+  const sample = (time, point) => ({ observedAt: `2026-10-13T${time}:00+09:00`, ...point });
+  const only = (samples) => ({ ...history(), dailyRoute: null, sessions: [{ segments: [{ samples }] }] });
+  const passBy = only([sample('06:20', near), sample('06:25', far)]);
+  assert.equal(centerArrivalMs(passBy, center), undefined);
+  const later = only([sample('06:20', near), sample('06:25', far), sample('09:00', near), sample('09:30', far)]);
+  assert.equal(centerArrivalMs(later, center), Date.parse('2026-10-13T09:00:00+09:00'));
+  const stillThere = only([sample('09:00', near), sample('09:20', near)]);
+  assert.equal(centerArrivalMs(stillThere, center), Date.parse('2026-10-13T09:00:00+09:00'));
+  const justArrived = only([sample('09:00', near), sample('09:05', near)]);
+  assert.equal(centerArrivalMs(justArrived, center), undefined);
 });

@@ -749,7 +749,7 @@ function VehicleTrailTimeline({
     <section className="control-trail-timeline" aria-label={`${vehicleLabel} 자취 타임라인`}>
       <header>
         <span><small>차량 자취</small><strong>{vehicleLabel}</strong></span>
-        <time dateTime={new Date(cursor).toISOString()}>{formatTrailTimelineTime(cursor, range.endMs)}</time>
+        <time dateTime={new Date(cursor).toISOString()}>{formatTrailTimelineTime(cursor)}</time>
       </header>
       <div className="control-trail-timeline__track">
         <button
@@ -758,7 +758,7 @@ function VehicleTrailTimeline({
           onClick={togglePlayback}
           type="button"
         >{playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}</button>
-        <time>{formatTrailTimelineTime(range.startMs, range.endMs)}</time>
+        <time>{formatTrailTimelineTime(range.startMs)}</time>
         <input
           aria-label="자취 시점"
           max={range.endMs}
@@ -768,7 +768,7 @@ function VehicleTrailTimeline({
           type="range"
           value={cursor}
         />
-        <time>{formatTrailTimelineTime(range.endMs, range.endMs)}</time>
+        <time>{formatTrailTimelineTime(range.endMs)}</time>
       </div>
       <footer>
         <button onClick={onReset} type="button"><RotateCcw aria-hidden="true" />처음</button>
@@ -783,8 +783,7 @@ function VehicleTrailTimeline({
   );
 }
 
-function formatTrailTimelineTime(value: number, endMs: number): string {
-  if (value === endMs) return '24:00';
+function formatTrailTimelineTime(value: number): string {
   return new Intl.DateTimeFormat('ko-KR', {
     hour: '2-digit',
     hour12: false,

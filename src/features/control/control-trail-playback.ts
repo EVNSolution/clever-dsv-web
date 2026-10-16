@@ -21,7 +21,12 @@ export function controlTrailBounds(history?: VehicleGpsTrailHistory): ControlTra
     .filter(Number.isFinite);
   if (times.length === 0) return undefined;
   // The history already holds only the shown window, so the range is its first and last point, not the whole day.
-  return { startMs: Math.min(...times), endMs: Math.max(...times) };
+  // The timeline slider steps by a minute from its start, so both ends sit on a minute and the last point is reachable.
+  const minuteMs = 60_000;
+  return {
+    startMs: Math.floor(Math.min(...times) / minuteMs) * minuteMs,
+    endMs: Math.ceil(Math.max(...times) / minuteMs) * minuteMs,
+  };
 }
 
 export function controlTrailSampleAt(

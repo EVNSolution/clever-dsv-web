@@ -27,7 +27,7 @@ import {
   visibleTrailRawLines,
 } from '../features/control/control-trail-playback';
 import type { ManagementData } from '../demo/management';
-import { centerArrivalMs, lastDeliveryFinishedMs, trimTrailHistory } from '../features/control/control-trail-window';
+import { centerArrivalMs, lastStopArrivedMs, trimTrailHistory } from '../features/control/control-trail-window';
 import type { DepartureLocation } from './DepartureMarker';
 import type { MapCanvasCenterRequest, MapCanvasPoint, MapCanvasRoute, MapCanvasVehiclePoint } from './MapCanvas';
 import {
@@ -105,13 +105,14 @@ export function AdminShell({
   const [controlTrailCursorMs, setControlTrailCursorMs] = useState<number>();
   const [controlTrailPlaying, setControlTrailPlaying] = useState(false);
   const [controlTrailFollow, setControlTrailFollow] = useState(false);
-  // The web shows the trail from the vehicle's arrival at the center to its last finished stop. The rest of the
-  // day stays on the server. Without a center or an arrival the whole history is shown as before.
+  // The web shows the trail from the vehicle's arrival at the center to its arrival at the last stop. A return to the
+  // center is not part of a DSV route. The rest of the day stays on the server, and the live position is not
+  // affected. Without a center or an arrival the whole history is shown as before.
   const controlVehicleTrail = useMemo(() => {
     if (controlVehicleTrailFull === undefined || departureLocation === null) return controlVehicleTrailFull;
     const startMs = centerArrivalMs(controlVehicleTrailFull, departureLocation);
     if (startMs === undefined) return controlVehicleTrailFull;
-    const endMs = lastDeliveryFinishedMs(controlOrders.filter((order) => (
+    const endMs = lastStopArrivedMs(controlOrders.filter((order) => (
       order.assignmentStatus === 'ASSIGNED' && order.vehicleId === selectedControlVehicleId
     )));
     return trimTrailHistory(controlVehicleTrailFull, { endMs, startMs });

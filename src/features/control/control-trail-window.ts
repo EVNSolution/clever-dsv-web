@@ -26,50 +26,81 @@ function distanceMeters(
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a));
 }
 
-/** The first time a GPS point of the vehicle is inside the center radius. Undefined when it never is. */
+/**
+ * The vehicle has to wait at the center this long before it counts as arrived. A drive past the center is not an
+ * arrival. Every working day in 30 days of raw GPS had one stay of 13 minutes or more at the center, and none had a
+ * shorter stay, so 10 minutes keeps all of them and still skips a pass-by, which takes about a minute.
+ */
+export const CONTROL_CENTER_MIN_WAIT_MINUTES = 10;
+
+/**
+ * When the vehicle arrived at the center: the start of its first stay inside the radius that lasted at least the
+ * waiting time, so the wait itself is part of what is shown. Undefined when it never waited there.
+ */
 export function centerArrivalMs(
   history: VehicleGpsTrailHistory,
   center: { latitude: number; longitude: number },
   radiusMeters = CONTROL_CENTER_RADIUS_M,
+  minWaitMinutes = CONTROL_CENTER_MIN_WAIT_MINUTES,
 ): number | undefined {
-  let first: number | undefined;
-  const consider = (observedAt: string, latitude: number, longitude: number) => {
+  const points: Array<{ inside: boolean; time: number }> = [];
+  const add = (observedAt: string, latitude: number, longitude: number) => {
     const time = Date.parse(observedAt);
-    if (!Number.isFinite(time) || (first !== undefined && time >= first)) return;
-    if (distanceMeters(center, { latitude, longitude }) <= radiusMeters) first = time;
+    if (Number.isFinite(time)) points.push({ inside: distanceMeters(center, { latitude, longitude }) <= radiusMeters, time });
   };
   for (const session of history.sessions) {
     for (const segment of session.segments) {
-      for (const sample of segment.samples) consider(sample.observedAt, sample.latitude, sample.longitude);
+      for (const sample of segment.samples) add(sample.observedAt, sample.latitude, sample.longitude);
     }
   }
   const daily = history.dailyRoute;
   if (daily !== null) {
     for (const anchor of daily.anchors) {
       const coordinate = daily.coordinates[anchor.coordinateIndex];
-      if (coordinate !== undefined) consider(anchor.observedAt, coordinate[1], coordinate[0]);
+      if (coordinate !== undefined) add(anchor.observedAt, coordinate[1], coordinate[0]);
     }
   }
-  return first;
+  points.sort((left, right) => left.time - right.time);
+  let stayStart: number | undefined;
+  let lastInside: number | undefined;
+  for (const point of points) {
+    if (point.inside) {
+      stayStart ??= point.time;
+      lastInside = point.time;
+      continue;
+    }
+    // The stay ends at the first point outside the radius, so a stay with sparse points still counts its whole wait.
+    if (stayStart !== undefined && point.time - stayStart >= minWaitMinutes * 60_000) return stayStart;
+    stayStart = undefined;
+    lastInside = undefined;
+  }
+  // A stay that is still going at the latest point.
+  if (stayStart !== undefined && lastInside !== undefined && lastInside - stayStart >= minWaitMinutes * 60_000) return stayStart;
+  return undefined;
 }
 
 /**
- * The time the last stop of the vehicle finished. Undefined while any stop has no delivered or failed event yet,
- * so a vehicle still on its way keeps an open end.
+ * The time the vehicle arrived at its last stop. The route ends there: DSV vehicles do not have to return to the
+ * center. A stop counts as reached by its arrival event, or by a delivered or failed event when no arrival was
+ * recorded. Undefined while any stop is not reached yet, so a vehicle still on its way keeps an open end.
  */
-export function lastDeliveryFinishedMs(
+export function lastStopArrivedMs(
   orders: ReadonlyArray<{ eventSummary: ReadonlyArray<{ occurredAt: string; type: string }> }>,
 ): number | undefined {
   let last: number | undefined;
   for (const order of orders) {
-    let finished: number | undefined;
-    for (const event of order.eventSummary) {
-      if (event.type !== 'STOP_DELIVERED' && event.type !== 'STOP_FAILED') continue;
-      const time = Date.parse(event.occurredAt);
-      if (Number.isFinite(time) && (finished === undefined || time > finished)) finished = time;
-    }
-    if (finished === undefined) return undefined;
-    if (last === undefined || finished > last) last = finished;
+    const earliest = (types: readonly string[]): number | undefined => {
+      let found: number | undefined;
+      for (const event of order.eventSummary) {
+        if (!types.includes(event.type)) continue;
+        const time = Date.parse(event.occurredAt);
+        if (Number.isFinite(time) && (found === undefined || time < found)) found = time;
+      }
+      return found;
+    };
+    const reached = earliest(['STOP_ARRIVED']) ?? earliest(['STOP_DELIVERED', 'STOP_FAILED']);
+    if (reached === undefined) return undefined;
+    if (last === undefined || reached > last) last = reached;
   }
   return last;
 }
