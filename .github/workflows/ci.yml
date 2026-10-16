@@ -1,7 +1,7 @@
 name: CI
 
 # The type check and the unit and static tests run on every pull request and every push to main. They take under a
-# minute. The browser specs take about four minutes, so they are opt-in: add the `e2e` label to a pull request, or run
+# minute. The browser specs take about three to four minutes, so they are opt-in: add the `e2e` label to a pull request, or run
 # this workflow by hand from the Actions tab. A push to main never runs them.
 # It reads the code only: no secrets, no deploy.
 on:
@@ -35,8 +35,10 @@ jobs:
       - run: npm run test:unit
       - run: npm run test:static
 
-  # The remote-mode browser specs from `npm run test:e2e:remote`, in three shards that run side by side.
-  # Each shard builds the app and serves it through the Playwright config.
+  # The remote-mode browser specs from `npm run test:e2e:remote`, in four shards that run side by side.
+  # Each shard builds the app and serves it through the Playwright config. `--fully-parallel` lets the shards split
+  # the tests of one file too. Three shards left the boundary spec, the slowest one, alone in one shard.
+  # Four shards cut it to 47 tests there. A shard takes about the same setup time, so more shards stop paying off.
   # Opt-in: only a manual run, or a pull request that carries the `e2e` label. Never on a push to main.
   e2e:
     if: >-
@@ -47,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -61,12 +63,44 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e:remote -- --shard=${{ matrix.shard }}/3
+      - run: npm run test:e2e:remote -- --shard=${{ matrix.shard }}/4 --fully-parallel
       - name: Keep the failure report
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: e2e-failures-shard-${{ matrix.shard }}
+          path: test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # The mock-mode browser specs from `npm run test:e2e`: the pages that run on built-in sample data, with no API.
+  # It runs 87 tests, 32 of which skip themselves in this mode, in about a minute and a half. The four remote shards above run at the same time.
+  # Opt-in the same way as the remote specs.
+  e2e-mock:
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'e2e'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Cache the Playwright browser
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Keep the failure report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-mock-failures
           path: test-results
           retention-days: 7
           if-no-files-found: ignore
